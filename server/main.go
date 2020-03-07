@@ -20,20 +20,42 @@ type vMixFunction struct {
 var (
 	hostaddr      *string        // API Listen host
 	vmixaddr      *string        // Target vMix host address
-	inputs        []vmixgo.Input // vMix Inputs
 	vMixFunctions []vMixFunction // vMix functions slice. TODO!
+	vmix          *vmixgo.Vmix
 )
 
-// GetScenesHandler returns available vmix inputs for [GET] /api/scenes as JSON.
-func GetScenesHandler(c *gin.Context) {
-	if inputs == nil {
+// GetvMixURLHandler returns vMix API Endpoint.
+func GetvMixURLHandler(c *gin.Context) {
+	c.JSON(http.StatusOK, gin.H{
+		"url": *vmixaddr,
+	})
+}
+
+// RefreshInputHandler returns vMix API Endpoint.
+func RefreshInputHandler(c *gin.Context) {
+	vmix, err := vmix.Refresh()
+	if err != nil {
+		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{
+			"err": err.Error(),
+		})
+		return
+	}
+	log.Printf("vmix.Inputs.Input pointer : %p\n", &vmix.Inputs.Input)
+	c.JSON(http.StatusOK, gin.H{
+		"inputs": vmix.Inputs.Input,
+	})
+}
+
+// GetInputsHandler returns available vmix inputs for [GET] /api/inputs as JSON.
+func GetInputsHandler(c *gin.Context) {
+	if vmix.Inputs.Input == nil {
 		c.AbortWithStatusJSON(http.StatusNotFound, gin.H{
 			"error": "Input not loaded",
 		})
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{
-		"scenes": inputs,
+		"inputs": vmix.Inputs.Input,
 	})
 	return
 }
@@ -54,11 +76,11 @@ func init() {
 
 func main() {
 	log.Println("STARTING...")
-	vmix, err := vmixgo.NewVmix(*vmixaddr)
+	var err error
+	vmix, err = vmixgo.NewVmix(*vmixaddr)
 	if err != nil {
 		panic(err)
 	}
-	inputs = vmix.Inputs.Input
 	r := gin.Default()
 	entrypoint := "./static/index.html"
 	r.GET("/", func(c *gin.Context) { c.File(entrypoint) })
@@ -69,8 +91,10 @@ func main() {
 
 	api := r.Group("/api")
 	{
-		api.GET("/scenes", GetScenesHandler)
+		api.GET("/vmix", GetvMixURLHandler)
+		api.GET("/inputs", GetInputsHandler)
 		api.GET("/functions", GetFunctionsHandler)
+		api.POST("/refresh", RefreshInputHandler)
 	}
 
 	log.Panicf("Failed to listen port %s : %v\n", *hostaddr, r.Run(*hostaddr))
