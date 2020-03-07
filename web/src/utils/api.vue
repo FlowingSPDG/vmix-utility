@@ -7,7 +7,7 @@ export default {
         const res = await this.axios.get("/api/vmix");
         return res.data.url;
       } catch (err) {
-        console.error(err);
+        throw new Error(err);
       }
     },
     async GetInputs() {
@@ -15,7 +15,7 @@ export default {
         const res = await this.axios.get("/api/inputs");
         return res.data.inputs;
       } catch (err) {
-        console.error(err);
+        throw new Error(err);
       }
     },
     async RefreshInput() {
