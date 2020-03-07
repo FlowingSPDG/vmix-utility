@@ -40,7 +40,6 @@ func RefreshInputHandler(c *gin.Context) {
 		})
 		return
 	}
-	log.Printf("vmix.Inputs.Input pointer : %p\n", &vmix.Inputs.Input)
 	c.JSON(http.StatusOK, gin.H{
 		"inputs": vmix.Inputs.Input,
 	})
