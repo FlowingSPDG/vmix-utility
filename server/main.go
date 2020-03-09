@@ -2,11 +2,13 @@ package main
 
 import (
 	"flag"
+	"fmt"
 	vmixgo "github.com/FlowingSPDG/vmix-go"
 	"github.com/gin-contrib/static"
 	"github.com/gin-gonic/gin"
 	"log"
 	"net/http"
+	"os/exec"
 )
 
 // vMixFunction contains vMix's available function names and value type, and Input information.
@@ -80,6 +82,7 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
+	gin.SetMode(gin.ReleaseMode)
 	r := gin.Default()
 	entrypoint := "./static/index.html"
 	r.GET("/", func(c *gin.Context) { c.File(entrypoint) })
@@ -96,5 +99,11 @@ func main() {
 		api.POST("/refresh", RefreshInputHandler)
 	}
 
+	url := fmt.Sprintf("http://localhost%s/", *hostaddr)
+	err = exec.Command("rundll32.exe", "url.dll,FileProtocolHandler", url).Start()
+	if err != nil {
+		log.Println("Failed to open link. ignoring...")
+		log.Printf("ERR : %v\n", err)
+	}
 	log.Panicf("Failed to listen port %s : %v\n", *hostaddr, r.Run(*hostaddr))
 }

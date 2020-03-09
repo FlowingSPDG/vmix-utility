@@ -10,6 +10,7 @@
   "dependencies": {
     "core-js": "^3.6.4",
     "element-ui": "^2.13.0",
+    "eslint-config-vue": "^2.0.2",
     "vue": "^2.6.11",
     "vue-class-component": "^7.2.2",
     "vue-clipboard2": "^0.3.1",
@@ -28,8 +29,8 @@
     "@vue/cli-service": "~4.2.0",
     "@vue/eslint-config-typescript": "^5.0.1",
     "axios": "^0.18.0",
-    "eslint": "^6.7.2",
-    "eslint-plugin-vue": "^6.1.2",
+    "eslint": "^6.8.0",
+    "eslint-plugin-vue": "^5.0.0-beta.6",
     "typescript": "~3.7.5",
     "vue-cli-plugin-axios": "~0.0.4",
     "vue-template-compiler": "^2.6.11"

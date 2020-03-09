@@ -11,6 +11,7 @@
 
       <el-form-item label="Input">
         <el-select v-model="form.input">
+          <el-option label="None" value=""></el-option>
           <el-option
             v-for="(input,index) in inputs"
             :key="index"
