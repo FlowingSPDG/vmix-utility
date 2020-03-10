@@ -21,6 +21,29 @@
         </el-select>
       </el-form-item>
 
+      <el-form-item label="Custom queries" v-if="form.queries">
+
+        <template>
+        </template>
+
+        <el-input
+          v-for="(query,index) in form.queries"
+            :key="'key_'+index"
+            :placeholder="'Key '+index"
+            v-model="form.queries[index].key"
+          >
+        </el-input>
+
+        <el-input
+          v-for="(query,index) in form.queries"
+            :key="'value_'+index"
+            :placeholder="'Value '+index"
+            v-model="form.queries[index].value"
+          >
+        </el-input>
+
+      </el-form-item>
+
       <el-button round icon="el-icon-refresh-right" @click="Refresh">Refresh inputs</el-button>
 
       <el-button
@@ -30,6 +53,10 @@
         v-clipboard:success="onCopy"
         v-clipboard:error="onError"
       >COPY</el-button>
+
+      <el-button round icon="el-icon-circle-plus-outline" @click="AddQuery()">Add query</el-button>
+      <el-button round icon="el-icon-refresh-right" @click="form.queries = []">Flush queries</el-button>
+
       <el-input :placeholder="URL" readonly></el-input>
     </el-form>
   </div>
@@ -51,7 +78,8 @@ export default {
       form: {
         name: "",
         input: "",
-        value: ""
+        value: "",
+        queries:[] // {"key":"","value":""}
       }
     };
   },
@@ -72,6 +100,9 @@ export default {
         title: "Error",
         message: `Copy failed`
       });
+    },
+    AddQuery: function(){
+      this.form.queries.push({"key":"","value":""})
     },
     async Refresh(){
       try{
@@ -97,6 +128,13 @@ export default {
       }
       if (this.form.value !== "") {
         url += `&Value=${this.form.value}`;
+      }
+      if (this.form.queries){
+        for (let i=0;i<this.form.queries.length;i++){
+          if (this.form.queries[i].key && this.form.queries[i].value){
+            url += `&${this.form.queries[i].key}=${this.form.queries[i].value}`
+          }
+        }
       }
       return url;
     }

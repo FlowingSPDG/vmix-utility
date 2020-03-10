@@ -13,10 +13,10 @@ import (
 
 // vMixFunction contains vMix's available function names and value type, and Input information.
 type vMixFunction struct {
-	Name           string              `json:"name"`            // function name. e.g. "Fade" .
-	ValueType      string              `json:"value_type"`      // value types. string,int and others.
-	InputAvaialble bool                `json:"input_available"` // &Input="..." usable or not.
-	Options        []map[string]string `json:"options"`         // other options types, such as "Duration":"int" .
+	Name           string            `json:"name"`            // function name. e.g. "Fade" .
+	ValueType      string            `json:"value_type"`      // value types. string,int and others.
+	InputAvaialble bool              `json:"input_available"` // &Input="..." usable or not.
+	Options        map[string]string `json:"options"`         // other options types, such as "Duration":"int" .
 }
 
 var (
