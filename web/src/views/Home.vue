@@ -58,6 +58,8 @@
       <el-button round icon="el-icon-refresh-right" @click="form.queries = []">Flush queries</el-button>
 
       <el-input :placeholder="URL" readonly></el-input>
+
+      <el-button round icon="el-icon-video-play" @click="TryFunction(URL)">Try!</el-button>
     </el-form>
   </div>
 </template>

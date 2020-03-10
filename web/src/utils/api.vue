@@ -25,6 +25,16 @@ export default {
       } catch (err) {
         throw new Error(err);
       }
+    },
+    async TryFunction(url){
+      try{
+        await this.axios.get(url);
+      }catch(err){
+        this.$notify.error({
+          title: "Error",
+          message: err
+        })
+      }
     }
   }
 };
