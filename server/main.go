@@ -35,7 +35,8 @@ func GetvMixURLHandler(c *gin.Context) {
 
 // RefreshInputHandler returns vMix API Endpoint.
 func RefreshInputHandler(c *gin.Context) {
-	vmix, err := vmix.Refresh()
+	var err error
+	vmix, err = vmix.Refresh()
 	if err != nil {
 		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{
 			"err": err.Error(),
