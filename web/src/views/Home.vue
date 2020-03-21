@@ -19,6 +19,13 @@
             :value="input.Key"
           ></el-option>
         </el-select>
+        <el-button
+        round
+        icon="el-icon-copy-document"
+        v-clipboard:copy="form.input"
+        v-clipboard:success="onCopy"
+        v-clipboard:error="onError"
+      >COPY</el-button>
       </el-form-item>
 
       <el-form-item label="Custom queries" v-if="form.queries">
