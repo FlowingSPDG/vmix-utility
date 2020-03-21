@@ -3,10 +3,12 @@
     <el-form ref="form" :model="form" label-width="120px">
       <el-form-item label="Function name">
         <el-input v-model="form.name"></el-input>
+        <el-button round icon="el-icon-refresh-right" @click="form.name = ''">CLEAR</el-button>
       </el-form-item>
 
       <el-form-item label="Value">
         <el-input v-model="form.value"></el-input>
+        <el-button round icon="el-icon-refresh-right" @click="form.value = ''">CLEAR</el-button>
       </el-form-item>
 
       <el-form-item label="Input">
@@ -26,9 +28,10 @@
         v-clipboard:success="onCopy"
         v-clipboard:error="onError"
       >COPY</el-button>
+      <el-button round icon="el-icon-refresh-right" @click="form.input = ''">CLEAR</el-button>
       </el-form-item>
 
-      <el-form-item label="Custom queries" v-if="form.queries">
+      <el-form-item label="Custom queries" v-if="form.queries.length > 0">
 
         <template>
         </template>
@@ -48,6 +51,7 @@
             v-model="form.queries[index].value"
           >
         </el-input>
+        <el-button round icon="el-icon-refresh-right" @click="form.queries = []">Flush queries</el-button>
 
       </el-form-item>
 
@@ -62,7 +66,6 @@
       >COPY</el-button>
 
       <el-button round icon="el-icon-circle-plus-outline" @click="AddQuery()">Add query</el-button>
-      <el-button round icon="el-icon-refresh-right" @click="form.queries = []">Flush queries</el-button>
 
       <el-input :placeholder="URL" readonly></el-input>
 
