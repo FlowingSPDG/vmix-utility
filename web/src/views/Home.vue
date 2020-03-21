@@ -33,24 +33,8 @@
 
       <el-form-item label="Custom queries" v-if="form.queries.length > 0">
 
-        <template>
-        </template>
+        <query v-for="(query,index) in form.queries" :key="'key_'+index" v-model="form.queries[index]"> </query>
 
-        <el-input
-          v-for="(query,index) in form.queries"
-            :key="'key_'+index"
-            :placeholder="'Key '+index"
-            v-model="form.queries[index].key"
-          >
-        </el-input>
-
-        <el-input
-          v-for="(query,index) in form.queries"
-            :key="'value_'+index"
-            :placeholder="'Value '+index"
-            v-model="form.queries[index].value"
-          >
-        </el-input>
         <el-button round icon="el-icon-refresh-right" @click="form.queries = []">Flush queries</el-button>
 
       </el-form-item>
@@ -76,13 +60,13 @@
 
 <script>
 // @ is an alias to /src
-// import HelloWorld from '@/components/HelloWorld.vue'
+import query from '@/components/query.vue'
 
 export default {
   name: "Home",
-  // components: {
-  //   HelloWorld
-  // }
+  components: {
+    query
+  },
   data() {
     return {
       vMixURL: "",
