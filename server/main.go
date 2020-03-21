@@ -50,6 +50,12 @@ func RefreshInputHandler(c *gin.Context) {
 
 // GetInputsHandler returns available vmix inputs for [GET] /api/inputs as JSON.
 func GetInputsHandler(c *gin.Context) {
+	if vmix == nil {
+		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{
+			"error": "vmix instance not loaded",
+		})
+		return
+	}
 	if vmix.Inputs.Input == nil {
 		c.AbortWithStatusJSON(http.StatusNotFound, gin.H{
 			"error": "Input not loaded",
