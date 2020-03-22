@@ -1,12 +1,23 @@
 <template>
   <div id="app">
     <div id="nav">
-      <router-link to="/">Home</router-link> |
-      <router-link to="/developer">Developer Info</router-link>
+      <el-button round icon="el-icon-s-home"> <router-link to="/">Home</router-link></el-button>
+      <el-button round icon="el-icon-user-solid"> <router-link to="/developer">Developer Info</router-link></el-button>
+      <el-button round icon="el-icon-link" @click="moveLink('https://www.vmix.com/help17/index.htm?ShortcutFunctionReference.html')">vMix Shortcut Function Reference</el-button>
     </div>
     <router-view/>
   </div>
 </template>
+
+<script>
+export default {
+  methods: {
+    moveLink (url) {
+      window.open(url, '_blank')
+    }
+  }
+}
+</script>
 
 <style>
 #app {
