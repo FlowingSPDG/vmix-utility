@@ -1,8 +1,8 @@
 <template>
   <div id="app">
     <div id="nav">
-      <el-button round icon="el-icon-s-home"> <router-link to="/">Home</router-link></el-button>
-      <el-button round icon="el-icon-user-solid"> <router-link to="/developer">Developer Info</router-link></el-button>
+      <el-button round icon="el-icon-s-home" @click="JumpTo('/')">Home</el-button>
+      <el-button round icon="el-icon-user-solid" @click="JumpTo('/developer')">Developer Info</el-button>
       <el-button round icon="el-icon-link" @click="moveLink('https://www.vmix.com/help17/index.htm?ShortcutFunctionReference.html')">vMix Shortcut Function Reference</el-button>
     </div>
     <router-view/>
@@ -12,8 +12,17 @@
 <script>
 export default {
   methods: {
-    moveLink (url) {
-      window.open(url, '_blank')
+    JumpTo: function(url){
+      this.$router.push(url)
+    },
+    moveLink (url) {      
+        this.$confirm(`外部サイトを開きます。よろしいですか？`, 'Warning', {
+          confirmButtonText: 'OK',
+          cancelButtonText: 'Cancel',
+          type: 'warning'
+        }).then(() => {
+          window.open(url, '_blank')
+        });
     }
   }
 }
