@@ -12,7 +12,7 @@
       </el-form-item>
 
       <el-form-item label="Input">
-        <el-select v-model="form.input">
+        <el-select v-model="form.input" filterable >
           <el-option label="None" value=""></el-option>
           <el-option
             v-for="(input,index) in inputs"
