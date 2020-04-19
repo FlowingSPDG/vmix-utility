@@ -14,12 +14,22 @@
       <el-form-item label="Input">
         <el-select v-model="form.input" filterable >
           <el-option label="None" value=""></el-option>
-          <el-option
-            v-for="(input,index) in inputs"
-            :key="index"
-            :label="input.Number + ' : ' + input.Title"
-            :value="input.Key"
-          ></el-option>
+          <div v-for="(input,index) in inputs" :key="index">
+            <el-option
+              :value="input.Key"
+              style="display:inline-block"
+            >
+            {{input.Number + ' : ' + input.Title}}
+            </el-option>
+            <el-button
+              size="mini"
+              class="el-icon-copy-document"
+              v-clipboard:copy="input.Key"
+              v-clipboard:success="onCopy"
+              v-clipboard:error="onError"
+              style="display:inline-block"
+            >COPY {{ input.Key }}</el-button>
+          </div>
         </el-select>
         <el-button
         round
