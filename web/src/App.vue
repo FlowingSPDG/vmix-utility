@@ -3,7 +3,7 @@
     <div id="nav">
       <el-button round icon="el-icon-s-home" @click="JumpTo('/')">Home</el-button>
       <el-button round icon="el-icon-user-solid" @click="JumpTo('/developer')">Developer Info</el-button>
-      <el-button round icon="el-icon-link" @click="moveLink('https://www.vmix.com/help17/index.htm?ShortcutFunctionReference.html')">vMix Shortcut Function Reference</el-button>
+      <el-button round icon="el-icon-link" @click="moveLink('https://www.vmix.com/help23/index.htm?ShortcutFunctionReference.html')">vMix Shortcut Function Reference</el-button>
     </div>
     <router-view/>
   </div>
