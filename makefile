@@ -45,7 +45,7 @@ deps-web:
 	@yarn global add @vue/cli
 	@cd ./web && yarn
 deps-go:
-	@$(GOGET) -v -u
+	@cd ./server && $(GOGET) -v -u
 build-prepare:
 	@cd ./server && $(GOGET) github.com/mitchellh/gox \
 	github.com/konsorten/go-windows-terminal-sequences
