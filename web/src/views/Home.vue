@@ -65,6 +65,12 @@
 
       <el-button round icon="el-icon-video-play" @click="TryFunction(URL)">Try!</el-button>
     </el-form>
+
+    <el-table :data="inputs" style="width:85%;margin:auto;" v-loading="loading">
+      <el-table-column prop="Key" label="Input KEY"> </el-table-column>
+      COPY BUTTON HERE
+      TRY BUTTON HERE
+    </el-table>
   </div>
 </template>
 
@@ -86,12 +92,14 @@ export default {
         input: "",
         value: "",
         queries:[] // {"key":"","value":""}
-      }
+      },
+      loading:false
     };
   },
   async mounted() {
     this.vMixURL = await this.GetvMixAddr();
     this.inputs = await this.GetInputs();
+    this.loading = false
   },
   methods: {
     onCopy: function(e) {
@@ -124,13 +132,11 @@ export default {
         message: err
       });
       }
-    }
-  },
-  computed: {
-    URL: function() {
+    },
+    URL: function(inputKey) {
       let url = `${this.vMixURL}/api?Function=${this.form.name}`;
-      if (this.form.input !== "") {
-        url += `&Input=${this.form.input}`;
+      if (inputKey !== "") {
+        url += `&Input=${inputKey}`;
       }
       if (this.form.value !== "") {
         url += `&Value=${this.form.value}`;
