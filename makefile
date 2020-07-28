@@ -47,7 +47,7 @@ deps-web:
 deps-go:
 	@cd ./server && $(GOGET) -v -u
 build-prepare:
-	@cd ./server && $(GOGET) github.com/mitchellh/gox \
+	@$(GOGET) github.com/mitchellh/gox \
 	github.com/konsorten/go-windows-terminal-sequences
 	-@$(RM) ./$(DIST_DIR)/*/static
 build-windows: build-prepare build-web build-windows-server-only
