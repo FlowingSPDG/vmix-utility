@@ -3,12 +3,14 @@ package main
 import (
 	"flag"
 	"fmt"
-	vmixgo "github.com/FlowingSPDG/vmix-go"
-	"github.com/gin-contrib/static"
-	"github.com/gin-gonic/gin"
 	"log"
 	"net/http"
 	"os/exec"
+
+	"github.com/gin-contrib/static"
+	"github.com/gin-gonic/gin"
+
+	vmixgo "github.com/FlowingSPDG/vmix-go"
 )
 
 // vMixFunction contains vMix's available function names and value type, and Input information.

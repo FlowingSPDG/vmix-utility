@@ -29,6 +29,11 @@ export default {
     async TryFunction(url){
       try{
         await this.axios.get(url);
+        await this.$notify({
+          title: "Success",
+          message: `Success GET Request on ${url}`,
+          type: "success"
+        });
       }catch(err){
         this.$notify.error({
           title: "Error",
