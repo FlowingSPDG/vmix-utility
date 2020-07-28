@@ -30,10 +30,10 @@ export default {
       try{
         await this.axios.get(url);
         await this.$notify({
-        title: "Success",
-        message: `Success GET Request on ${url}`,
-        type: "success"
-      });
+          title: "Success",
+          message: `Success GET Request on ${url}`,
+          type: "success"
+        });
       }catch(err){
         this.$notify.error({
           title: "Error",
