@@ -11,65 +11,31 @@
         <el-button round icon="el-icon-refresh-right" @click="form.value = ''">CLEAR</el-button>
       </el-form-item>
 
-      <el-form-item label="Input">
-        <el-select v-model="form.input" filterable >
-          <el-option label="None" value=""></el-option>
-          <div v-for="(input,index) in inputs" :key="index">
-            <el-option
-              :value="input.Key"
-              style="display:inline-block"
-            >
-            {{input.Number + ' : ' + input.Title}}
-            </el-option>
-            <el-button
-              size="mini"
-              class="el-icon-copy-document"
-              v-clipboard:copy="input.Key"
-              v-clipboard:success="onCopy"
-              v-clipboard:error="onError"
-              style="display:inline-block"
-            >COPY {{ input.Key }}</el-button>
-          </div>
-        </el-select>
-        <el-button
-        round
-        icon="el-icon-copy-document"
-        v-clipboard:copy="form.input"
-        v-clipboard:success="onCopy"
-        v-clipboard:error="onError"
-      >COPY</el-button>
-      <el-button round icon="el-icon-refresh-right" @click="form.input = ''">CLEAR</el-button>
-      </el-form-item>
-
       <el-form-item label="Custom queries" v-if="form.queries.length > 0">
-
         <query v-for="(query,index) in form.queries" :key="'key_'+index" v-model="form.queries[index]"> </query>
-
         <el-button round icon="el-icon-refresh-right" @click="form.queries = []">Flush queries</el-button>
-
       </el-form-item>
 
       <el-button round icon="el-icon-refresh-right" @click="Refresh">Refresh inputs</el-button>
 
-      <el-button
-        round
-        icon="el-icon-copy-document"
-        v-clipboard:copy="URL"
-        v-clipboard:success="onCopy"
-        v-clipboard:error="onError"
-      >COPY</el-button>
-
       <el-button round icon="el-icon-circle-plus-outline" @click="AddQuery()">Add query</el-button>
-
-      <el-input :placeholder="URL" readonly></el-input>
-
-      <el-button round icon="el-icon-video-play" @click="TryFunction(URL)">Try!</el-button>
     </el-form>
 
     <el-table :data="inputs" style="width:85%;margin:auto;" v-loading="loading">
-      <el-table-column prop="Key" label="Input KEY"> </el-table-column>
-      COPY BUTTON HERE
-      TRY BUTTON HERE
+      <el-table-column label="Number" prop="Number"> </el-table-column>
+      <el-table-column label="Name" prop="Name"> </el-table-column>
+      <el-table-column label="KEY">
+        <template slot-scope="scope">
+          {{ scope.row.Key }}
+          <el-button round icon="el-icon-copy-document" v-clipboard:copy="scope.row.Key" v-clipboard:success="onCopy" v-clipboard:error="onError">COPY Key</el-button>
+        </template>
+      </el-table-column>
+      <el-table-column label="vMix functions">
+        <template slot-scope="scope">
+          <el-button round icon="el-icon-copy-document" v-clipboard:copy="URL(scope.row.Key)" v-clipboard:success="onCopy" v-clipboard:error="onError">COPY URL</el-button>
+          <el-button round icon="el-icon-video-play" @click="TryFunction(URL(scope.row.Key))">Try!</el-button>
+        </template>
+      </el-table-column>
     </el-table>
   </div>
 </template>
