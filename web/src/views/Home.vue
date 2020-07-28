@@ -17,7 +17,6 @@
       </el-form-item>
 
       <el-button round icon="el-icon-refresh-right" @click="Refresh">Refresh inputs</el-button>
-
       <el-button round icon="el-icon-circle-plus-outline" @click="AddQuery()">Add query</el-button>
     </el-form>
 
