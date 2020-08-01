@@ -79,7 +79,7 @@ export default {
     onError: function(e) {
       this.$notify.error({
         title: "Error",
-        message: `Copy failed`
+        message: `Copy failed : ${e}`
       });
     },
     AddQuery: function(){
@@ -129,7 +129,6 @@ export default {
   },
   watch:{
     inputs:function(val,oldval){
-      console.log(val)
       if (val[0].Key !== "") {
         this.inputs.unshift({
           Number:0,
