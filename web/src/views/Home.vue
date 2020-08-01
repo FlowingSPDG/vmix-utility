@@ -101,7 +101,7 @@ export default {
     },
     URL: function(inputKey) {
       let url = `${this.vMixURL}/api?Function=${this.form.name}`;
-      if (inputKey !== "") {
+      if (inputKey) {
         url += `&Input=${inputKey}`;
       }
       if (this.form.value !== "") {
@@ -119,7 +119,7 @@ export default {
   },
   watch:{
     inputs:function(val,oldval){
-      if (val[0].Key === "") {
+      if (!val[0].Key) {
         this.inputs.unshift({
           Number:0,
           Name:"empty",
