@@ -20,9 +20,9 @@
       <el-button round icon="el-icon-circle-plus-outline" @click="AddQuery()">Add query</el-button>
     </el-form>
 
-    <el-table ref="singleTable" :data="inputs" style="width:85%;margin:auto;" v-loading="loading" highlight-current-row @current-change="handleCurrentChange">
-      <el-table-column label="Number" prop="Number"> </el-table-column>
-      <el-table-column label="Name" prop="Name"> </el-table-column>
+    <el-table ref="singleTable" :default-sort = "{prop: 'Number', order: 'ascending'}" :data="inputs" style="width:85%;margin:auto;" v-loading="loading" highlight-current-row @current-change="handleCurrentChange">
+      <el-table-column label="Number" prop="Number" sortable> </el-table-column>
+      <el-table-column label="Name" prop="Name" sortable> </el-table-column>
       <el-table-column label="KEY">
         <template slot-scope="scope">
           {{ scope.row.Key }}
