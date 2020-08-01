@@ -20,20 +20,20 @@
       <el-button round icon="el-icon-circle-plus-outline" @click="AddQuery()">Add query</el-button>
     </el-form>
 
-    <el-table :data="inputs" style="width:85%;margin:auto;" v-loading="loading">
+    <el-table ref="singleTable" :data="inputs" style="width:85%;margin:auto;" v-loading="loading" highlight-current-row @current-change="handleCurrentChange">
       <el-table-column label="Number" prop="Number"> </el-table-column>
       <el-table-column label="Name" prop="Name"> </el-table-column>
       <el-table-column label="KEY">
         <template slot-scope="scope">
           {{ scope.row.Key }}
-          <el-button round icon="el-icon-copy-document" v-clipboard:copy="scope.row.Key" v-clipboard:success="onCopy" v-clipboard:error="onError">COPY Key</el-button>
+          <el-button round icon="el-icon-copy-document" @click="setCurrent(scope.row.Number-1)" v-show="scope.row.Key != ``" v-clipboard:copy="scope.row.Key" v-clipboard:success="onCopy" v-clipboard:error="onError">COPY Key</el-button>
         </template>
       </el-table-column>
       <el-table-column label="vMix functions">
         <template slot-scope="scope">
           <el-input placeholder="vMIX API URL" :value="URL(scope.row.Key)"></el-input>
-          <el-button round icon="el-icon-copy-document" v-clipboard:copy="URL(scope.row.Key)" v-clipboard:success="onCopy" v-clipboard:error="onError">COPY URL</el-button>
-          <el-button round icon="el-icon-video-play" @click="TryFunction(URL(scope.row.Key))">Try!</el-button>
+          <el-button round icon="el-icon-copy-document" @click="setCurrent(scope.row.Number-1)" v-show="scope.row.Key != ``" v-clipboard:copy="URL(scope.row.Key)" v-clipboard:success="onCopy" v-clipboard:error="onError">COPY URL</el-button>
+          <el-button round icon="el-icon-video-play" @click="TryFunction(URL(scope.row.Key));setCurrent(scope.row.Number-1)" v-show="scope.row.Key != ``">Try!</el-button>
         </template>
       </el-table-column>
     </el-table>
@@ -59,7 +59,8 @@ export default {
         value: "",
         queries:[] // {"key":"","value":""}
       },
-      loading:false
+      loading:false,
+      currentRow: null
     };
   },
   async mounted() {
@@ -101,7 +102,7 @@ export default {
     },
     URL: function(inputKey) {
       let url = `${this.vMixURL}/api?Function=${this.form.name}`;
-      if (inputKey !== "") {
+      if (inputKey) {
         url += `&Input=${inputKey}`;
       }
       if (this.form.value !== "") {
@@ -115,7 +116,29 @@ export default {
         }
       }
       return url;
+    },
+    setCurrent(row) {
+      this.$refs.singleTable.setCurrentRow(row);
+      setTimeout(() => {
+       this.$refs.singleTable.setCurrentRow(null);
+     },1000)
+    },
+    handleCurrentChange(val) {
+     this.currentRow = val;
     }
+  },
+  watch:{
+    inputs:function(val,oldval){
+      console.log(val)
+      if (val[0].Key !== "") {
+        this.inputs.unshift({
+          Number:0,
+          Name:"EMPTY",
+          Key:"",
+        })
+      }
+    },
+    deep: true
   }
 };
 </script>
