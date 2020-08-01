@@ -116,6 +116,18 @@ export default {
       }
       return url;
     }
+  },
+  watch:{
+    inputs:function(val,oldval){
+      if (val[0].Key === "") {
+        this.inputs.unshift({
+          Number:0,
+          Name:"empty",
+          Key:"",
+        })
+      }
+    },
+    deep: true
   }
 };
 </script>
