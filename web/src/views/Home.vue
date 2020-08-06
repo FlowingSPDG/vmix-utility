@@ -32,8 +32,8 @@
       <el-table-column label="vMix functions">
         <template slot-scope="scope">
           <el-input placeholder="vMIX API URL" :value="URL(scope.row.Key)"></el-input>
-          <el-button round icon="el-icon-copy-document" @click="setCurrent(scope.row.Number-1)" v-show="scope.row.Key != ``" v-clipboard:copy="URL(scope.row.Key)" v-clipboard:success="onCopy" v-clipboard:error="onError">COPY URL</el-button>
-          <el-button round icon="el-icon-video-play" @click="TryFunction(URL(scope.row.Key));setCurrent(scope.row.Number-1)" v-show="scope.row.Key != ``">Try!</el-button>
+          <el-button round icon="el-icon-copy-document" @click="setCurrent(scope.row.Number-1)" v-clipboard:copy="URL(scope.row.Key)" v-clipboard:success="onCopy" v-clipboard:error="onError">COPY URL</el-button>
+          <el-button round icon="el-icon-video-play" @click="TryFunction(URL(scope.row.Key));setCurrent(scope.row.Number-1)">Try!</el-button>
         </template>
       </el-table-column>
     </el-table>
