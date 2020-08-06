@@ -34,6 +34,7 @@
           <el-input placeholder="vMix API URL" :value="URL(scope.row.Key)"></el-input>
           <el-input placeholder="vMix Script" :value="Script(scope.row.Key)"></el-input>
           <el-button round icon="el-icon-copy-document" @click="setCurrent(scope.row.Number-1)" v-clipboard:copy="URL(scope.row.Key)" v-clipboard:success="onCopy" v-clipboard:error="onError">COPY URL</el-button>
+          <el-button round icon="el-icon-copy-document" @click="setCurrent(scope.row.Number-1)" v-clipboard:copy="Script(scope.row.Key)" v-clipboard:success="onCopy" v-clipboard:error="onError">COPY Script</el-button>
           <el-button round icon="el-icon-video-play" @click="TryFunction(URL(scope.row.Key));setCurrent(scope.row.Number-1)">Try!</el-button>
         </template>
       </el-table-column>
