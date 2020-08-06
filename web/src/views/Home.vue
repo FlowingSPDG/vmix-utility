@@ -6,6 +6,12 @@
         <el-button round icon="el-icon-refresh-right" @click="form.name = ''">CLEAR</el-button>
       </el-form-item>
 
+      <el-form-item label="vMix URL(Override)">
+        <el-input placeholder="vMix Script" :value="vMixURLAddr()"></el-input>
+        <el-input v-model="vMixURLOverride"></el-input>
+        <el-button round icon="el-icon-refresh-right" @click="form.name = ''">CLEAR</el-button>
+      </el-form-item>
+
       <el-form-item label="Value">
         <el-input v-model="form.value"></el-input>
         <el-button round icon="el-icon-refresh-right" @click="form.value = ''">CLEAR</el-button>
@@ -54,6 +60,7 @@ export default {
   data() {
     return {
       vMixURL: "",
+      vMixURLOverride: "",
       inputs: [],
       form: {
         name: "",
@@ -103,13 +110,11 @@ export default {
       }
     },
     URL: function(inputKey) {
+      let vmix = this.xMixURL
+      if ( this.vMixURLOverride !== '' ) vmix = this.vMixURLOverride
       let url = `${this.vMixURL}/api?Function=${this.form.name}`;
-      if (inputKey) {
-        url += `&Input=${inputKey}`;
-      }
-      if (this.form.value !== "") {
-        url += `&Value=${this.form.value}`;
-      }
+      if (inputKey) url += `&Input=${inputKey}`
+      if (this.form.value !== "") url += `&Value=${this.form.value}`;
       if (this.form.queries){
         for (let i=0;i<this.form.queries.length;i++){
           if (this.form.queries[i].key && this.form.queries[i].value){
@@ -121,12 +126,8 @@ export default {
     },
     Script: function(inputKey) {
       let url = `Function=${this.form.name}`;
-      if (inputKey) {
-        url += `&Input=${inputKey}`;
-      }
-      if (this.form.value !== "") {
-        url += `&Value=${this.form.value}`;
-      }
+      if (inputKey) url += `&Input=${inputKey}`
+      if (this.form.value !== "") url += `&Value=${this.form.value}`;
       if (this.form.queries){
         for (let i=0;i<this.form.queries.length;i++){
           if (this.form.queries[i].key && this.form.queries[i].value){
@@ -144,6 +145,9 @@ export default {
     },
     handleCurrentChange(val) {
      this.currentRow = val;
+    },
+    vMixURLAddr() {
+      return this.vMixURL
     }
   },
   watch:{
