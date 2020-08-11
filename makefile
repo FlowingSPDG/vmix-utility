@@ -54,6 +54,6 @@ build-windows: build-prepare build-web build-windows-server-only
 	@$(MKDIR) ./$(DIST_DIR)/static
 	@$(CP) ./web/dist/* ./$(DIST_DIR)/static
 build-windows-server-only: build-prepare
-	@cd ./server && GOOS=windows GOARCH=386 go build -o ../$(DIST_DIR)/${BINARY_NAME}.exe main.go
+	@cd ./server && GOOS=windows GOARCH=386 go build -mod=vendor -o ../$(DIST_DIR)/${BINARY_NAME}.exe main.go
 build-web:
 	@cd ./web && yarn run build
