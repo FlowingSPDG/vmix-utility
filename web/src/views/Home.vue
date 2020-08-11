@@ -1,6 +1,10 @@
 <template>
   <div class="home">
     <el-form ref="form" :model="form" label-width="120px">
+      <el-form-item label="詳細モード">
+        <el-checkbox v-model="DetailedMode"></el-checkbox>
+      </el-form-item>
+
       <el-form-item label="Function name">
         <el-input v-model="form.name"></el-input>
         <el-button round icon="el-icon-refresh-right" @click="form.name = ''">CLEAR</el-button>
@@ -27,9 +31,9 @@
     </el-form>
 
     <el-table ref="singleTable" :default-sort = "{prop: 'Number', order: 'ascending'}" :data="inputs" style="width:85%;margin:auto;" v-loading="loading" highlight-current-row @current-change="handleCurrentChange">
-      <el-table-column label="Number" prop="Number" sortable> </el-table-column>
+      <el-table-column label="Number" prop="Number" sortable v-if="DetailedMode" > </el-table-column>
       <el-table-column label="Name" prop="Name" sortable> </el-table-column>
-      <el-table-column label="KEY">
+      <el-table-column label="KEY" v-if="DetailedMode">
         <template slot-scope="scope">
           {{ scope.row.Key }}
           <el-button round icon="el-icon-copy-document" @click="setCurrent(scope.row.Number-1)" v-show="scope.row.Key != ``" v-clipboard:copy="scope.row.Key" v-clipboard:success="onCopy" v-clipboard:error="onError">COPY Key</el-button>
@@ -69,6 +73,7 @@ export default {
         queries:[] // {"key":"","value":""}
       },
       loading:false,
+      DetailedMode:false,
       currentRow: null
     };
   },
