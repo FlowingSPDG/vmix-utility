@@ -115,9 +115,9 @@ export default {
       }
     },
     URL: function(inputKey) {
-      let vmix = this.xMixURL
-      if ( this.vMixURLOverride !== '' ) vmix = this.vMixURLOverride
-      let url = `${this.vMixURL}/api?Function=${this.form.name}`;
+      let vmix = this.vMixURL
+      if ( this.vMixURLOverride != '' ) vmix = this.vMixURLOverride
+      let url = `${vmix}/api?Function=${this.form.name}`;
       if (inputKey) url += `&Input=${inputKey}`
       if (this.form.value !== "") url += `&Value=${this.form.value}`;
       if (this.form.queries){
