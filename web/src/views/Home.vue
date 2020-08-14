@@ -12,7 +12,9 @@
 
       <el-form-item label="vMix URL(Override)">
         <el-input placeholder="vMix Script" :value="vMixURLAddr()"></el-input>
-        <el-input v-model="vMixURLOverride"></el-input>
+        <el-input v-model="vMixURLOverride">
+          <template slot="prepend">http://</template>
+        </el-input>
         <el-button round icon="el-icon-refresh-right" @click="form.name = ''">CLEAR</el-button>
       </el-form-item>
 
@@ -115,8 +117,7 @@ export default {
       }
     },
     URL: function(inputKey) {
-      let vmix = this.vMixURL
-      if ( this.vMixURLOverride != '' ) vmix = this.vMixURLOverride
+      const vmix = this.vMixURLOverride != '' ? `http://${this.vMixURLOverride}` : this.vMixURL
       let url = `${vmix}/api?Function=${this.form.name}`;
       if (inputKey) url += `&Input=${inputKey}`
       if (this.form.value !== "") url += `&Value=${this.form.value}`;
