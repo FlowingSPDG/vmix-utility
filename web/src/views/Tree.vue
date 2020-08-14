@@ -14,7 +14,8 @@
 
             <h1>Used By...</h1>
             <el-table ref="singleTable" :default-sort = "{prop: 'Number', order: 'ascending'}" :data="GetActiveUsedInputByKey(scope.row.Key)" style="width:85%;margin:auto;">
-                <el-table-column label="Index" prop="Index"><template slot-scope="scope"> {{SolveInputNumberByKey(scope.row.Key)}}</template></el-table-column>
+                <el-table-column label="Number" prop="Index"><template slot-scope="scope"> {{SolveInputNumberByKey(scope.row.Key)}}</template></el-table-column>
+                <el-table-column label="Index" prop="Index"><template slot-scope="scope"> {{SolveInputNumberByKey(scope.row.Index)}}</template></el-table-column>
                 <el-table-column label="Name"><template slot-scope="scope"> {{SolveInputNameByKey(scope.row.Key)}}</template></el-table-column>
                 <el-table-column label="Key" prop="Key"></el-table-column>
             </el-table>
