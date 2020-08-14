@@ -84,7 +84,6 @@ export default {
           const UsingInputs = []
           for (let i=0;i<this.inputs.length;i++) {
               if (Array.isArray(this.inputs[i].Overlay)) {
-                console.log(`overlay is array`)
                  for (let o=0;o<this.inputs[i].Overlay.length;o++) {
                     if (this.inputs[i].Overlay[o].Key == key) {
                         UsingInputs.push(this.inputs[i])
