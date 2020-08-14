@@ -15,7 +15,7 @@
         <el-input v-model="vMixURLOverride">
           <template slot="prepend">http://</template>
         </el-input>
-        <el-button round icon="el-icon-refresh-right" @click="form.name = ''">CLEAR</el-button>
+        <el-button round icon="el-icon-refresh-right" @click="vMixURLOverride = ''">CLEAR</el-button>
       </el-form-item>
 
       <el-form-item label="Value">
