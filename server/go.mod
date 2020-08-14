@@ -3,7 +3,7 @@ module github.com/FlowingSPDG/vmix-URL-Generator/server
 go 1.13
 
 require (
-	github.com/FlowingSPDG/vmix-go v0.0.0-20200807041000-7173c0c22821
+	github.com/FlowingSPDG/vmix-go v0.0.0-20200814074029-08ada8a0bb4a
 	github.com/gin-contrib/static v0.0.0-20191128031702-f81c604d8ac2
 	github.com/gin-gonic/gin v1.6.3
 	github.com/go-playground/validator/v10 v10.3.0 // indirect
