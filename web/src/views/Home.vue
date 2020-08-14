@@ -33,7 +33,7 @@
     </el-form>
 
     <el-table ref="singleTable" :default-sort = "{prop: 'Number', order: 'ascending'}" :data="inputs" style="width:85%;margin:auto;" v-loading="loading" highlight-current-row @current-change="handleCurrentChange">
-      <el-table-column label="Number" prop="Number" sortable v-if="DetailedMode" > </el-table-column>
+      <el-table-column label="Number" prop="Number" sortable > </el-table-column>
       <el-table-column label="Name" prop="Name" sortable> </el-table-column>
       <el-table-column label="KEY" v-if="DetailedMode">
         <template slot-scope="scope">
@@ -43,8 +43,8 @@
       </el-table-column>
       <el-table-column label="vMix functions">
         <template slot-scope="scope">
-          <el-input placeholder="vMix API URL" :value="URL(scope.row.Key)"></el-input>
-          <el-input placeholder="vMix Script" :value="Script(scope.row.Key)"></el-input>
+          <el-input placeholder="vMix API URL" :value="URL(scope.row.Key)" v-if="DetailedMode"></el-input>
+          <el-input placeholder="vMix Script" :value="Script(scope.row.Key)" v-if="DetailedMode"></el-input>
           <el-button round icon="el-icon-copy-document" @click="setCurrent(scope.row.Number-1)" v-clipboard:copy="URL(scope.row.Key)" v-clipboard:success="onCopy" v-clipboard:error="onError">COPY URL</el-button>
           <el-button round icon="el-icon-copy-document" @click="setCurrent(scope.row.Number-1)" v-clipboard:copy="Script(scope.row.Key)" v-clipboard:success="onCopy" v-clipboard:error="onError">COPY Script</el-button>
           <el-button round icon="el-icon-video-play" @click="TryFunction(URL(scope.row.Key));setCurrent(scope.row.Number-1)">Try!</el-button>
@@ -145,9 +145,6 @@ export default {
     },
     setCurrent(row) {
       this.$refs.singleTable.setCurrentRow(row);
-      setTimeout(() => {
-       this.$refs.singleTable.setCurrentRow(null);
-     },1000)
     },
     handleCurrentChange(val) {
      this.currentRow = val;
