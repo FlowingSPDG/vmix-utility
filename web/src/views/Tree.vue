@@ -3,7 +3,7 @@
     <h1>Input Menu</h1>
     <el-button round icon="el-icon-refresh-right" @click="Refresh">Refresh inputs</el-button>
     <el-table ref="singleTable" :default-sort = "{prop: 'Number', order: 'ascending'}" :data="inputs" style="width:85%;margin:auto;">
-      <el-table-column label="Detail" type="expand">
+      <el-table-column label="" type="expand">
         <template slot-scope="scope">
             <h1>Multi View</h1>
             <el-table ref="singleTable" :default-sort = "{prop: 'Number', order: 'ascending'}" :data="scope.row.Overlay" style="width:85%;margin:auto;">
@@ -20,7 +20,7 @@
             </el-table>
         </template>
       </el-table-column>
-      <el-table-column label="Number" prop="Number"> </el-table-column>
+      <el-table-column label="Number" prop="Number" sortable> </el-table-column>
       <el-table-column label="Type" prop="SceneType" sortable> </el-table-column>
       <el-table-column label="Title" prop="Title" sortable> </el-table-column>
       <el-table-column label="Key" prop="Key"></el-table-column>
