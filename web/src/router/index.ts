@@ -3,6 +3,7 @@ import VueRouter from 'vue-router'
 import Home from '../views/Home.vue'
 import Developer from '../views/Developer.vue'
 import Tree from '../views/Tree.vue'
+import Program from '../views/Program.vue'
 import api from '../utils/api.vue'
 
 Vue.use(VueRouter)
@@ -25,6 +26,11 @@ const routes = [
     path: '/developer',
     name: 'Developer',
     component: Developer
+  },
+  {
+    path: '/program',
+    name: 'Program',
+    component: Program
   }
 ]
 

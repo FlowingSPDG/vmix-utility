@@ -10,6 +10,11 @@ import (
 	"github.com/gin-contrib/static"
 	"github.com/gin-gonic/gin"
 
+	"github.com/nareix/joy4/av/avutil"
+	"github.com/nareix/joy4/av/pubsub"
+	"github.com/nareix/joy4/format"
+	"github.com/nareix/joy4/format/rtmp"
+
 	vmixgo "github.com/FlowingSPDG/vmix-go"
 )
 
@@ -26,6 +31,8 @@ var (
 	vmixaddr      *string        // Target vMix host address
 	vMixFunctions []vMixFunction // vMix functions slice. TODO!
 	vmix          *vmixgo.Vmix
+
+	queue *pubsub.Queue
 )
 
 // GetvMixURLHandler returns vMix API Endpoint.
@@ -82,10 +89,35 @@ func init() {
 	vmixaddr = flag.String("vmix", "http://localhost:8088", "vMix API Address")
 	hostaddr = flag.String("host", ":8080", "Server listen port")
 	flag.Parse()
+
+	format.RegisterAll()
+	queue = pubsub.NewQueue()
 }
 
 func main() {
 	log.Println("STARTING...")
+
+	go func() {
+		RTMPServer := &rtmp.Server{
+			Addr: ":1935",
+		}
+
+		RTMPServer.HandlePlay = func(conn *rtmp.Conn) {
+			log.Println("RTMP Play request from:", conn.NetConn().RemoteAddr().String())
+			log.Println("URL :", *conn.URL)
+			avutil.CopyFile(conn, queue.Latest())
+		}
+
+		RTMPServer.HandlePublish = func(conn *rtmp.Conn) {
+			log.Println("RTMP Publish request from:", conn.NetConn().RemoteAddr().String())
+			log.Println("URL :", *conn.URL)
+			avutil.CopyFile(queue, conn)
+		}
+
+		log.Println("RTMP Server started")
+		log.Panicf("Failed to start RTMP Server : %v\n", RTMPServer.ListenAndServe())
+	}()
+
 	var err error
 	vmix, err = vmixgo.NewVmix(*vmixaddr)
 	if err != nil {
