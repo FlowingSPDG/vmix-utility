@@ -1,9 +1,8 @@
 ## ~~vmix-URL-Generator~~
-## vMix Input management utility
-~~vMix RESTful API URL Generator.~~  
-Currently this utility is not only for generating RESTful URLs.  
-It can be used for managing inputs, checking multiviews.  
-But changing repository name broke gomod things and stuff so I am not going to change it.  
+## vMix Management Utility Tool
+Currently this software is not only for generating RESTful URLs.  
+It can be used for managing inputs, checking multiviews and etc.  
+I'm going to change repository name in few weeks.  
 Golang, Gin and Vue.  
 
 ## Developer / 開発者
