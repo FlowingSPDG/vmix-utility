@@ -106,7 +106,7 @@ func (r *DoMultipleFunctionsRequest) Validate() error {
 	return nil
 }
 
-// DoMultipleFunctionsHandler Generates multiple inputs to vMix.
+// DoMultipleFunctionsHandler Sends multiple functions to vMix.
 func DoMultipleFunctionsHandler(c *gin.Context) {
 	req := DoMultipleFunctionsRequest{}
 	c.BindJSON(&req)
