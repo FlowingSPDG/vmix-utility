@@ -2,7 +2,7 @@
   <div class="tree">
     <h1>Input Menu</h1>
     <el-button round icon="el-icon-refresh-right" @click="Refresh">Refresh inputs</el-button>
-    <el-table ref="singleTable" :default-sort = "{prop: 'Number', order: 'ascending'}" :data="inputs" style="width:85%;margin:auto;">
+    <el-table ref="singleTable" :default-sort = "{prop: 'Number', order: 'ascending'}" :data="inputs" style="width:85%;margin:auto;" v-loading="loading">
       <el-table-column label="" type="expand">
         <template slot-scope="InputScope">
             <h1>Multi View</h1>
@@ -38,11 +38,14 @@ export default {
   components: {},
   data() {
     return {
+        loading: false,
         inputs: []
     };
   },
   async mounted() {
+        this.loading = true
         this.inputs = await this.GetInputs();
+        this.loading = false
   },
   methods: {
       SolveInputNameByKey:function(key) {
@@ -95,6 +98,7 @@ export default {
           return UsingInputs
       },
       async Refresh(){
+        this.loading = true
         try{
             this.inputs = await this.RefreshInput()
             this.$notify({
@@ -106,8 +110,10 @@ export default {
             this.$notify.error({
                 title: "Error",
                 message: err
-        });
-      }
+            })
+        }finally{
+            this.loading = false
+        }
     },
     GetOverlayNumberByKey:function(InputKey,OverlayKey) {
         if (!Array.isArray(this.inputs)) {
@@ -123,7 +129,7 @@ export default {
               }
           }
     }
-  },
+    },
   watch:{
   }
 };

@@ -38,16 +38,18 @@
       <el-table-column label="KEY" v-if="DetailedMode">
         <template slot-scope="scope">
           {{ scope.row.Key }}
-          <el-button round icon="el-icon-copy-document" @click="setCurrent(scope.row.Number-1)" v-show="scope.row.Key != ``" v-clipboard:copy="scope.row.Key" v-clipboard:success="onCopy" v-clipboard:error="onError">COPY Key</el-button>
+          <el-button round icon="el-icon-copy-document" @click="setCurrent(scope.row.Number-1)" v-show="scope.row.Key != ``" v-clipboard:copy="scope.row.Key" v-clipboard:success="onCopy" v-clipboard:error="onError">Key</el-button>
         </template>
       </el-table-column>
-      <el-table-column label="vMix functions">
-        <template slot-scope="scope">
+      <el-table-column label="vMix functions" width="300">
+        <template slot-scope="scope" style="">
           <el-input placeholder="vMix API URL" :value="URL(scope.row.Key)" v-if="DetailedMode"></el-input>
           <el-input placeholder="vMix Script" :value="Script(scope.row.Key)" v-if="DetailedMode"></el-input>
-          <el-button round icon="el-icon-copy-document" @click="setCurrent(scope.row.Number-1)" v-clipboard:copy="URL(scope.row.Key)" v-clipboard:success="onCopy" v-clipboard:error="onError">COPY URL</el-button>
-          <el-button round icon="el-icon-copy-document" @click="setCurrent(scope.row.Number-1)" v-clipboard:copy="Script(scope.row.Key)" v-clipboard:success="onCopy" v-clipboard:error="onError">COPY Script</el-button>
-          <el-button round icon="el-icon-video-play" @click="TryFunction(URL(scope.row.Key));setCurrent(scope.row.Number-1)">Try!</el-button>
+          <el-button-group>
+            <el-button plain size="small" round icon="el-icon-copy-document" @click="setCurrent(scope.row.Number-1)" v-clipboard:copy="URL(scope.row.Key)" v-clipboard:success="onCopy" v-clipboard:error="onError">URL</el-button>
+            <el-button plain size="small" round icon="el-icon-copy-document" @click="setCurrent(scope.row.Number-1)" v-clipboard:copy="Script(scope.row.Key)" v-clipboard:success="onCopy" v-clipboard:error="onError">Script</el-button>
+            <el-button plain size="small" round icon="el-icon-video-play" @click="TryFunction(URL(scope.row.Key));setCurrent(scope.row.Number-1)">Try!</el-button>
+          </el-button-group>
         </template>
       </el-table-column>
     </el-table>
@@ -80,6 +82,7 @@ export default {
     };
   },
   async mounted() {
+    this.loading = true
     this.vMixURL = await this.GetvMixAddr();
     this.inputs = await this.GetInputs();
     this.loading = false
