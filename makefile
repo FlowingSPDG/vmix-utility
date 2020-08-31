@@ -45,15 +45,16 @@ deps-web:
 	@yarn global add @vue/cli
 	@cd ./web && yarn
 deps-go:
-	@cd ./server && $(GOGET) -v -u
-build-prepare:
+	@cd ./server && $(GOGET) -v
+build-prepare: clean
 	@$(GOGET) github.com/mitchellh/gox \
 	github.com/konsorten/go-windows-terminal-sequences
+	@cd ./server && $(GOGET)
 	-@$(RM) ./$(DIST_DIR)/*/static
 build-windows: build-prepare build-web build-windows-server-only
 	@$(MKDIR) ./$(DIST_DIR)/static
 	@$(CP) ./web/dist/* ./$(DIST_DIR)/static
 build-windows-server-only: build-prepare
-	@cd ./server && GOOS=windows GOARCH=386 go build -o ../$(DIST_DIR)/${BINARY_NAME}.exe main.go
+	@cd ./server && gox --osarch "windows/amd64" --output ../$(DIST_DIR)/${BINARY_NAME}_{{.OS}}_{{.Arch}} ./
 build-web:
 	@cd ./web && yarn run build
