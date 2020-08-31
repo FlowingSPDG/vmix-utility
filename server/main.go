@@ -6,6 +6,8 @@ import (
 	"log"
 	"net/http"
 	"os/exec"
+	"strings"
+	"sync"
 
 	"github.com/gin-contrib/static"
 	"github.com/gin-gonic/gin"
@@ -80,19 +82,54 @@ func GetFunctionsHandler(c *gin.Context) {
 
 // DoMultipleFunctionsRequest Request JSON for DoMultipleFunctionsHandler
 type DoMultipleFunctionsRequest struct {
-	Function string
-	Num      int
+	Function string `json:"function"` // function name. e.g. "Fade" .
+	Queries  []struct {
+		Key   string `json:"key"`   // Key.
+		Value string `json:"value"` // Value.
+	} `json:"queries"` // Key-Value queries.
+	Num int `json:"num"`
+}
+
+// Validate form
+func (r *DoMultipleFunctionsRequest) Validate() error {
+	if strings.TrimSpace(r.Function) == "" {
+		return fmt.Errorf("Function empty")
+	}
+	for _, v := range r.Queries {
+		if v.Key == "" || v.Value == "" {
+			return fmt.Errorf("Invalid queries")
+		}
+	}
+	if r.Num <= 0 {
+		return fmt.Errorf("Invalid Number length")
+	}
+	return nil
 }
 
 // DoMultipleFunctionsHandler Generates multiple inputs to vMix.
 func DoMultipleFunctionsHandler(c *gin.Context) {
 	req := DoMultipleFunctionsRequest{}
 	c.BindJSON(&req)
-	for i := 0; i < req.Num; i++ {
-		if err := vmix.SendFunction(req.Function, nil); err != nil {
-			log.Printf("Error sending function %s. ERR : %v\n", req.Function, err)
-		}
+	if err := req.Validate(); err != nil {
+		c.AbortWithError(http.StatusBadRequest, err)
+		return
 	}
+	params := make(map[string]string)
+	for _, v := range req.Queries {
+		params[v.Key] = v.Value
+	}
+
+	wg := &sync.WaitGroup{}
+	for i := 0; i < req.Num; i++ {
+		wg.Add(1)
+		go func() {
+			if err := vmix.SendFunction(req.Function, params); err != nil {
+				log.Printf("Error sending function %s. ERR : %v\n", req.Function, err)
+			}
+			wg.Done()
+		}()
+	}
+	wg.Wait()
 	c.String(http.StatusOK, "OK")
 }
 
