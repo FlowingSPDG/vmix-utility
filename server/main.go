@@ -78,6 +78,24 @@ func GetFunctionsHandler(c *gin.Context) {
 	return
 }
 
+// DoMultipleFunctionsRequest Request JSON for DoMultipleFunctionsHandler
+type DoMultipleFunctionsRequest struct {
+	Function string
+	Num      int
+}
+
+// DoMultipleFunctionsHandler Generates multiple inputs to vMix.
+func DoMultipleFunctionsHandler(c *gin.Context) {
+	req := DoMultipleFunctionsRequest{}
+	c.BindJSON(&req)
+	for i := 0; i < req.Num; i++ {
+		if err := vmix.SendFunction(req.Function, nil); err != nil {
+			log.Printf("Error sending function %s. ERR : %v\n", req.Function, err)
+		}
+	}
+	c.String(http.StatusOK, "OK")
+}
+
 func init() {
 	vmixaddr = flag.String("vmix", "http://localhost:8088", "vMix API Address")
 	hostaddr = flag.String("host", ":8080", "Server listen port")
@@ -106,6 +124,7 @@ func main() {
 		api.GET("/inputs", GetInputsHandler)
 		api.GET("/functions", GetFunctionsHandler)
 		api.POST("/refresh", RefreshInputHandler)
+		api.POST("/multiple", DoMultipleFunctionsHandler)
 	}
 
 	url := fmt.Sprintf("http://localhost%s/", *hostaddr)
