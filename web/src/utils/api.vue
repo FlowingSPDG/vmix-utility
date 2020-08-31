@@ -49,33 +49,15 @@ export default {
           "num": num
         }
         const res = await this.axios.post("/api/multiple", data);
-        switch (res.status) {
-          case 200:
-            await this.$notify({
-              title: "Success",
-              message: res.data,
-              type: "success"
-            });
-            break
-          case 202:
-            this.$notify({
-              title: "Warning",
-              message: res.data,
-              type: "warning"
-            })
-            break
-          default:
-            this.$notify({
-              title: "Error",
-              message: res.data,
-              type: "error"
-          })
-        }
+        await this.$notify({
+          title: "Success",
+          message: `Success POST multiple function Request`,
+          type: "success"
+        });
       }catch(err){
-        this.$notify({
+        this.$notify.error({
           title: "Error",
-          message: err,
-          type: "warning"
+          message: err
         })
       }
     }

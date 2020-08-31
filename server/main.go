@@ -120,23 +120,17 @@ func DoMultipleFunctionsHandler(c *gin.Context) {
 	}
 
 	wg := &sync.WaitGroup{}
-	numerrors := 0
 	for i := 0; i < req.Num; i++ {
 		wg.Add(1)
 		go func() {
 			if err := vmix.SendFunction(req.Function, params); err != nil {
-				numerrors++
 				log.Printf("Error sending function %s with %v queries. ERR : %v\n", req.Function, params, err)
 			}
 			wg.Done()
 		}()
 	}
 	wg.Wait()
-	if numerrors == 0 {
-		c.String(http.StatusOK, "Done with no errors")
-	} else {
-		c.String(http.StatusAccepted, fmt.Sprintf("Done with %d errors", numerrors))
-	}
+	c.String(http.StatusOK, "OK")
 }
 
 func init() {
