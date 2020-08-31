@@ -124,7 +124,7 @@ func DoMultipleFunctionsHandler(c *gin.Context) {
 		wg.Add(1)
 		go func() {
 			if err := vmix.SendFunction(req.Function, params); err != nil {
-				log.Printf("Error sending function %s with %v queries. ERR : %v\n", req.Function, params, err)
+				log.Printf("Error sending function %s. ERR : %v\n", req.Function, err)
 			}
 			wg.Done()
 		}()

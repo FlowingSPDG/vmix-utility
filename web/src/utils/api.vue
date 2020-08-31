@@ -40,26 +40,6 @@ export default {
           message: err
         })
       }
-    },
-    async SendsMultipleFunctions(funcName, queries, num){
-      try{
-        const data = {
-          "function": funcName,
-          "queries": queries,
-          "num": num
-        }
-        const res = await this.axios.post("/api/multiple", data);
-        await this.$notify({
-          title: "Success",
-          message: `Success POST multiple function Request`,
-          type: "success"
-        });
-      }catch(err){
-        this.$notify.error({
-          title: "Error",
-          message: err
-        })
-      }
     }
   }
 };
