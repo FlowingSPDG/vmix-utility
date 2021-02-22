@@ -1,6 +1,7 @@
 package main
 
 import (
+	"embed"
 	"flag"
 	"fmt"
 	"log"
@@ -9,7 +10,6 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/gin-contrib/static"
 	"github.com/gin-gonic/gin"
 
 	vmixgo "github.com/FlowingSPDG/vmix-go"
@@ -23,12 +23,17 @@ type vMixFunction struct {
 	Options        map[string]string `json:"options"`         // other options types, such as "Duration":"int" .
 }
 
+// vMix variables
 var (
 	hostaddr      *string        // API Listen host
 	vmixaddr      *string        // Target vMix host address
 	vMixFunctions []vMixFunction // vMix functions slice. TODO!
 	vmix          *vmixgo.Vmix
 )
+
+// Static files
+//go:embed static/*
+var staticFS embed.FS
 
 // GetvMixURLHandler returns vMix API Endpoint.
 func GetvMixURLHandler(c *gin.Context) {
@@ -147,19 +152,73 @@ func init() {
 
 func main() {
 	log.Println("STARTING...")
+
+	// Init vMix
 	var err error
 	vmix, err = vmixgo.NewVmix(*vmixaddr)
 	if err != nil {
 		panic(err)
 	}
+
+	// Init Gin router
 	gin.SetMode(gin.ReleaseMode)
 	r := gin.Default()
+
+	// Cache files
+	index, err := staticFS.ReadFile("static/index.html")
+	if err != nil {
+		panic(err)
+	}
+
+	favicon, err := staticFS.ReadFile("static/favicon.ico")
+	if err != nil {
+		panic(err)
+	}
 	entrypoint := "./static/index.html"
 	r.GET("/", func(c *gin.Context) { c.File(entrypoint) })
-	r.Use(static.Serve("/css", static.LocalFile("./static/css", false)))
-	r.Use(static.Serve("/js", static.LocalFile("./static/js", false)))
-	r.Use(static.Serve("/img", static.LocalFile("./static/img", false)))
-	r.Use(static.Serve("/fonts", static.LocalFile("./static/fonts", false)))
+	// serve static files
+	r.GET("/", func(c *gin.Context) {
+		c.Writer.WriteString(string(index))
+	})
+	r.GET("/favicon.ico", func(c *gin.Context) {
+		c.Data(http.StatusOK, "image/x-icon", favicon)
+	})
+	r.GET("/css/*file", func(c *gin.Context) {
+		file := c.Param("file")
+		b, err := staticFS.ReadFile("static/css" + file)
+		if err != nil {
+			c.AbortWithError(http.StatusNotFound, err)
+			return
+		}
+		c.Data(http.StatusOK, "text/css", b)
+	})
+	r.GET("/js/*file", func(c *gin.Context) {
+		file := c.Param("file")
+		b, err := staticFS.ReadFile("static/js" + file)
+		if err != nil {
+			c.AbortWithError(http.StatusNotFound, err)
+			return
+		}
+		c.Data(http.StatusOK, "text/css", b)
+	})
+	r.GET("/img/*file", func(c *gin.Context) {
+		file := c.Param("file")
+		b, err := staticFS.ReadFile("static/img" + file)
+		if err != nil {
+			c.AbortWithError(http.StatusNotFound, err)
+			return
+		}
+		c.Data(http.StatusOK, "text/css", b)
+	})
+	r.GET("/fonts/*file", func(c *gin.Context) {
+		file := c.Param("file")
+		b, err := staticFS.ReadFile("static/fonts" + file)
+		if err != nil {
+			c.AbortWithError(http.StatusNotFound, err)
+			return
+		}
+		c.Data(http.StatusOK, "text/css", b)
+	})
 
 	api := r.Group("/api")
 	{

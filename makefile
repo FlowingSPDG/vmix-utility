@@ -50,11 +50,10 @@ build-prepare: clean
 	@$(GOGET) github.com/mitchellh/gox \
 	github.com/konsorten/go-windows-terminal-sequences
 	@cd ./server && $(GOGET)
-	-@$(RM) ./$(DIST_DIR)/*/static
 build-windows: build-prepare build-web build-windows-server-only
-	@$(MKDIR) ./$(DIST_DIR)/static
-	@$(CP) ./web/dist/* ./$(DIST_DIR)/static
 build-windows-server-only: build-prepare
 	@cd ./server && gox --osarch "windows/amd64" --output ../$(DIST_DIR)/${BINARY_NAME}_{{.OS}}_{{.Arch}} ./
 build-web:
 	@cd ./web && yarn run build
+	@$(MKDIR) $(SERVER_DIR)/static
+	@$(CP) ./web/dist/* ./$(SERVER_DIR)/static/
