@@ -174,8 +174,6 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
-	entrypoint := "./static/index.html"
-	r.GET("/", func(c *gin.Context) { c.File(entrypoint) })
 	// serve static files
 	r.GET("/", func(c *gin.Context) {
 		c.Writer.WriteString(string(index))
