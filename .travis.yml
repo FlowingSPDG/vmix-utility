@@ -13,7 +13,7 @@ before_install:
   - make deps
 env:
   global:
-    - TRAVIS_GO_VERSION=eval "$(gimme 1.16.1)"
+    - TRAVIS_GO_VERSION=1.16.1
     - GO111MODULE=on
 install:
   - cd ./server && go mod download && cd ..
