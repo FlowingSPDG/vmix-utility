@@ -1,4 +1,4 @@
-language: node_js, go
+language: go
 dist: xenial
 go:
   - 1.16.2
