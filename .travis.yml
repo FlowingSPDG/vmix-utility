@@ -11,6 +11,10 @@ notifications:
   email: false
 before_install:
   - make deps
+env:
+  - GO111MODULE=on
+install:
+  - cd ./server && go mod download
 matrix:
   include:
     - language: go,node_js
@@ -18,4 +22,4 @@ matrix:
       node_js: 14.8.0
       
       script:
-        - env GO111MODULE=on make
+        - make
