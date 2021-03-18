@@ -1,14 +1,11 @@
-## ~~vmix-URL-Generator~~
-## vMix Management Utility Tool
-Currently this software is not only for generating RESTful URLs.  
-It can be used for managing inputs, checking multiviews and etc.  
-I'm going to change repository name in few weeks.  
+## vmix-utility
+vMix utility tool, this can be used for managing inputs, checking multiviews and etc.  
 Golang, Gin and Vue.  
 
 ## Developer / 開発者
 Shugo Kawamura / 河村 柊吾  
 Github : [**FlowingSPDG**](http://github.com/FlowingSPDG)  
-Twitter : [**@FlowingSPDG**](http://twitter.com/FlowingSPDG) / [**@FlowingSPDG_EN**](http://twitter.com/FlowingSPDG_EN)
+Twitter : [**@fluozh**](http://twitter.com/fluozh) / [**@FlowingSPDG**](http://twitter.com/FlowingSPDG)
 
 ## Usage / 使い方
 ``./vmix_gen.exe -addr :8080 -vmix "http://localhost:8088" ``  
@@ -18,7 +15,7 @@ Twitter : [**@FlowingSPDG**](http://twitter.com/FlowingSPDG) / [**@FlowingSPDG_E
 ![Screenshot](https://user-images.githubusercontent.com/30292185/88998385-d859b180-d32c-11ea-8c12-3b303ff48545.png "Screenshot")  
 
 ## Query Options
-#### [Function name](https://www.vmix.com/help23/index.htm?WebScripting.html)
+#### [Function name](https://www.vmix.com/help24/index.htm?WebScripting.html)
 Specifies `Function` query in URL parameter.  
 URL中の`Function`クエリパラメタを設定します。  
 #### Value

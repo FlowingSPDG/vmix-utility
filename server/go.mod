@@ -1,4 +1,4 @@
-module github.com/FlowingSPDG/vmix-URL-Generator/server
+module github.com/FlowingSPDG/vmix-utility/server
 
 go 1.16
 
