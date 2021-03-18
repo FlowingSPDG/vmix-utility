@@ -1,0 +1,21 @@
+language: go,node_js
+dist: xenial
+sudo: false
+cache: yarn
+git:
+  depth: 1
+branches:
+  only:
+    - master
+notifications:
+  email: false
+before_install:
+  - make deps
+matrix:
+  include:
+    - language: go,node_js
+      go: 1.16.1
+      node_js: 14.8.0
+      
+      script:
+        - make build-web
