@@ -1,7 +1,9 @@
-language: node_js
+language: node_js, go
 dist: xenial
 go:
   - 1.16.2
+node_js:
+  - "14.8.0"
 cache: yarn
 git:
   depth: 1
