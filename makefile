@@ -39,7 +39,7 @@ endif
 test:
 	$(GOTEST) -v ./...
 clean:
-	@$(GOCLEAN)
+	@cd ./server && $(GOCLEAN)
 	-@$(RM) $(DIST_DIR)/*
 deps: deps-web
 deps-web:
