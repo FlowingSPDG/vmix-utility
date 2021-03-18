@@ -1,6 +1,7 @@
-language: go,node_js
+language: node_js
 dist: xenial
-sudo: false
+go:
+  - 1.16.2
 cache: yarn
 git:
   depth: 1
@@ -13,13 +14,13 @@ before_install:
   - make deps
 env:
   global:
-    - TRAVIS_GO_VERSION=1.16.2
+    - TRAVIS_GO_VERSION=1.16.x
     - GO111MODULE=on
 install:
   - cd ./server && go mod download && cd ..
-matrix:
+jobs:
   include:
-    - language: go,node_js
+    - language: node_js
       go: 1.16.x
       node_js: 14.8.0
       
