@@ -4,6 +4,7 @@ GOBUILD=$(GOCMD) build
 GOCLEAN=$(GOCMD) clean
 GOTEST=$(GOCMD) test
 GOGET=$(GOCMD) get
+GOINSTALL=$(GOCMD) install
 BINARY_NAME=vmix_gen
 DIST_DIR=build
 SERVER_DIR=server
@@ -40,16 +41,12 @@ test:
 clean:
 	@$(GOCLEAN)
 	-@$(RM) $(DIST_DIR)/*
-deps: deps-web deps-go
+deps: deps-web
 deps-web:
 	@yarn global add @vue/cli
 	@cd ./web && yarn
-deps-go:
-	@cd ./server && $(GOGET) -v
 build-prepare: clean
-	@$(GOGET) github.com/mitchellh/gox \
-	github.com/konsorten/go-windows-terminal-sequences
-	@cd ./server && $(GOGET)
+	@$(GOINSTALL) github.com/mitchellh/gox@v1.0.1
 build-windows: build-prepare build-web build-windows-server-only
 build-windows-server-only: build-prepare
 	@cd ./server && gox --osarch "windows/amd64" --output ../$(DIST_DIR)/${BINARY_NAME}_{{.OS}}_{{.Arch}} ./
