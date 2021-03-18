@@ -13,8 +13,6 @@ before_install:
   - make deps
 env:
   - GO111MODULE=on
-install:
-  - cd ./server && go mod download
 matrix:
   include:
     - language: go,node_js
