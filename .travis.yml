@@ -12,13 +12,15 @@ notifications:
 before_install:
   - make deps
 env:
-  - GO111MODULE=on
+  global:
+    - TRAVIS_GO_VERSION=eval "$(gimme 1.16.1)"
+    - GO111MODULE=on
 install:
   - cd ./server && go mod download && cd ..
 matrix:
   include:
     - language: go,node_js
-      go: 1.16.1
+      go: 1.16.x
       node_js: 14.8.0
       
       script:
