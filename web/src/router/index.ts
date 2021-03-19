@@ -14,7 +14,7 @@ Vue.mixin(api)
 const routes = [
   {
     path: '/',
-    name: 'Home',
+    name: 'Generator',
     component: Home
   },
   {

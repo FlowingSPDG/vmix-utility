@@ -1,5 +1,6 @@
 <template>
   <div class="home">
+    <h1>Function Generator</h1>
     <el-form ref="form" :model="form" label-width="120px">
       <el-form-item label="詳細モード">
         <el-checkbox v-model="DetailedMode"></el-checkbox>
@@ -257,11 +258,23 @@ export default {
   watch: {
     inputs: function (val, oldval) {
       if (val[0].Key !== "") {
-        this.inputs.unshift({
-          Number: 0,
+        this.inputs.unshift(
+        {
+          Number: null,
           Name: "EMPTY",
           Key: "",
-        });
+        },
+        {
+          Number: -1,
+          Name: "PREVIEW",
+          Key: "-1",
+        },
+        {
+          Number: 0,
+          Name: "PROGRAM",
+          Key: "0",
+        }
+        );
       }
     },
     deep: true,
