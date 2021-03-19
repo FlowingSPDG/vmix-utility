@@ -266,12 +266,12 @@ export default {
         },
         {
           Number: -1,
-          Name: "PREVIEW",
+          Name: "PROGRAM",
           Key: "-1",
         },
         {
           Number: 0,
-          Name: "PROGRAM",
+          Name: "PREVIEW",
           Key: "0",
         }
         );
