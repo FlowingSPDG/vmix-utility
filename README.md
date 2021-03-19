@@ -13,7 +13,7 @@ Twitter : [**@fluozh**](http://twitter.com/fluozh) / [**@FlowingSPDG**](http://t
 ``-addr`` Specifies where to listen request from browser. Default: `:8080` / ブラウザからのリクエストを受け付けるポートを指定します。初期値: `":8080"`  
 ``-vmix`` : vMix API Endpoint URL. Default: `"http://localhost:8088"` / vMixのAPIエンドポイントURLです。初期値: `"http://localhost:8088"`
 
-![Screenshot1](https://user-images.githubusercontent.com/30292185/111715023-4c35d380-8896-11eb-9958-11cfdd04a86f.png "Screenshot")  
+![Screenshot1](https://user-images.githubusercontent.com/30292185/111716922-5e197580-889a-11eb-91d1-059b63ff5e1f.png "Screenshot")  
 ![Screenshot2](https://user-images.githubusercontent.com/30292185/111715113-7d160880-8896-11eb-9a16-6af241f606b0.png "Screenshot")  
 
 ## Query Options
