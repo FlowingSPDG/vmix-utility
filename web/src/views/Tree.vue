@@ -5,7 +5,7 @@
     <el-table ref="singleTable" :default-sort = "{prop: 'Number', order: 'ascending'}" :data="inputs" style="width:85%;margin:auto;" v-loading="loading">
       <el-table-column label="" type="expand">
         <template slot-scope="InputScope">
-            <h1>Multi View</h1>
+            <h1>Layers</h1>
             <el-table ref="singleTable" :default-sort = "{prop: 'Number', order: 'ascending'}" :data="InputScope.row.Overlay" style="width:85%;margin:auto;">
                 <el-table-column label="Index" prop="Index"></el-table-column>
                 <el-table-column label="Name"><template slot-scope="NameScope"> {{SolveInputNameByKey(NameScope.row.Key)}}</template></el-table-column>
