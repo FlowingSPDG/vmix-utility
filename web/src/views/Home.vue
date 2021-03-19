@@ -256,7 +256,7 @@ export default {
     },
   },
   watch: {
-    inputs: function (val, oldval) {
+    inputs: function (val, _oldval) {
       if (val[0].Key !== "") {
         this.inputs.unshift(
         {
