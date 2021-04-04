@@ -22,8 +22,13 @@
         </template>
       </el-table-column>
       <el-table-column label="Number" prop="Number" sortable> </el-table-column>
+      <el-table-column label="Title" sortable>
+            <template slot-scope="TitleScope">
+                <el-input v-model="inputs[TitleScope.row.index].Title"></el-input>
+                <el-button type="primary" :loading="false">Apply</el-button>
+            </template>
+      </el-table-column>
       <el-table-column label="Type" prop="SceneType" sortable> </el-table-column>
-      <el-table-column label="Title" prop="Title" sortable> </el-table-column>
       <el-table-column label="Key" prop="Key"></el-table-column>
     </el-table>
   </div>
