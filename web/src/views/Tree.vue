@@ -11,6 +11,13 @@
             Loop : <el-checkbox disabled :checked="InputScope.row.Loop == true"></el-checkbox><br>
             Muted : <el-checkbox disabled :checked="InputScope.row.Muted == true"></el-checkbox><br>
             Solo : <el-checkbox disabled :checked="InputScope.row.Solo == true"></el-checkbox><br>
+
+            <h1>Position</h1>
+            Pan X : {{ InputScope.row.Position.PanX }}<br>
+            Pan Y : {{ InputScope.row.Position.PanY }}<br>
+            Text : {{ InputScope.row.Position.Text }}<br>
+            Zoom X : {{ InputScope.row.Position.ZoomX }}<br>
+            Zoom Y : {{ InputScope.row.Position.ZoomY }}<br>
             
             <h1>Layers</h1>
             <el-table ref="singleTable" :default-sort = "{prop: 'Number', order: 'ascending'}" :data="InputScope.row.Overlay" style="width:85%;margin:auto;">
