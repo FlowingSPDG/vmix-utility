@@ -150,7 +150,6 @@ export default {
     },
     async SetInputName(key,name){
         const url = `${await this.GetvMixAddr()}/api?Function=SetInputName&input=${key}&Value=${name}`;
-        console.log(`url : ${url}`)
         try{
         await this.axios.get(url);
         await this.$notify({
