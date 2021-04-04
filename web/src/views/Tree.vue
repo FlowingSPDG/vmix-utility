@@ -1,10 +1,17 @@
 <template>
   <div class="tree">
-    <h1>Input Menu</h1>
+    <h1>Input Manager</h1>
     <el-button round icon="el-icon-refresh-right" @click="Refresh">Refresh inputs</el-button>
     <el-table ref="singleTable" :default-sort = "{prop: 'Number', order: 'ascending'}" :data="inputs" style="width:85%;margin:auto;" v-loading="loading">
       <el-table-column label="" type="expand">
         <template slot-scope="InputScope">
+            <h1>Detail</h1>
+            State : {{ InputScope.row.State }}<br>
+            Duration : {{ InputScope.row.Duration }}<br>
+            Loop : <el-checkbox disabled :checked="InputScope.row.Loop == true"></el-checkbox><br>
+            Muted : <el-checkbox disabled :checked="InputScope.row.Muted == true"></el-checkbox><br>
+            Solo : <el-checkbox disabled :checked="InputScope.row.Solo == true"></el-checkbox><br>
+            
             <h1>Layers</h1>
             <el-table ref="singleTable" :default-sort = "{prop: 'Number', order: 'ascending'}" :data="InputScope.row.Overlay" style="width:85%;margin:auto;">
                 <el-table-column label="Index" prop="Index"></el-table-column>
@@ -22,10 +29,10 @@
         </template>
       </el-table-column>
       <el-table-column label="Number" prop="Number" sortable> </el-table-column>
-      <el-table-column label="Title" sortable>
+      <el-table-column label="Title" width="250" sortable>
             <template slot-scope="TitleScope">
-                <el-input v-model="inputs[TitleScope.row.index].Title"></el-input>
-                <el-button type="primary" :loading="false">Apply</el-button>
+                <el-input v-model="inputs[TitleScope.$index].Name"></el-input>
+                <el-button round icon="el-icon-edit" :loading="false" @click="SetInputName(inputs[TitleScope.$index].Key,inputs[TitleScope.$index].Name)"></el-button>
             </template>
       </el-table-column>
       <el-table-column label="Type" prop="SceneType" sortable> </el-table-column>
@@ -133,6 +140,23 @@ export default {
                 }
               }
           }
+    },
+    async SetInputName(key,name){
+        const url = `${await this.GetvMixAddr()}/api?Function=SetInputName&input=${key}&Value=${name}`;
+        console.log(`url : ${url}`)
+        try{
+        await this.axios.get(url);
+        await this.$notify({
+          title: "Success",
+          message: `Success Change Name on ${key}`,
+          type: "success"
+        });
+      }catch(err){
+        this.$notify.error({
+          title: "Error",
+          message: err
+        })
+      }
     }
     },
   watch:{
