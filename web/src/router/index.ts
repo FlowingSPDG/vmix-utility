@@ -3,6 +3,7 @@ import VueRouter from 'vue-router'
 import Home from '../views/Home.vue'
 import Developer from '../views/Developer.vue'
 import Tree from '../views/Tree.vue'
+import Duplicate from '../views/Duplicate.vue'
 import BlankGen from '../views/BlankGen.vue'
 import api from '../utils/api.vue'
 
@@ -26,6 +27,11 @@ const routes = [
     path: '/blank-gen',
     name: 'BlankGen',
     component: BlankGen
+  },
+  {
+    path: '/duplicate',
+    name: 'Duplicate',
+    component: Duplicate
   },
   {
     path: '/developer',
