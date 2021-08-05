@@ -15,9 +15,7 @@
       title="実際に生成されるBlankは指定した数より少なくなる場合があります。"
       type="warning">
     </el-alert>
-    <el-popconfirm @onConfirm="Send()" title="続行しますか？">
-      <el-button slot="reference">Confirm</el-button>
-    </el-popconfirm>
+    <el-button @click='SendConfirm()' title="続行しますか？">Confirm</el-button>
 
   </div>
 </template>
@@ -32,7 +30,16 @@ export default {
     };
   },
   methods:{
-    async Send(){
+    async SendConfirm(){
+      try{
+        await this.$confirm('続行しますか？', 'Warning', {
+          confirmButtonText: 'OK',
+          cancelButtonText: 'Cancel',
+          type: 'warning'
+        })
+      }catch(e){
+        //
+      }
       this.fullscreenLoading = true
       const queries = [{
         "key":"Value",
