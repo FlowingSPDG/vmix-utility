@@ -4,6 +4,7 @@ import (
 	"embed"
 	"flag"
 	"fmt"
+	"io/fs"
 	"log"
 	"net/http"
 	"os/exec"
@@ -34,6 +35,9 @@ var (
 // Static files
 //go:embed static/*
 var staticFS embed.FS
+
+//go:embed vMixMultiview/*
+var multiviewFS embed.FS
 
 // GetvMixURLHandler returns vMix API Endpoint.
 func GetvMixURLHandler(c *gin.Context) {
@@ -152,6 +156,14 @@ func init() {
 
 func main() {
 	log.Println("STARTING...")
+	// check embed
+	fs.WalkDir(multiviewFS, ".", func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		fmt.Printf("path=%q, isDir=%v\n", path, d.IsDir())
+		return nil
+	})
 
 	// Init vMix
 	var err error
@@ -216,6 +228,15 @@ func main() {
 			return
 		}
 		c.Data(http.StatusOK, "text/css", b)
+	})
+	r.GET("/multiviewer/*file", func(c *gin.Context) {
+		file := c.Param("file")
+		b, err := multiviewFS.ReadFile("vMixMultiview" + file)
+		if err != nil {
+			c.AbortWithError(http.StatusNotFound, err)
+			return
+		}
+		c.Data(http.StatusOK, "", b)
 	})
 
 	api := r.Group("/api")

@@ -52,5 +52,17 @@ build-windows-server-only: build-prepare
 	@cd ./server && gox --osarch "windows/amd64" --output ../$(DIST_DIR)/${BINARY_NAME}_{{.OS}}_{{.Arch}} ./
 build-web:
 	@cd ./web && yarn run build
-	@$(MKDIR) $(SERVER_DIR)/static
+	@$(MKDIR) ./$(SERVER_DIR)/static
+	@$(RM) ./$(SERVER_DIR)/static/*
 	@$(CP) ./web/dist/* ./$(SERVER_DIR)/static/
+	@$(RM) ./$(SERVER_DIR)/vMixMultiview/
+	@$(MKDIR) ./$(SERVER_DIR)/vMixMultiview/vMixLayouts
+	@$(MKDIR) ./$(SERVER_DIR)/vMixMultiview/vMixPreset
+	@$(CP) ./vMixMultiview/vMixLayouts/index.html ./$(SERVER_DIR)/vMixMultiview/vMixLayouts/
+	@$(CP) ./vMixMultiview/vMixPreset/index.html ./$(SERVER_DIR)/vMixMultiview/vMixPreset/
+	@$(CP) ./vMixMultiview/favicon.ico ./$(SERVER_DIR)/vMixMultiview/
+	@$(CP) ./vMixMultiview/index.html ./$(SERVER_DIR)/vMixMultiview/
+	@$(CP) ./vMixMultiview/jquery.js ./$(SERVER_DIR)/vMixMultiview/
+	@$(CP) ./vMixMultiview/mask.png ./$(SERVER_DIR)/vMixMultiview/
+	@$(CP) ./vMixMultiview/script.js ./$(SERVER_DIR)/vMixMultiview/
+	@$(CP) ./vMixMultiview/style.css ./$(SERVER_DIR)/vMixMultiview/

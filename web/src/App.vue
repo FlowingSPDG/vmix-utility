@@ -5,6 +5,7 @@
       <el-button round icon="el-icon-s-operation" @click="JumpTo('/tree')">Input Manager</el-button>
       <el-button round icon="el-icon-circle-plus" @click="JumpTo('/blank-gen')">Blank Generator</el-button>
       <el-button round icon="el-icon-user-solid" @click="JumpTo('/developer')">Developer</el-button>
+      <el-button round icon="el-icon-s-grid" @click="moveLink('/multiviewer/index.html')">MultiView</el-button>
       <el-button round icon="el-icon-link" @click="moveLink('https://www.vmix.com/help24/index.htm?ShortcutFunctionReference.html')">vMix Reference</el-button>
     </div>
     <router-view/>
