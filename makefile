@@ -43,6 +43,8 @@ clean:
 	-@$(RM) $(DIST_DIR)/*
 deps: deps-web
 deps-web:
+	@git submodule init
+	@git submodule update
 	@yarn global add @vue/cli
 	@cd ./web && yarn
 build-prepare: clean
