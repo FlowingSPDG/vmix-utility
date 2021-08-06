@@ -4,7 +4,6 @@ import (
 	"embed"
 	"flag"
 	"fmt"
-	"io/fs"
 	"log"
 	"net/http"
 	"os/exec"
@@ -156,14 +155,6 @@ func init() {
 
 func main() {
 	log.Println("STARTING...")
-	// check embed
-	fs.WalkDir(multiviewFS, ".", func(path string, d fs.DirEntry, err error) error {
-		if err != nil {
-			return err
-		}
-		fmt.Printf("path=%q, isDir=%v\n", path, d.IsDir())
-		return nil
-	})
 
 	// Init vMix
 	var err error
