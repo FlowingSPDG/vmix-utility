@@ -4,9 +4,9 @@ vMix utility tool, this can be used for managing inputs, checking multiviews and
 Golang, Gin and Vue.  
 
 ## Developer / 開発者
-Shugo Kawamura / 河村 柊吾  
+Nil Hiiragi / 柊木にる
 Github : [**FlowingSPDG**](http://github.com/FlowingSPDG)  
-Twitter : [**@fluozh**](http://twitter.com/fluozh) / [**@FlowingSPDG**](http://twitter.com/FlowingSPDG)
+Twitter : [**@HiiragiNil**](http://twitter.com/HiiragiNil) / [**@rjzefl**](http://twitter.com/rjzefl) / [**@FlowingSPDG**](http://twitter.com/FlowingSPDG)
 
 ## Usage / 使い方
 ``./vmix_gen.exe -addr :8080 -vmix "http://localhost:8088" ``  
