@@ -42,7 +42,7 @@ export default {
       }
       this.fullscreenLoading = true
       const queries = [{
-        "key":"Value",
+        "key":"value",
         "value":"Colour|Black"
       }]
       if (this.transparent) {
