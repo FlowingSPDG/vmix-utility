@@ -37,10 +37,14 @@ func GetShortcuts(helpVer int) ([]Shortcut, error) {
 						s.Description = t
 					}
 				case 2:
-					if j.Text != "" && j.Text != "None" {
+					if j.Text != "" {
 						t := strings.ReplaceAll(j.Text, "\n", "")
-						ts := strings.Split(t, ",")
-						s.Parameters = ts
+						if t == "None" {
+							s.Parameters = []string{}
+						} else {
+							ts := strings.Split(t, ",")
+							s.Parameters = ts
+						}
 					}
 				}
 			})
@@ -49,7 +53,7 @@ func GetShortcuts(helpVer int) ([]Shortcut, error) {
 	})
 
 	c.OnRequest(func(r *colly.Request) {
-		fmt.Println("Visiting", r.URL)
+		// fmt.Println("Visiting", r.URL)
 	})
 
 	u := fmt.Sprintf("https://www.vmix.com/help%d/ShortcutFunctionReference.html", helpVer)

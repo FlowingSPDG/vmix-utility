@@ -13,6 +13,7 @@ import (
 	"github.com/gin-gonic/gin"
 
 	vmixgo "github.com/FlowingSPDG/vmix-go"
+	"github.com/FlowingSPDG/vmix-utility/scraper"
 )
 
 // vMixFunction contains vMix's available function names and value type, and Input information.
@@ -43,6 +44,16 @@ func GetvMixURLHandler(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
 		"url": *vmixaddr,
 	})
+}
+
+// GetvMixURLHandler returns vMix API Endpoint.
+func GetvMixShortcuts(c *gin.Context) {
+	s, err := scraper.GetShortcuts(25)
+	if err != nil {
+		c.AbortWithError(http.StatusInternalServerError, err)
+		return
+	}
+	c.JSON(http.StatusOK, s)
 }
 
 // RefreshInputHandler returns vMix API Endpoint.
@@ -76,14 +87,6 @@ func GetInputsHandler(c *gin.Context) {
 	}
 	c.JSON(http.StatusOK, gin.H{
 		"inputs": vmix.Inputs.Input,
-	})
-	return
-}
-
-// GetFunctionsHandler returns available functions/value/input combinations for [GET] /api/functions as JSON.
-func GetFunctionsHandler(c *gin.Context) {
-	c.JSON(http.StatusOK, gin.H{
-		"functions": vMixFunctions,
 	})
 	return
 }
@@ -160,7 +163,7 @@ func main() {
 	var err error
 	vmix, err = vmixgo.NewVmix(*vmixaddr)
 	if err != nil {
-		panic(err)
+		//panic(err)
 	}
 
 	// Init Gin router
@@ -233,8 +236,8 @@ func main() {
 	api := r.Group("/api")
 	{
 		api.GET("/vmix", GetvMixURLHandler)
+		api.GET("/shortcuts", GetvMixShortcuts)
 		api.GET("/inputs", GetInputsHandler)
-		api.GET("/functions", GetFunctionsHandler)
 		api.POST("/refresh", RefreshInputHandler)
 		api.POST("/multiple", DoMultipleFunctionsHandler)
 	}
