@@ -188,7 +188,7 @@ export default {
         cb(results); // number of things returned
       },
     handleSelect(item) {
-        console.log(item);
+        this.form.name = item.Name
       },
     onCopy: function (e) {
       this.$notify({
