@@ -16,20 +16,12 @@ import (
 	"github.com/FlowingSPDG/vmix-utility/scraper"
 )
 
-// vMixFunction contains vMix's available function names and value type, and Input information.
-type vMixFunction struct {
-	Name           string            `json:"name"`            // function name. e.g. "Fade" .
-	ValueType      string            `json:"value_type"`      // value types. string,int and others.
-	InputAvaialble bool              `json:"input_available"` // &Input="..." usable or not.
-	Options        map[string]string `json:"options"`         // other options types, such as "Duration":"int" .
-}
-
 // vMix variables
 var (
-	hostaddr      *string        // API Listen host
-	vmixaddr      *string        // Target vMix host address
-	vMixFunctions []vMixFunction // vMix functions slice. TODO!
-	vmix          *vmixgo.Vmix
+	hostaddr  *string            // API Listen host
+	vmixaddr  *string            // Target vMix host address
+	shortcuts []scraper.Shortcut // vMix functions slice. TODO!
+	vmix      *vmixgo.Vmix
 )
 
 // Static files
@@ -48,12 +40,16 @@ func GetvMixURLHandler(c *gin.Context) {
 
 // GetvMixURLHandler returns vMix API Endpoint.
 func GetvMixShortcuts(c *gin.Context) {
-	s, err := scraper.GetShortcuts(25)
-	if err != nil {
-		c.AbortWithError(http.StatusInternalServerError, err)
-		return
+	if shortcuts == nil {
+		s, err := scraper.GetShortcuts(25)
+		if err != nil {
+			c.AbortWithError(http.StatusInternalServerError, err)
+			return
+		}
+		shortcuts = s
 	}
-	c.JSON(http.StatusOK, s)
+
+	c.JSON(http.StatusOK, shortcuts)
 }
 
 // RefreshInputHandler returns vMix API Endpoint.
