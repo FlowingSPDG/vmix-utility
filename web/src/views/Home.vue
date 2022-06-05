@@ -175,7 +175,7 @@ export default {
   async mounted() {
     this.loading = true;
     this.vMixURL = await this.GetvMixAddr();
-    // this.inputs = await this.GetInputs();
+    this.inputs = await this.GetInputs();
     this.shortcuts = await this.GetShortcuts();
     this.loading = false;
   },

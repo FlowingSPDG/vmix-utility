@@ -163,7 +163,7 @@ func main() {
 	var err error
 	vmix, err = vmixgo.NewVmix(*vmixaddr)
 	if err != nil {
-		//panic(err)
+		panic(err)
 	}
 
 	// Init Gin router
