@@ -7,28 +7,22 @@ import (
 	"log"
 	"net/http"
 	"os/exec"
+	"runtime"
 	"strings"
 	"sync"
 
 	"github.com/gin-gonic/gin"
 
 	vmixgo "github.com/FlowingSPDG/vmix-go"
+	"github.com/FlowingSPDG/vmix-utility/scraper"
 )
-
-// vMixFunction contains vMix's available function names and value type, and Input information.
-type vMixFunction struct {
-	Name           string            `json:"name"`            // function name. e.g. "Fade" .
-	ValueType      string            `json:"value_type"`      // value types. string,int and others.
-	InputAvaialble bool              `json:"input_available"` // &Input="..." usable or not.
-	Options        map[string]string `json:"options"`         // other options types, such as "Duration":"int" .
-}
 
 // vMix variables
 var (
-	hostaddr      *string        // API Listen host
-	vmixaddr      *string        // Target vMix host address
-	vMixFunctions []vMixFunction // vMix functions slice. TODO!
-	vmix          *vmixgo.Vmix
+	hostaddr  *string            // API Listen host
+	vmixaddr  *string            // Target vMix host address
+	shortcuts []scraper.Shortcut // vMix functions slice. TODO!
+	vmix      *vmixgo.Vmix
 )
 
 // Static files
@@ -43,6 +37,20 @@ func GetvMixURLHandler(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
 		"url": *vmixaddr,
 	})
+}
+
+// GetvMixURLHandler returns vMix API Endpoint.
+func GetvMixShortcuts(c *gin.Context) {
+	if shortcuts == nil {
+		s, err := scraper.GetShortcuts(25)
+		if err != nil {
+			c.AbortWithError(http.StatusInternalServerError, err)
+			return
+		}
+		shortcuts = s
+	}
+
+	c.JSON(http.StatusOK, shortcuts)
 }
 
 // RefreshInputHandler returns vMix API Endpoint.
@@ -76,14 +84,6 @@ func GetInputsHandler(c *gin.Context) {
 	}
 	c.JSON(http.StatusOK, gin.H{
 		"inputs": vmix.Inputs.Input,
-	})
-	return
-}
-
-// GetFunctionsHandler returns available functions/value/input combinations for [GET] /api/functions as JSON.
-func GetFunctionsHandler(c *gin.Context) {
-	c.JSON(http.StatusOK, gin.H{
-		"functions": vMixFunctions,
 	})
 	return
 }
@@ -233,17 +233,19 @@ func main() {
 	api := r.Group("/api")
 	{
 		api.GET("/vmix", GetvMixURLHandler)
+		api.GET("/shortcuts", GetvMixShortcuts)
 		api.GET("/inputs", GetInputsHandler)
-		api.GET("/functions", GetFunctionsHandler)
 		api.POST("/refresh", RefreshInputHandler)
 		api.POST("/multiple", DoMultipleFunctionsHandler)
 	}
 
 	url := fmt.Sprintf("http://localhost%s/", *hostaddr)
-	err = exec.Command("rundll32.exe", "url.dll,FileProtocolHandler", url).Start()
-	if err != nil {
-		log.Println("Failed to open link. ignoring...")
-		log.Printf("ERR : %v\n", err)
+	if runtime.GOOS == "windows" {
+		if err := exec.Command("rundll32.exe", "url.dll,FileProtocolHandler", url).Start(); err != nil {
+			log.Println("Failed to open link. ignoring...")
+			log.Printf("ERR : %v\n", err)
+		}
 	}
+
 	log.Panicf("Failed to listen port %s : %v\n", *hostaddr, r.Run(*hostaddr))
 }
