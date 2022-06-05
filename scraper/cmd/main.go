@@ -10,30 +10,49 @@ import (
 
 var (
 	helpVer int
-	funcs   map[string][]string // map[FunctionName] - Query slice
 )
+
+type Shortcut struct {
+	Name        string
+	Description string
+	Parameters  []string // comma-separated queries
+}
 
 func main() {
 	flag.IntVar(&helpVer, "helpver", 25, "vMix help version")
 	flag.Parse()
 
-	funcs = make(map[string][]string)
+	shortcuts := make([]Shortcut, 0, 500)
 
 	c := colly.NewCollector()
 
 	// Find and visit all links
-	// #topic_content > div > table > tbody > tr:nth-child(3) > td:nth-child(1)
-	c.OnHTML("tr", func(e *colly.HTMLElement) {
-		// fmt.Printf("e:%#v\n", e)
-		e.ForEach("td", func(i int, h *colly.HTMLElement) {
-			if i != 0 {
-				return
-			}
-
-			if h.Text != "" {
-				t := strings.TrimSuffix(h.Text, "\n")
-				funcs[t] = make([]string, 0)
-			}
+	c.OnHTML("table", func(e *colly.HTMLElement) {
+		e.ForEach("tr", func(i int, h *colly.HTMLElement) {
+			// Filter header column somehow?
+			s := Shortcut{}
+			h.ForEach("td", func(i int, j *colly.HTMLElement) {
+				// fmt.Println("td text:", i, j.Text)
+				switch i {
+				case 0:
+					if j.Text != "" {
+						t := strings.ReplaceAll(j.Text, "\n", "")
+						s.Name = t
+					}
+				case 1:
+					if j.Text != "" {
+						t := strings.ReplaceAll(j.Text, "\n", "")
+						s.Description = t
+					}
+				case 2:
+					if j.Text != "" && j.Text != "None" {
+						t := strings.ReplaceAll(j.Text, "\n", "")
+						ts := strings.Split(t, ",")
+						s.Parameters = ts
+					}
+				}
+			})
+			shortcuts = append(shortcuts, s)
 		})
 	})
 
@@ -44,8 +63,9 @@ func main() {
 	u := fmt.Sprintf("https://www.vmix.com/help%d/ShortcutFunctionReference.html", helpVer)
 
 	c.Visit(u)
-	fmt.Printf("Got %d Functions\n", len(funcs))
-	for f := range funcs {
-		fmt.Println("Found", f)
+
+	fmt.Printf("Got %d Functions\n", len(shortcuts))
+	for i, f := range shortcuts {
+		fmt.Printf("Shortcut[%d] : %s(%s) . Queries:%v\n", i, f.Name, f.Description, f.Parameters)
 	}
 }
