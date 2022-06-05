@@ -34,7 +34,7 @@ ifeq ($(OS),Windows_NT)
     GOPATHDIR = $$env:GOPATH
 endif
 
-.DEFAULT_GOAL := build-windows
+.DEFAULT_GOAL := build
 
 test:
 	$(GOTEST) -v ./...
@@ -49,9 +49,9 @@ deps-web:
 	@cd ./web && yarn
 build-prepare: clean
 	@$(GOINSTALL) github.com/mitchellh/gox@v1.0.1
-build-windows: build-prepare build-web build-windows-server-only
-build-windows-server-only: build-prepare
-	@cd ./server && gox --osarch "windows/amd64" --output ../$(DIST_DIR)/${BINARY_NAME}_{{.OS}}_{{.Arch}} ./
+build: build-prepare build-web build-server-only
+build-server-only: build-prepare
+	@cd ./server && gox --osarch "windows/amd64 darwin/amd64 linux/amd64" --output ../$(DIST_DIR)/${BINARY_NAME}_{{.OS}}_{{.Arch}} ./
 build-web:
 	@cd ./web && yarn run build
 	@$(MKDIR) ./$(SERVER_DIR)/static

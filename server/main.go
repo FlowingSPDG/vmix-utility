@@ -7,6 +7,7 @@ import (
 	"log"
 	"net/http"
 	"os/exec"
+	"runtime"
 	"strings"
 	"sync"
 
@@ -239,10 +240,12 @@ func main() {
 	}
 
 	url := fmt.Sprintf("http://localhost%s/", *hostaddr)
-	err = exec.Command("rundll32.exe", "url.dll,FileProtocolHandler", url).Start()
-	if err != nil {
-		log.Println("Failed to open link. ignoring...")
-		log.Printf("ERR : %v\n", err)
+	if runtime.GOOS == "windows" {
+		if err := exec.Command("rundll32.exe", "url.dll,FileProtocolHandler", url).Start(); err != nil {
+			log.Println("Failed to open link. ignoring...")
+			log.Printf("ERR : %v\n", err)
+		}
 	}
+
 	log.Panicf("Failed to listen port %s : %v\n", *hostaddr, r.Run(*hostaddr))
 }
