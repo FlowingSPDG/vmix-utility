@@ -18,6 +18,14 @@ export default {
         throw new Error(err);
       }
     },
+    async GetShortcuts() {
+      try {
+        const res = await this.axios.get("/api/shortcuts");
+        return res.data;
+      } catch (err) {
+        throw new Error(err);
+      }
+    },
     async RefreshInput() {
       try {
         const res = await this.axios.post("/api/refresh");

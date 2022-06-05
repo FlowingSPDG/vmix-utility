@@ -7,10 +7,15 @@
       </el-form-item>
 
       <el-form-item label="Function name">
-        <el-input v-model="form.name"></el-input>
-        <el-button round icon="el-icon-refresh-right" @click="form.name = ''"
-          >CLEAR</el-button
-        >
+        <el-autocomplete
+          class="inline-input"
+          v-model="form.name"
+          :fetch-suggestions="querySearch"
+          placeholder="PreviewInput"
+          @select="handleSelect"
+        ><template slot-scope="{ item }">
+    <div class="value">{{ item.Name }}</div>
+    </template></el-autocomplete>
       </el-form-item>
 
       <el-form-item label="vMix URL(Override)">
@@ -155,6 +160,7 @@ export default {
       vMixURL: "",
       vMixURLOverride: "",
       inputs: [],
+      shortcuts: [],
       form: {
         name: "",
         input: "",
@@ -169,10 +175,21 @@ export default {
   async mounted() {
     this.loading = true;
     this.vMixURL = await this.GetvMixAddr();
-    this.inputs = await this.GetInputs();
+    // this.inputs = await this.GetInputs();
+    this.shortcuts = await this.GetShortcuts();
     this.loading = false;
   },
   methods: {
+    querySearch(queryString, cb) {
+        const shortcuts = this.shortcuts;
+        const results = queryString? shortcuts.filter(function(shortcut, index){
+          if (shortcut.Name.toLowerCase().indexOf(queryString.toLowerCase()) >= 0) return true;
+        }) : shortcuts
+        cb(results); // number of things returned
+      },
+    handleSelect(item) {
+        console.log(item);
+      },
     onCopy: function (e) {
       this.$notify({
         title: "Success",
