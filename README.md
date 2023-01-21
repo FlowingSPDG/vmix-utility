@@ -29,3 +29,7 @@ URL中の`Input`クエリパラメタをInput keyで指定します。 `"None"`�
 #### Query
 Click [Add query] Button to add additional queries. e.g. If you add ``"Duration"``, and ``"500"``. This will add ``&Duration=500`` query in URL.  
 [Add query] ボタンをクリックするとURL中にクエリを追加します。 例えば``”Duration"``,``"500"``を指定した場合``&Duration=500`` というクエリが追加されます。
+  
+  
+## Releases  / ダウンロード
+https://github.com/FlowingSPDG/vmix-utility/releases
