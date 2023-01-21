@@ -6,7 +6,7 @@ Golang, Gin and Vue.
 ## Developer / 開発者
 Nil Hiiragi / 柊木にる
 Github : [**FlowingSPDG**](http://github.com/FlowingSPDG)  
-Twitter : [**@HiiragiNil**](http://twitter.com/HiiragiNil) / [**@rjzefl**](http://twitter.com/rjzefl) / [**@FlowingSPDG**](http://twitter.com/FlowingSPDG)
+Twitter : [**@FlowingSPDG**](http://twitter.com/FlowingSPDG) / [**@x_eyfl**](http://twitter.com/x_eyfl). 
 
 ## Usage / 使い方
 ``./vmix_gen.exe -addr :8080 -vmix "http://localhost:8088" ``  
