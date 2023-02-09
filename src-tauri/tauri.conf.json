@@ -33,7 +33,7 @@
         "icons/icon.icns",
         "icons/icon.ico"
       ],
-      "identifier": "com.tauri.dev",
+      "identifier": "tokyo.flowing.utility.vmix",
       "longDescription": "",
       "macOS": {
         "entitlements": null,
