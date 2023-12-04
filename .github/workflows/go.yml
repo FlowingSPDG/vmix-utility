@@ -26,9 +26,3 @@ jobs:
       with:
         cmd: install
         dir: ./web
-
-    - name: Deps
-      run: make deps
-
-    - name: Build
-      run: make build
