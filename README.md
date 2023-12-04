@@ -1,12 +1,12 @@
-[![CircleCI](https://circleci.com/gh/FlowingSPDG/vmix-utility.svg?style=shield)](https://circleci.com/gh/FlowingSPDG/vmix-utility)  
+[![build](https://github.com/FlowingSPDG/vmix-utility/actions/workflows/build.yaml/badge.svg)](https://github.com/FlowingSPDG/vmix-utility/actions/workflows/build.yaml)  
 ## vmix-utility
 vMix utility tool, this can be used for managing inputs, checking multiviews and etc.  
-Golang, Gin and Vue.  
+Go, Gin and Vue.  
 
 ## Developer / 開発者
-Nil Hiiragi / 柊木にる
-Github : [**FlowingSPDG**](http://github.com/FlowingSPDG)  
-Twitter : [**@FlowingSPDG**](http://twitter.com/FlowingSPDG) / [**@x_eyfl**](http://twitter.com/x_eyfl). 
+Shugo Kawamura
+GitHub : [**FlowingSPDG**](http://github.com/FlowingSPDG)  
+X : [**@FlowingSPDG**](http://twitter.com/FlowingSPDG). 
 
 ## Usage / 使い方
 ``./vmix_gen.exe -addr :8080 -vmix "http://localhost:8088" ``  
@@ -17,7 +17,7 @@ Twitter : [**@FlowingSPDG**](http://twitter.com/FlowingSPDG) / [**@x_eyfl**](htt
 ![Screenshot2](https://user-images.githubusercontent.com/30292185/111715113-7d160880-8896-11eb-9a16-6af241f606b0.png "Screenshot")  
 
 ## Query Options
-#### [Function name(vMix Reference)](https://www.vmix.com/help24/index.htm?WebScripting.html)
+#### [Function name(vMix Reference)](https://www.vmix.com/help26/index.htm?WebScripting.html)
 Specifies `Function` query in URL parameter.  
 URL中の`Function`クエリパラメタを設定します。  
 #### Value
