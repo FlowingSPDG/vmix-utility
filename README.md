@@ -1,4 +1,4 @@
-[![CircleCI](https://circleci.com/gh/FlowingSPDG/vmix-utility.svg?style=shield)](https://circleci.com/gh/FlowingSPDG/vmix-utility)  
+[![build](https://github.com/FlowingSPDG/vmix-utility/actions/workflows/build.yaml/badge.svg)](https://github.com/FlowingSPDG/vmix-utility/actions/workflows/build.yaml)  
 ## vmix-utility
 vMix utility tool, this can be used for managing inputs, checking multiviews and etc.  
 Golang, Gin and Vue.  
