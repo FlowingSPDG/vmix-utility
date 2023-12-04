@@ -1,6 +1,6 @@
 module github.com/FlowingSPDG/vmix-utility
 
-go 1.16
+go 1.21
 
 require (
 	github.com/FlowingSPDG/vmix-go v0.0.0-20210404081624-a8d79ad60cca

@@ -41,7 +41,9 @@ test:
 clean:
 	@$(GOCLEAN)
 	-@$(RM) $(DIST_DIR)/*
-deps: deps-web
+deps: deps-web deps-server
+deps-server:
+	@$(MKDIR) ./server/static
 deps-web:
 	@git submodule init
 	@git submodule update
