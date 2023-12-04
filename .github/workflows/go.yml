@@ -31,4 +31,4 @@ jobs:
       run: make deps
 
     - name: Build
-      run: make build-server
+      run: make build
