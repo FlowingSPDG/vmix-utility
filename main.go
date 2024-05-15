@@ -10,17 +10,17 @@ import (
 
 	"embed"
 
-	vmixutility "github.com/FlowingSPDG/vmix-utility/server/core"
+	vmixutility "github.com/FlowingSPDG/vmix-utility/server"
 	"github.com/gin-gonic/gin"
 )
 
-// Static files
-//
-//go:embed static/*
+//go:embed web/dist/*
 var staticFS embed.FS
 
-//go:embed vMixMultiview/*
-var multiviewFS embed.FS
+// go embedは.(ピリオド)始まりのファイルに対応しない
+// 一時的に除外する
+///go:embed vMixMultiview/*
+// var multiviewFS embed.FS
 
 func main() {
 	log.Println("STARTING...")
@@ -43,12 +43,12 @@ func main() {
 	r := gin.Default()
 
 	// Cache files
-	index, err := staticFS.ReadFile("static/index.html")
+	index, err := staticFS.ReadFile("web/dist/index.html")
 	if err != nil {
 		panic(err)
 	}
 
-	favicon, err := staticFS.ReadFile("static/favicon.ico")
+	favicon, err := staticFS.ReadFile("web/dist/favicon.ico")
 	if err != nil {
 		panic(err)
 	}
@@ -61,7 +61,7 @@ func main() {
 	})
 	r.GET("/css/*file", func(c *gin.Context) {
 		file := c.Param("file")
-		b, err := staticFS.ReadFile("static/css" + file)
+		b, err := staticFS.ReadFile("web/dist/css" + file)
 		if err != nil {
 			c.AbortWithError(http.StatusNotFound, err)
 			return
@@ -70,7 +70,7 @@ func main() {
 	})
 	r.GET("/js/*file", func(c *gin.Context) {
 		file := c.Param("file")
-		b, err := staticFS.ReadFile("static/js" + file)
+		b, err := staticFS.ReadFile("web/dist/js" + file)
 		if err != nil {
 			c.AbortWithError(http.StatusNotFound, err)
 			return
@@ -79,7 +79,7 @@ func main() {
 	})
 	r.GET("/img/*file", func(c *gin.Context) {
 		file := c.Param("file")
-		b, err := staticFS.ReadFile("static/img" + file)
+		b, err := staticFS.ReadFile("web/dist/img" + file)
 		if err != nil {
 			c.AbortWithError(http.StatusNotFound, err)
 			return
@@ -88,22 +88,24 @@ func main() {
 	})
 	r.GET("/fonts/*file", func(c *gin.Context) {
 		file := c.Param("file")
-		b, err := staticFS.ReadFile("static/fonts" + file)
+		b, err := staticFS.ReadFile("web/dist/fonts" + file)
 		if err != nil {
 			c.AbortWithError(http.StatusNotFound, err)
 			return
 		}
 		c.Data(http.StatusOK, "text/css", b)
 	})
-	r.GET("/multiviewer/*file", func(c *gin.Context) {
-		file := c.Param("file")
-		b, err := multiviewFS.ReadFile("vMixMultiview" + file)
-		if err != nil {
-			c.AbortWithError(http.StatusNotFound, err)
-			return
-		}
-		c.Data(http.StatusOK, "", b)
-	})
+	/*
+		r.GET("/multiviewer/*file", func(c *gin.Context) {
+			file := c.Param("file")
+			b, err := multiviewFS.ReadFile("vMixMultiview" + file)
+			if err != nil {
+				c.AbortWithError(http.StatusNotFound, err)
+				return
+			}
+			c.Data(http.StatusOK, "", b)
+		})
+	*/
 
 	api := r.Group("/api")
 	{

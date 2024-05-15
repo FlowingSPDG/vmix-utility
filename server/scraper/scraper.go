@@ -7,10 +7,14 @@ import (
 	"github.com/gocolly/colly/v2"
 )
 
+type Parameter struct {
+	Type ParameterType
+}
+
 type Shortcut struct {
 	Name        string
 	Description string
-	Parameters  []string // comma-separated queries
+	Parameters  []Parameter // comma-separated queries
 }
 
 func GetShortcuts(helpVer int) ([]Shortcut, error) {
@@ -29,21 +33,29 @@ func GetShortcuts(helpVer int) ([]Shortcut, error) {
 				case 0:
 					if j.Text != "" {
 						t := strings.ReplaceAll(j.Text, "\n", "")
+						t = strings.TrimSpace(t)
 						s.Name = t
 					}
 				case 1:
 					if j.Text != "" {
 						t := strings.ReplaceAll(j.Text, "\n", "")
+						t = strings.TrimSpace(t)
 						s.Description = t
 					}
 				case 2:
 					if j.Text != "" {
 						t := strings.ReplaceAll(j.Text, "\n", "")
+						t = strings.TrimSpace(t)
 						if t == "None" {
-							s.Parameters = []string{}
+							s.Parameters = nil
 						} else {
 							ts := strings.Split(t, ",")
-							s.Parameters = ts
+							s.Parameters = make([]Parameter, 0, len(ts))
+							for _, p := range ts {
+								p = strings.TrimSpace(p)
+								pt := resolveParameterType(p)
+								s.Parameters = append(s.Parameters, Parameter{Type: pt})
+							}
 						}
 					}
 				}

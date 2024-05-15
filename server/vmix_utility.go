@@ -37,7 +37,7 @@ func NewUtilityClient(hostPort int, vmixAddr string) (UtilityClient, error) {
 		hostPort:  hostPort,
 		vmixAddr:  vmixAddr,
 		vmix:      vmix,
-		shortcuts: []scraper.Shortcut{},
+		shortcuts: nil,
 	}, nil
 }
 
@@ -51,7 +51,7 @@ func (u *utilityClient) GetvMixURLHandler(c *gin.Context) {
 // GetvMixURLHandler returns vMix API Endpoint.
 func (u *utilityClient) GetvMixShortcuts(c *gin.Context) {
 	if u.shortcuts == nil {
-		s, err := scraper.GetShortcuts(26) // TODO: 実際のバージョンを使用する
+		s, err := scraper.GetShortcuts(27) // TODO: 実際のバージョンを使用する
 		if err != nil {
 			c.AbortWithError(http.StatusInternalServerError, err)
 			return
