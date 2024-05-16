@@ -54,7 +54,7 @@ build-prepare: build-prepare-server build-prepare-web
 build: build-web build-server
 build-server: build-prepare
 #TODO: goxをやめる
-	@cd ./server && go run github.com/mitchellh/gox@v1.0.1 --osarch "windows/amd64" --output ../$(DIST_DIR)/${BINARY_NAME}_{{.OS}}_{{.Arch}} ./
+	@go run github.com/mitchellh/gox@v1.0.1 --osarch "windows/amd64" --output ./${DIST_DIR}/${BINARY_NAME}_{{.OS}}_{{.Arch}} ./
 build-web:
 	@cd ./web && yarn run build 
 	@$(MKDIR) ./$(SERVER_DIR)/static
