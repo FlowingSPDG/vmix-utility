@@ -85,7 +85,7 @@
         </template>
       </el-table-column>
       <el-table-column label="vMix functions" width="400">
-        <template slot-scope="scope" style="">
+        <template slot-scope="scope">
           <el-input
             placeholder="vMix API URL"
             :value="URL(scope.row.Key)"
@@ -174,10 +174,18 @@ export default {
   },
   async mounted() {
     this.loading = true;
-    this.vMixURL = await this.GetvMixAddr();
-    this.inputs = await this.GetInputs();
-    this.shortcuts = await this.GetShortcuts();
-    this.loading = false;
+    try {
+      this.vMixURL = await this.GetvMixAddr();
+      this.inputs = await this.GetInputs();
+      this.shortcuts = await this.GetShortcuts();
+    } catch (err) {
+      this.$notify.error({
+        title: "Error",
+        message: err,
+      });
+    }finally{
+      this.loading = false;
+    }
   },
   methods: {
     querySearch(queryString, cb) {

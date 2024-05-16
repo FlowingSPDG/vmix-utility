@@ -47,14 +47,14 @@ deps-server:
 deps-web:
 	@git submodule init
 	@git submodule update
-	@yarn global add @vue/cli
 	@cd ./web && yarn
 build-prepare-web:
 build-prepare-server: deps-server
 build-prepare: build-prepare-server build-prepare-web
 build: build-web build-server
 build-server: build-prepare
-	@cd ./server && go run github.com/mitchellh/gox@v1.0.1 --osarch "windows/amd64 darwin/amd64 linux/amd64" --output ../$(DIST_DIR)/${BINARY_NAME}_{{.OS}}_{{.Arch}} ./
+#TODO: goxをやめる
+	@cd ./server && go run github.com/mitchellh/gox@v1.0.1 --osarch "windows/amd64" --output ../$(DIST_DIR)/${BINARY_NAME}_{{.OS}}_{{.Arch}} ./
 build-web:
 	@cd ./web && yarn run build
 	@$(MKDIR) ./$(SERVER_DIR)/static
