@@ -24,6 +24,6 @@ jobs:
     - name: Run install
       uses: actions/setup-node@v4
       with:
-        node-version: 20
+        node-version: 17
     - run: corepack enable
     - run: cd web && yarn install
