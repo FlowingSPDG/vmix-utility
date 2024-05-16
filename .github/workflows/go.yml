@@ -26,4 +26,4 @@ jobs:
       with:
         node-version: 20
     - run: corepack enable
-    - run: cd web && yarn install --frozen-lockfile
+    - run: cd web && yarn install
