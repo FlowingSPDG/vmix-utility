@@ -22,7 +22,8 @@ jobs:
         go-version: '1.21'
 
     - name: Run install
-      uses: borales/actions-yarn@v4
+      uses: actions/setup-node@v4
       with:
-        cmd: install
-        dir: ./web
+        node-version: 20
+    - run: corepack enable
+    - run: cd web && yarn install --frozen-lockfile
