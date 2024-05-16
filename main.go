@@ -17,10 +17,11 @@ import (
 //go:embed web/dist/*
 var staticFS embed.FS
 
-// go embedは.(ピリオド)始まりのファイルに対応しない
-// 一時的に除外する
-///go:embed vMixMultiview/*
-// var multiviewFS embed.FS
+//go:embed vMixMultiview/index.html
+//go:embed vMixMultiview/script.js
+//go:embed vMixMultiview/jquery.js
+//go:embed vMixMultiview/style.css
+var multiviewFS embed.FS
 
 func main() {
 	log.Println("STARTING...")
@@ -95,17 +96,15 @@ func main() {
 		}
 		c.Data(http.StatusOK, "text/css", b)
 	})
-	/*
-		r.GET("/multiviewer/*file", func(c *gin.Context) {
-			file := c.Param("file")
-			b, err := multiviewFS.ReadFile("vMixMultiview" + file)
-			if err != nil {
-				c.AbortWithError(http.StatusNotFound, err)
-				return
-			}
-			c.Data(http.StatusOK, "", b)
-		})
-	*/
+	r.GET("/multiviewer/*file", func(c *gin.Context) {
+		file := c.Param("file")
+		b, err := multiviewFS.ReadFile("vMixMultiview" + file)
+		if err != nil {
+			c.AbortWithError(http.StatusNotFound, err)
+			return
+		}
+		c.Data(http.StatusOK, "", b)
+	})
 
 	api := r.Group("/api")
 	{

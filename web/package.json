@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "serve": "vue-cli-service serve",
-    "build": "vue-cli-service build",
+    "build": "NODE_OPTIONS='--openssl-legacy-provider' vue-cli-service build",
     "lint": "vue-cli-service lint"
   },
   "dependencies": {
@@ -35,5 +35,8 @@
     "typescript": "~3.7.5",
     "vue-cli-plugin-axios": "~0.0.4",
     "vue-template-compiler": "^2.6.11"
+  },
+  "volta": {
+    "node": "20.13.1"
   }
 }
