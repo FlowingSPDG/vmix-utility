@@ -124,5 +124,5 @@ func main() {
 		}
 	}
 
-	log.Panicf("failed to listen port %s : %v\n", hostPort, r.Run(fmt.Sprintf(":%d", hostPort)))
+	log.Panicf("failed to listen port %d : %v\n", hostPort, r.Run(fmt.Sprintf(":%d", hostPort)))
 }
