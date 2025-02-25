@@ -1,3 +1,4 @@
 [submodule "vMixMultiview"]
 	path = vMixMultiview
-	url = https://github.com/Haavard15/vMixMultiview
+	url = https://github.com/FlowingSPDG/vMixMultiview
+	branch = feat/refactor-utility
