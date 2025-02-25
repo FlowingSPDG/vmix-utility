@@ -25,7 +25,6 @@ type utilityClient struct {
 }
 
 type UtilityClient interface {
-	GetvMixURLHandler(c *gin.Context)
 	GetvMixShortcuts(c *gin.Context)
 
 	RefreshInputHandler(c *gin.Context)
@@ -50,13 +49,6 @@ func NewUtilityClient(hostPort int, vmixAddr string) (UtilityClient, error) {
 		vmix:      vmix,
 		shortcuts: shortcuts,
 	}, nil
-}
-
-// GetvMixURLHandler returns vMix API Endpoint.
-func (u *utilityClient) GetvMixURLHandler(c *gin.Context) {
-	c.JSON(http.StatusOK, gin.H{
-		"url": u.vmixAddr,
-	})
 }
 
 // GetvMixURLHandler returns vMix API Endpoint.

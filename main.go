@@ -108,7 +108,6 @@ func main() {
 
 	api := r.Group("/api")
 	{
-		api.GET("/vmix", util.GetvMixURLHandler)
 		api.GET("/shortcuts", util.GetvMixShortcuts)
 		api.GET("/inputs", util.GetInputsHandler)
 		api.POST("/refresh", util.RefreshInputHandler)
@@ -124,5 +123,5 @@ func main() {
 		}
 	}
 
-	log.Panicf("Failed to listen port %s : %v\n", hostPort, r.Run(fmt.Sprintf(":%d", hostPort)))
+	log.Panicf("failed to listen port %s : %v\n", hostPort, r.Run(fmt.Sprintf(":%d", hostPort)))
 }
