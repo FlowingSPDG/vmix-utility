@@ -109,6 +109,7 @@ func main() {
 	api := r.Group("/api")
 	{
 		api.GET("/shortcuts", util.GetvMixShortcuts)
+		api.GET("/raw", util.GetRawXMLHandler)
 		api.GET("/inputs", util.GetInputsHandler)
 		api.POST("/refresh", util.RefreshInputHandler)
 		api.POST("/multiple", util.DoMultipleFunctionsHandler)
