@@ -5,12 +5,12 @@ import (
 	"log"
 	"net/http"
 	"strings"
-	"sync"
 
 	"github.com/FlowingSPDG/vmix-utility/server/scraper"
 
 	vmixgo "github.com/FlowingSPDG/vmix-go"
 	"github.com/gin-gonic/gin"
+	"golang.org/x/sync/errgroup"
 	"golang.org/x/xerrors"
 )
 
@@ -146,25 +146,22 @@ func (u *utilityClient) DoMultipleFunctionsHandler(c *gin.Context) {
 
 	// 同時実行のためのgoroutineを準備する
 	// TODO: errgroupを使う
-	wg := &sync.WaitGroup{}
-	numerrors := 0
+	eg := &errgroup.Group{}
 	for range req.Num {
-		wg.Add(1)
-		go func() {
+		eg.Go(func() error {
 			if err := u.vmix.SendFunction(req.Function, params); err != nil {
-				numerrors++
 				log.Printf("Error sending function %s with %v queries. ERR : %v\n", req.Function, params, err)
+				return err
 			}
-			wg.Done()
-		}()
+			return nil
+		})
 	}
 	// goroutine合流
-	wg.Wait()
-
-	// 結果を返す
-	if numerrors == 0 {
-		c.String(http.StatusOK, "Done with no errors")
+	if err := eg.Wait(); err != nil {
+		c.String(http.StatusAccepted, fmt.Sprintf("Done with errors: %v", err))
 		return
 	}
-	c.String(http.StatusAccepted, fmt.Sprintf("Done with %d errors", numerrors))
+
+	// 結果を返す
+	c.String(http.StatusAccepted, "Done with no errors")
 }
