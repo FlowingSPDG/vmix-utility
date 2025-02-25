@@ -5,9 +5,10 @@ package scraper
 type ParameterType int
 
 const (
-	ParameterTypeNone ParameterType = iota
+	_ ParameterType = iota
 	ParameterTypeValue
 	ParameterTypeInput
+	ParameterTypeMix
 	ParameterTypeDuration
 	ParameterTypeChannel
 	ParameterTypeUnknown
@@ -23,6 +24,8 @@ func resolveParameterType(s string) ParameterType {
 		return ParameterTypeDuration
 	case "Channel":
 		return ParameterTypeChannel
+	case "Mix":
+		return ParameterTypeMix
 	default:
 		return ParameterTypeUnknown
 	}

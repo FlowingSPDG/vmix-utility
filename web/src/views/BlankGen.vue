@@ -38,7 +38,7 @@ export default {
           type: 'warning'
         })
       }catch(e){
-        //
+        return
       }
       this.fullscreenLoading = true
       const queries = [{

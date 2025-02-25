@@ -11,7 +11,6 @@
           class="inline-input"
           v-model="form.name"
           :fetch-suggestions="querySearch"
-          placeholder="PreviewInput"
           @select="handleSelect"
         ><template slot-scope="{ item }">
     <div class="value">{{ item.Name }}</div>
@@ -19,7 +18,7 @@
       </el-form-item>
 
       <el-form-item label="vMix URL(Override)">
-        <el-input placeholder="vMix Script" :value="vMixURLAddr()"></el-input>
+        <el-input placeholder="vMix Script" :value="vMixURLAddr()" disabled></el-input>
         <el-input v-model="vMixURLOverride">
           <template slot="prepend">http://</template>
         </el-input>
@@ -162,7 +161,7 @@ export default {
       inputs: [],
       shortcuts: [],
       form: {
-        name: "",
+        name: "PreviewInput",
         input: "",
         value: "",
         queries: [], // {"key":"","value":""}
@@ -175,7 +174,7 @@ export default {
   async mounted() {
     this.loading = true;
     try {
-      this.vMixURL = await this.GetvMixAddr();
+      this.vMixURL = `http://${location.hostname}:8088`; // 8088 is default port
       this.inputs = await this.GetInputs();
       this.shortcuts = await this.GetShortcuts();
     } catch (err) {
@@ -190,11 +189,11 @@ export default {
   methods: {
     querySearch(queryString, cb) {
         const shortcuts = this.shortcuts;
-        const results = queryString? shortcuts.filter(function(shortcut, index){
-          if (shortcut.Name.toLowerCase().indexOf(queryString.toLowerCase()) >= 0) return true;
-        }) : shortcuts
-        cb(results); // number of things returned
-      },
+        const results = queryString ? shortcuts.filter((shortcut) => 
+          shortcut.Name.toLowerCase().indexOf(queryString.toLowerCase()) >= 0
+        ) : shortcuts;
+        cb(results);
+    },
     handleSelect(item) {
         this.form.name = item.Name
       },
@@ -219,7 +218,7 @@ export default {
         this.inputs = await this.RefreshInput();
         this.$notify({
           title: "Success",
-          message: `Refreshed inputs.`,
+          message: "Refreshed inputs.",
           type: "success",
         });
       } catch (err) {
@@ -231,7 +230,7 @@ export default {
     },
     URL: function (inputKey) {
       const vmix =
-        this.vMixURLOverride != ""
+        this.vMixURLOverride !== ""
           ? `http://${this.vMixURLOverride}`
           : this.vMixURL;
       let url = `${vmix}/api?Function=${this.form.name}`;
@@ -248,7 +247,7 @@ export default {
     },
     TallyURL: function (inputKey) {
       const vmix =
-        this.vMixURLOverride != ""
+        this.vMixURLOverride !== ""
           ? `http://${this.vMixURLOverride}`
           : this.vMixURL;
       const url = `${vmix}/tally?key=${inputKey}`;

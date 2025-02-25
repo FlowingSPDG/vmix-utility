@@ -17,8 +17,44 @@ type Shortcut struct {
 	Parameters  []Parameter // comma-separated queries
 }
 
+// OverrideShortcuts is a list of shortcuts that are not on the official documentation.
+var OverrideShortcuts = []Shortcut{
+	{
+		Name:        "PreviewInput",
+		Description: "Preview Input",
+		Parameters: []Parameter{
+			{Type: ParameterTypeInput},
+			{Type: ParameterTypeMix},
+		},
+	},
+	{
+		Name:        "Cut",
+		Description: "Cut",
+		Parameters: []Parameter{
+			{Type: ParameterTypeInput},
+			{Type: ParameterTypeMix},
+		},
+	},
+	{
+		Name:        "Fade",
+		Description: "Fade",
+		Parameters: []Parameter{
+			{Type: ParameterTypeInput},
+			{Type: ParameterTypeMix},
+		},
+	},
+	{
+		Name:        "Merge",
+		Description: "Merge",
+		Parameters: []Parameter{
+			{Type: ParameterTypeInput},
+		},
+	},
+}
+
 func GetShortcuts(helpVer int) ([]Shortcut, error) {
 	shortcuts := make([]Shortcut, 0, 500)
+	shortcuts = append(shortcuts, OverrideShortcuts...)
 
 	c := colly.NewCollector()
 
@@ -28,9 +64,11 @@ func GetShortcuts(helpVer int) ([]Shortcut, error) {
 			// Filter header column somehow?
 			s := Shortcut{}
 			h.ForEach("td", func(i int, j *colly.HTMLElement) {
-				// fmt.Println("td text:", i, j.Text)
 				switch i {
 				case 0:
+					if strings.Contains(j.Attr("style"), "background-color: #ccffcc;") {
+						return
+					}
 					if j.Text != "" {
 						t := strings.ReplaceAll(j.Text, "\n", "")
 						t = strings.TrimSpace(t)
@@ -60,6 +98,9 @@ func GetShortcuts(helpVer int) ([]Shortcut, error) {
 					}
 				}
 			})
+			if s.Name == "" {
+				return
+			}
 			shortcuts = append(shortcuts, s)
 		})
 	})
