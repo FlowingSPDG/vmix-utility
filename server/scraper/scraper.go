@@ -20,14 +20,6 @@ type Shortcut struct {
 // OverrideShortcuts is a list of shortcuts that are not on the official documentation.
 var OverrideShortcuts = []Shortcut{
 	{
-		Name:        "PreviewInput",
-		Description: "Preview Input",
-		Parameters: []Parameter{
-			{Type: ParameterTypeInput},
-			{Type: ParameterTypeMix},
-		},
-	},
-	{
 		Name:        "Cut",
 		Description: "Cut",
 		Parameters: []Parameter{
