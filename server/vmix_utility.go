@@ -2,6 +2,7 @@ package vmixutility
 
 import (
 	"fmt"
+	"io"
 	"log"
 	"net/http"
 	"strings"
@@ -25,8 +26,8 @@ type utilityClient struct {
 }
 
 type UtilityClient interface {
+	GetRawXMLHandler(c *gin.Context)
 	GetvMixShortcuts(c *gin.Context)
-
 	RefreshInputHandler(c *gin.Context)
 	GetInputsHandler(c *gin.Context)
 	DoMultipleFunctionsHandler(c *gin.Context)
@@ -49,6 +50,24 @@ func NewUtilityClient(hostPort int, vmixAddr string) (UtilityClient, error) {
 		vmix:      vmix,
 		shortcuts: shortcuts,
 	}, nil
+}
+
+func (u *utilityClient) GetRawXMLHandler(c *gin.Context) {
+	resp, err := http.Get(u.vmixAddr + "/api")
+	if err != nil {
+		c.AbortWithError(http.StatusInternalServerError, err)
+		return
+	}
+	defer resp.Body.Close()
+
+	b, err := io.ReadAll(resp.Body)
+	if err != nil {
+		c.AbortWithError(http.StatusInternalServerError, err)
+		return
+	}
+
+	c.Header("Content-Type", "application/xml")
+	c.String(http.StatusOK, string(b))
 }
 
 // GetvMixURLHandler returns vMix API Endpoint.
