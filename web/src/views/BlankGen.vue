@@ -42,16 +42,20 @@ export default {
       }
       this.fullscreenLoading = true
       const queries = [{
-        "key":"value",
-        "value":"Colour|Black"
+        key:"value",
+        value:"Colour|Black"
       }]
       if (this.transparent) {
-        queries.value = "Colour|Transparent"
+        queries[0].value = "Colour|Transparent"
       }
       try{
         return await this.SendsMultipleFunctions("AddInput", queries, this.num)
       }catch(e){
-        // 
+        // エラーが出たらエラーメッセージを表示
+        this.$notify.error({
+          title: "Error",
+          message: e
+        })
       }finally{
         this.fullscreenLoading = false
       }
