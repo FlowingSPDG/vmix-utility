@@ -1,0 +1,85 @@
+version: '3'
+
+vars:
+  DIST_DIR: 'build'
+  SERVER_DIR: 'server'
+  BINARY_NAME: 'vmix_gen'
+  GOTEST: 'go test'
+  GOCLEAN: 'go clean'
+  RM: 'rm -rf'
+  MKDIR: 'mkdir -p'
+  CP: 'cp -R'
+
+tasks:
+  default: 
+    deps:
+      - build
+
+  test:
+    cmds:
+      - '{{.GOTEST}} -v ./...'
+
+  clean:
+    cmds:
+      - '{{.GOCLEAN}}'
+      - '{{.RM}} {{.DIST_DIR}}/*'
+
+  deps:
+    deps:
+      - deps-web
+      - deps-server
+
+  deps-server:
+    cmds:
+      - '{{.MKDIR}} ./server/static'
+
+  deps-web:
+    cmds:
+      - git submodule init
+      - git submodule update
+      - cd ./web && yarn
+
+  build-prepare-web:
+    cmds: []
+
+  build-prepare-server:
+    deps:
+      - deps-server
+
+  build-prepare:
+    deps:
+      - build-prepare-server
+      - build-prepare-web
+
+  build:
+    deps:
+      - build-web
+      - build-server
+
+  build-server:
+    deps:
+      - build-prepare
+    cmds:
+      - task: build-server-windows
+
+  build-server-windows:
+    cmds:
+      - go run github.com/mitchellh/gox@v1.0.1 --osarch "windows/amd64" --output ./{{.DIST_DIR}}/{{.BINARY_NAME}}_{{`{{.OS}}_{{.Arch}}`}} ./
+
+  build-web:
+    cmds:
+      - cd ./web && yarn run build
+      - '{{.MKDIR}} ./{{.SERVER_DIR}}/static'
+      - '{{.RM}} ./{{.SERVER_DIR}}/static/*'
+      - '{{.CP}} ./web/dist/* ./{{.SERVER_DIR}}/static/'
+      - '{{.RM}} ./{{.SERVER_DIR}}/vMixMultiview/'
+      - '{{.MKDIR}} ./{{.SERVER_DIR}}/vMixMultiview/vMixLayouts'
+      - '{{.MKDIR}} ./{{.SERVER_DIR}}/vMixMultiview/vMixPreset'
+      - '{{.CP}} ./vMixMultiview/vMixLayouts/index.html ./{{.SERVER_DIR}}/vMixMultiview/vMixLayouts/'
+      - '{{.CP}} ./vMixMultiview/vMixPreset/index.html ./{{.SERVER_DIR}}/vMixMultiview/vMixPreset/'
+      - '{{.CP}} ./vMixMultiview/favicon.ico ./{{.SERVER_DIR}}/vMixMultiview/'
+      - '{{.CP}} ./vMixMultiview/index.html ./{{.SERVER_DIR}}/vMixMultiview/'
+      - '{{.CP}} ./vMixMultiview/jquery.js ./{{.SERVER_DIR}}/vMixMultiview/'
+      - '{{.CP}} ./vMixMultiview/mask.png ./{{.SERVER_DIR}}/vMixMultiview/'
+      - '{{.CP}} ./vMixMultiview/script.js ./{{.SERVER_DIR}}/vMixMultiview/'
+      - '{{.CP}} ./vMixMultiview/style.css ./{{.SERVER_DIR}}/vMixMultiview/'
