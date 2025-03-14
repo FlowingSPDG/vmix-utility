@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { invoke } from '@tauri-apps/api/tauri';
 import { 
   Box, 
   Typography, 
@@ -22,16 +23,35 @@ import DeleteIcon from '@mui/icons-material/Delete';
 interface Connection {
   id: number;
   host: string;
+  label: string;
   status: 'Connected' | 'Disconnected';
   activeInput: number;
   previewInput: number;
 }
 
 const Connections: React.FC = () => {
-  const [connections, setConnections] = useState<Connection[]>([
-    { id: 1, host: '192.168.1.100', status: 'Connected', activeInput: 1, previewInput: 2 },
-    { id: 2, host: '192.168.1.101', status: 'Disconnected', activeInput: 0, previewInput: 0 },
-  ]);
+  const [connections, setConnections] = useState<Connection[]>([]);
+
+  useEffect(() => {
+    const fetchConnections = async () => {
+      try {
+        // TODO: 実際の接続情報を取得するロジックを実装
+        const initialConnections = await invoke<VmixConnection[]>('get_vmix_statuses');
+        setConnections(initialConnections.map((conn, index) => ({
+          id: index + 1,
+          host: conn.host,
+          label: conn.label,
+          status: conn.status,
+          activeInput: conn.active_input,
+          previewInput: conn.preview_input,
+        })));
+      } catch (error) {
+        console.error('Failed to fetch connections:', error);
+      }
+    };
+
+    fetchConnections();
+  }, []);
   
   const [open, setOpen] = useState(false);
   const [newHost, setNewHost] = useState('');
@@ -45,22 +65,37 @@ const Connections: React.FC = () => {
     setNewHost('');
   };
 
-  const handleAdd = () => {
+  const handleAdd = async () => {
     if (newHost) {
-      const newConnection: Connection = {
-        id: connections.length > 0 ? Math.max(...connections.map(c => c.id)) + 1 : 1,
-        host: newHost,
-        status: 'Disconnected',
-        activeInput: 0,
-        previewInput: 0
-      };
-      setConnections([...connections, newConnection]);
-      handleClose();
+      try {
+        const newConnection = await invoke<VmixConnection>('connect_vmix', { host: newHost });
+        setConnections([...connections, {
+          id: connections.length > 0 ? Math.max(...connections.map(c => c.id)) + 1 : 1,
+          host: newConnection.host,
+          label: newConnection.label,
+          status: newConnection.status,
+          activeInput: newConnection.active_input,
+          previewInput: newConnection.preview_input
+        }]);
+        handleClose();
+      } catch (error) {
+        console.error('Failed to connect:', error);
+        alert(`接続に失敗しました: ${error}`);
+      }
     }
   };
 
-  const handleDelete = (id: number) => {
-    setConnections(connections.filter(connection => connection.id !== id));
+  const handleDelete = async (id: number) => {
+    const connection = connections.find(c => c.id === id);
+    if (connection) {
+      try {
+        await invoke('disconnect_vmix', { host: connection.host });
+        setConnections(connections.filter(connection => connection.id !== id));
+      } catch (error) {
+        console.error('Failed to disconnect:', error);
+        alert(`切断に失敗しました: ${error}`);
+      }
+    }
   };
 
   return (

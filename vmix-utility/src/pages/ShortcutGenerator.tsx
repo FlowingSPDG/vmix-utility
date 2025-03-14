@@ -93,7 +93,6 @@ const ShortcutGenerator = () => {
   // State for new query param
   const [newParamKey, setNewParamKey] = useState('');
   const [newParamValue, setNewParamValue] = useState('');
-  const [editingInputId, setEditingInputId] = useState<number | null>(null);
 
   const handleVMixChange = (event: SelectChangeEvent) => {
     setSelectedVMix(Number(event.target.value));
@@ -151,11 +150,7 @@ const ShortcutGenerator = () => {
   };
 
   const generateScript = (input: Input) => {
-    const url = generateUrl(input);
-    return `fetch("${url}")
-  .then(response => response.text())
-  .then(data => console.log(data))
-  .catch(error => console.error('Error:', error));`;
+    return `Function=${input.functionName}`;
   };
 
   const generateTally = (input: Input) => {
@@ -268,78 +263,6 @@ const ShortcutGenerator = () => {
           </TableBody>
         </Table>
       </TableContainer>
-      
-      <Typography variant="h6" sx={{ mt: 4, mb: 2 }}>
-        Query Parameters Editor
-      </Typography>
-      
-      <Paper sx={{ p: 2 }}>
-        <FormControl fullWidth sx={{ mb: 2 }}>
-          <InputLabel id="input-select-label">Select Input to Edit</InputLabel>
-          <Select
-            labelId="input-select-label"
-            value={editingInputId?.toString() || ''}
-            label="Select Input to Edit"
-            onChange={(e: SelectChangeEvent) => setEditingInputId(e.target.value ? Number(e.target.value) : null)}
-          >
-            <MenuItem value="">
-              <em>None</em>
-            </MenuItem>
-            {inputs.map((input) => (
-              <MenuItem key={input.id} value={input.id}>
-                {input.number}: {input.title}
-              </MenuItem>
-            ))}
-          </Select>
-        </FormControl>
-        
-        {editingInputId && (
-          <>
-            <Typography variant="subtitle1" gutterBottom>
-              Function: {inputs.find(i => i.id === editingInputId)?.functionName}
-            </Typography>
-            
-            <Stack direction="row" spacing={1} sx={{ mb: 2 }}>
-              {inputs.find(i => i.id === editingInputId)?.queryParams.map((param) => (
-                <Chip
-                  key={param.id}
-                  label={`${param.key}: ${param.value}`}
-                  onDelete={() => handleDeleteParam(editingInputId, param.id)}
-                  color="primary"
-                  variant="outlined"
-                />
-              ))}
-            </Stack>
-            
-            <Divider sx={{ my: 2 }} />
-            
-            <Box sx={{ display: 'flex', gap: 2, alignItems: 'center' }}>
-              <TextField
-                label="Parameter Key"
-                value={newParamKey}
-                onChange={(e) => setNewParamKey(e.target.value)}
-                size="small"
-                sx={{ flexGrow: 1 }}
-              />
-              <TextField
-                label="Parameter Value"
-                value={newParamValue}
-                onChange={(e) => setNewParamValue(e.target.value)}
-                size="small"
-                sx={{ flexGrow: 1 }}
-              />
-              <Button
-                variant="contained"
-                startIcon={<AddIcon />}
-                onClick={() => handleAddParam(editingInputId)}
-                disabled={!newParamKey || !newParamValue}
-              >
-                Add Parameter
-              </Button>
-            </Box>
-          </>
-        )}
-      </Paper>
     </Box>
   );
 };

@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import type { SelectChangeEvent } from '@mui/material';
 import {
   Box,
   Typography,
@@ -7,13 +8,35 @@ import {
   Checkbox,
   FormControlLabel,
   Slider,
-  Alert
+  Alert,
+  Select,
+  MenuItem,
+  FormControl,
+  InputLabel,
 } from '@mui/material';
+
+interface Connection {
+  id: number;
+  host: string;
+  label: string;
+  status: 'Connected' | 'Disconnected';
+}
 
 const BlankGenerator = () => {
   const [transparent, setTransparent] = useState(false);
   const [count, setCount] = useState(1);
   const [generated, setGenerated] = useState(false);
+  const [selectedConnection, setSelectedConnection] = useState<number | ''>('');
+  const [connections, setConnections] = useState<Connection[]>([]);
+
+  // 接続一覧を取得
+  useEffect(() => {
+    // TODO: 実際のAPIから接続一覧を取得する
+    setConnections([
+      { id: 1, host: '192.168.1.100', label: 'Main vMix', status: 'Connected' },
+      { id: 2, host: '192.168.1.101', label: 'Game vMix', status: 'Connected' },
+    ]);
+  }, []);
 
   const handleTransparentChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     setTransparent(event.target.checked);
@@ -23,15 +46,24 @@ const BlankGenerator = () => {
     setCount(newValue as number);
   };
 
+  const handleConnectionChange = (event: SelectChangeEvent<number | ''>) => {
+    setSelectedConnection(event.target.value as number);
+  };
+
   const handleGenerate = () => {
-    // In a real application, this would generate actual blank inputs in vMix
-    // This would be where you'd make the actual API call to vMix
-    console.log(`Generated ${count} blank${count !== 1 ? 's' : ''} with transparent=${transparent}`);
+    if (selectedConnection === '') {
+      return;
+    }
+
+    const connection = connections.find(c => c.id === selectedConnection);
+    if (!connection) {
+      return;
+    }
+
+    // TODO: 選択されたvMix接続に対してブランク生成を実行
+    console.log(`Generated ${count} blank${count !== 1 ? 's' : ''} with transparent=${transparent} on ${connection.host}`);
     
-    // Show success message
     setGenerated(true);
-    
-    // Hide success message after 3 seconds
     setTimeout(() => {
       setGenerated(false);
     }, 3000);
@@ -45,7 +77,7 @@ const BlankGenerator = () => {
       
       {generated && (
         <Alert severity="success" sx={{ mb: 3 }}>
-          Successfully generated {count} blank{count !== 1 ? 's' : ''} with {transparent ? 'transparent' : 'solid'} background!
+          Successfully generated {count} blank{count !== 1 ? 's' : ''} with {transparent ? 'transparent' : 'solid'} background on {connections.find(c => c.id === selectedConnection)?.label}!
         </Alert>
       )}
       
@@ -53,7 +85,30 @@ const BlankGenerator = () => {
         <Typography variant="h6" gutterBottom>
           Generate Blank Inputs
         </Typography>
-        
+
+        <Box sx={{ mb: 3 }}>
+          <FormControl fullWidth>
+            <InputLabel id="vmix-connection-label">vMix Connection</InputLabel>
+            <Select
+              labelId="vmix-connection-label"
+              id="vmix-connection"
+              value={selectedConnection}
+              label="vMix Connection"
+              onChange={handleConnectionChange}
+            >
+              {connections.map((connection) => (
+                <MenuItem
+                  key={connection.id}
+                  value={connection.id}
+                  disabled={connection.status === 'Disconnected'}
+                >
+                  {connection.label} ({connection.host})
+                </MenuItem>
+              ))}
+            </Select>
+          </FormControl>
+        </Box>
+
         <Box sx={{ mb: 3 }}>
           <FormControlLabel
             control={
@@ -88,6 +143,7 @@ const BlankGenerator = () => {
           color="primary"
           size="large"
           onClick={handleGenerate}
+          disabled={selectedConnection === ''}
         >
           Generate Blanks
         </Button>

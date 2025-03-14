@@ -125,29 +125,6 @@ const Settings = () => {
             <Divider sx={{ mb: 2 }} />
             
             <Box sx={{ mb: 2 }}>
-              <TextField
-                fullWidth
-                label="Default vMix IP Address"
-                name="defaultVMixIP"
-                value={settings.defaultVMixIP}
-                onChange={handleTextChange}
-                margin="normal"
-              />
-            </Box>
-            
-            <Box sx={{ mb: 2 }}>
-              <TextField
-                fullWidth
-                label="Default vMix Port"
-                name="defaultVMixPort"
-                type="number"
-                value={settings.defaultVMixPort}
-                onChange={handleTextChange}
-                margin="normal"
-              />
-            </Box>
-            
-            <Box sx={{ mb: 2 }}>
               <Typography id="refresh-interval-slider" gutterBottom>
                 Refresh Interval: {settings.refreshInterval}ms
               </Typography>
