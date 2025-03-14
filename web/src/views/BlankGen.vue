@@ -41,13 +41,14 @@ export default {
         return
       }
       this.fullscreenLoading = true
+      let value = "Colour|Black"
+      if (this.transparent) {
+        value = "Colour|Transparent"
+      }
       const queries = [{
         key:"value",
-        value:"Colour|Black"
+        value:value
       }]
-      if (this.transparent) {
-        queries[0].value = "Colour|Transparent"
-      }
       try{
         return await this.SendsMultipleFunctions("AddInput", queries, this.num)
       }catch(e){
