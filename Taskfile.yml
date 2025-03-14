@@ -12,8 +12,8 @@ vars:
 
 tasks:
   default: 
-    deps:
-      - build
+    cmds:
+      - task: build
 
   test:
     cmds:
@@ -52,9 +52,9 @@ tasks:
       - build-prepare-web
 
   build:
-    deps:
-      - build-web
-      - build-server
+    cmds:
+      - task: build-web
+      - task: build-server
 
   build-server:
     deps:
