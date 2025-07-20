@@ -113,6 +113,7 @@ func main() {
 		api.GET("/inputs", util.GetInputsHandler)
 		api.POST("/refresh", util.RefreshInputHandler)
 		api.POST("/multiple", util.DoMultipleFunctionsHandler)
+		api.POST("/setinputname", util.SetInputNameHandler)
 	}
 
 	// Windowsの場合、自動的にブラウザを開く

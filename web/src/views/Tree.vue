@@ -148,22 +148,6 @@ export default {
               }
           }
     },
-    async SetInputName(key,name){
-        const url = `${await this.GetvMixAddr()}/api?Function=SetInputName&input=${key}&Value=${name}`;
-        try{
-        await this.axios.get(url);
-        await this.$notify({
-          title: "Success",
-          message: `Success Change Name on ${key}`,
-          type: "success"
-        });
-      }catch(err){
-        this.$notify.error({
-          title: "Error",
-          message: err
-        })
-      }
-    }
     },
   watch:{
   }

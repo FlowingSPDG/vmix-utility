@@ -78,6 +78,26 @@ export default {
           type: "warning"
         })
       }
+    },
+    async SetInputName(input, value) {
+      try {
+        const data = {
+          "input": input,
+          "value": value
+        }
+        const res = await this.axios.post("/api/setinputname", data);
+        this.$notify({
+          title: "Success",
+          message: res.data.message || "Successfully set input name",
+          type: "success"
+        });
+      } catch (err) {
+        this.$notify.error({
+          title: "Error",
+          message: err.response?.data?.error || err.message || "Failed to set input name"
+        })
+        throw new Error(err);
+      }
     }
   }
 };
