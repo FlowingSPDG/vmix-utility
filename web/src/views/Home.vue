@@ -289,6 +289,26 @@ export default {
           Key: "",
         },
         {
+          Number: null,
+          Name: "Dynamic Input1(Dynamic1)",
+          Key: "Dynamic1",
+        },
+        {
+          Number: null,
+          Name: "Dynamic Input2(Dynamic2)",
+          Key: "Dynamic2",
+        },
+        {
+          Number: null,
+          Name: "Dynamic Input3(Dynamic3)",
+          Key: "Dynamic3",
+        },
+        {
+          Number: null,
+          Name: "Dynamic Input4(Dynamic4)",
+          Key: "Dynamic4",
+        },
+        {
           Number: -1,
           Name: "PROGRAM",
           Key: "-1",
