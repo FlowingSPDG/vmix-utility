@@ -1,6 +1,6 @@
 <script>
 export default {
-  name: "api",
+  name: "ApiHelper",
   methods: {
     async GetInputs() {
       try {
