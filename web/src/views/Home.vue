@@ -290,22 +290,22 @@ export default {
         },
         {
           Number: null,
-          Name: "Dynamic Input1(Dynamic1)",
+          Name: "Dynamic Input1",
           Key: "Dynamic1",
         },
         {
           Number: null,
-          Name: "Dynamic Input2(Dynamic2)",
+          Name: "Dynamic Input2",
           Key: "Dynamic2",
         },
         {
           Number: null,
-          Name: "Dynamic Input3(Dynamic3)",
+          Name: "Dynamic Input3",
           Key: "Dynamic3",
         },
         {
           Number: null,
-          Name: "Dynamic Input4(Dynamic4)",
+          Name: "Dynamic Input4",
           Key: "Dynamic4",
         },
         {

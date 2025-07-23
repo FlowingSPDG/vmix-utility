@@ -64,7 +64,7 @@ tasks:
 
   build-server-windows:
     cmds:
-      - go run github.com/mitchellh/gox@v1.0.1 --osarch "windows/amd64" --output ./{{.DIST_DIR}}/{{.BINARY_NAME}}_{{`{{.OS}}_{{.Arch}}`}} ./
+      - go run github.com/mitchellh/gox@v1.0.1 --osarch "windows/amd64 darwin/amd64 darwin/arm64" --output ./{{.DIST_DIR}}/{{.BINARY_NAME}}_{{`{{.OS}}_{{.Arch}}`}} ./
 
   build-web:
     cmds:

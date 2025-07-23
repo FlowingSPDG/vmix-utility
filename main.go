@@ -76,7 +76,7 @@ func main() {
 			c.AbortWithError(http.StatusNotFound, err)
 			return
 		}
-		c.Data(http.StatusOK, "text/css", b)
+		c.Data(http.StatusOK, "application/javascript", b)
 	})
 	r.GET("/img/*file", func(c *gin.Context) {
 		file := c.Param("file")
@@ -85,7 +85,7 @@ func main() {
 			c.AbortWithError(http.StatusNotFound, err)
 			return
 		}
-		c.Data(http.StatusOK, "text/css", b)
+		c.Data(http.StatusOK, "image/*", b)
 	})
 	r.GET("/fonts/*file", func(c *gin.Context) {
 		file := c.Param("file")
@@ -94,7 +94,7 @@ func main() {
 			c.AbortWithError(http.StatusNotFound, err)
 			return
 		}
-		c.Data(http.StatusOK, "text/css", b)
+		c.Data(http.StatusOK, "font/woff2", b)
 	})
 	r.GET("/multiviewer/*file", func(c *gin.Context) {
 		file := c.Param("file")
@@ -103,7 +103,7 @@ func main() {
 			c.AbortWithError(http.StatusNotFound, err)
 			return
 		}
-		c.Data(http.StatusOK, "", b)
+		c.Data(http.StatusOK, "text/html", b)
 	})
 
 	api := r.Group("/api")
