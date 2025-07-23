@@ -6,3 +6,9 @@
     <a href="https://twitter.com/FlowingSPDG/"> @FlowingSPDG </a> / <a href="https://twitter.com/FlowingSPDG_EN/"> @FlowingSPDG_EN </a>
   </div>
 </template>
+
+<script>
+export default {
+  name: 'DeveloperView'
+}
+</script>

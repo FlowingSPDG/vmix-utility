@@ -150,7 +150,7 @@
 import query from "@/components/query.vue";
 
 export default {
-  name: "Home",
+  name: "HomeView",
   components: {
     query,
   },
@@ -280,13 +280,33 @@ export default {
     },
   },
   watch: {
-    inputs: function (val, _oldval) {
+    inputs: function (val) {
       if (val[0].Key !== "") {
         this.inputs.unshift(
         {
           Number: null,
           Name: "EMPTY",
           Key: "",
+        },
+        {
+          Number: null,
+          Name: "Dynamic Input1",
+          Key: "Dynamic1",
+        },
+        {
+          Number: null,
+          Name: "Dynamic Input2",
+          Key: "Dynamic2",
+        },
+        {
+          Number: null,
+          Name: "Dynamic Input3",
+          Key: "Dynamic3",
+        },
+        {
+          Number: null,
+          Name: "Dynamic Input4",
+          Key: "Dynamic4",
         },
         {
           Number: -1,

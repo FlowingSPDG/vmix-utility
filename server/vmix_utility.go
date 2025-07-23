@@ -31,6 +31,7 @@ type UtilityClient interface {
 	RefreshInputHandler(c *gin.Context)
 	GetInputsHandler(c *gin.Context)
 	DoMultipleFunctionsHandler(c *gin.Context)
+	SetInputNameHandler(c *gin.Context)
 }
 
 func NewUtilityClient(hostPort int, vmixAddr string) (UtilityClient, error) {
@@ -175,4 +176,52 @@ func (u *utilityClient) DoMultipleFunctionsHandler(c *gin.Context) {
 
 	// 結果を返す
 	c.String(http.StatusAccepted, "Done with no errors")
+}
+
+// SetInputNameRequest Request JSON for SetInputNameHandler
+type SetInputNameRequest struct {
+	Input string `json:"input"` // Input key or number
+	Value string `json:"value"` // New input name
+}
+
+// Validate form
+func (r *SetInputNameRequest) Validate() error {
+	if strings.TrimSpace(r.Input) == "" {
+		return xerrors.Errorf("input empty")
+	}
+	if strings.TrimSpace(r.Value) == "" {
+		return xerrors.Errorf("value empty")
+	}
+	return nil
+}
+
+// SetInputNameHandler Sets input name in vMix.
+func (u *utilityClient) SetInputNameHandler(c *gin.Context) {
+	req := SetInputNameRequest{}
+	if err := c.BindJSON(&req); err != nil {
+		c.AbortWithError(http.StatusBadRequest, err)
+		return
+	}
+	if err := req.Validate(); err != nil {
+		c.AbortWithError(http.StatusBadRequest, err)
+		return
+	}
+
+	// Send SetInputName function to vMix
+	params := map[string]string{
+		"Input": req.Input,
+		"Value": req.Value,
+	}
+	
+	if err := u.vmix.SendFunction("SetInputName", params); err != nil {
+		log.Printf("Error setting input name: %v\n", err)
+		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{
+			"error": err.Error(),
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"message": fmt.Sprintf("Successfully set input name for %s to %s", req.Input, req.Value),
+	})
 }
