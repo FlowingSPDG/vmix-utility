@@ -103,7 +103,7 @@ func main() {
 			c.AbortWithError(http.StatusNotFound, err)
 			return
 		}
-		c.Data(http.StatusOK, "text/html", b)
+		c.Data(http.StatusOK, http.DetectContentType(b), b)
 	})
 
 	api := r.Group("/api")
