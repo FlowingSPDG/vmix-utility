@@ -36,7 +36,8 @@ fn greet(name: &str) -> String {
 async fn connect_vmix(state: tauri::State<'_, AppState>, host: String) -> Result<VmixConnection, String> {
     let socket_addr = SocketAddr::new(host.parse().unwrap(), 8088);
     let mut vmix = VmixApi::new(socket_addr, Duration::from_secs(10)).await.map_err(|e| e.to_string())?;
-        let status = vmix.connect().await.map_err(|e: Error| e.to_string())?;
+    let status = vmix.connect().await.map_err(|e: Error| e.to_string())?;
+    let status = vmix.get_status().await.map_err(|e: Error| e.to_string())?;
     
     state.connections.lock().unwrap().push(vmix.clone());
     
