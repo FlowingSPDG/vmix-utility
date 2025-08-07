@@ -99,8 +99,8 @@ const ShortcutGenerator = () => {
       const inputs = await invoke<VmixInput[]>('get_vmix_inputs', { host });
       setVmixInputs(inputs);
       
-      // Generate default shortcuts for the inputs
-      const defaultShortcuts = inputs.slice(0, 5).map((input, index) => ({
+      // Generate default shortcuts for all inputs
+      const defaultShortcuts = inputs.map((input, index) => ({
         id: index + 1,
         number: input.number,
         title: `Cut to ${input.title}`,

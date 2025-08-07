@@ -11,6 +11,8 @@ struct VmixXml {
     #[serde(rename = "preset")]
     preset: Option<String>,
     inputs: Inputs,
+    active: Option<String>,
+    preview: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -91,17 +93,21 @@ impl VmixHttpClient {
     }
 
     async fn get_active_input(&self) -> Result<i32> {
-        let _vmix_data = self.get_vmix_data().await?;
-        // TODO: Parse XML to find active input once we understand the structure
-        // For now, return placeholder since vMix XML doesn't have explicit active/preview attributes
-        Ok(1)
+        let vmix_data = self.get_vmix_data().await?;
+        if let Some(active) = vmix_data.active {
+            Ok(active.parse().unwrap_or(0))
+        } else {
+            Ok(0)
+        }
     }
 
     async fn get_preview_input(&self) -> Result<i32> {
-        let _vmix_data = self.get_vmix_data().await?;
-        // TODO: Parse XML to find preview input once we understand the structure  
-        // For now, return placeholder since vMix XML doesn't have explicit active/preview attributes
-        Ok(2)
+        let vmix_data = self.get_vmix_data().await?;
+        if let Some(preview) = vmix_data.preview {
+            Ok(preview.parse().unwrap_or(0))
+        } else {
+            Ok(0)
+        }
     }
 
     fn host(&self) -> &str {
@@ -158,11 +164,6 @@ struct VmixConnection {
     status: String,
     active_input: i32,
     preview_input: i32,
-}
-
-#[tauri::command]
-fn greet(name: &str) -> String {
-    format!("Hello, {}! You've been greeted from Rust!", name)
 }
 
 #[tauri::command]
@@ -240,7 +241,6 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .manage(AppState::new())
         .invoke_handler(tauri::generate_handler![
-            greet,
             connect_vmix,
             disconnect_vmix,
             get_vmix_status,

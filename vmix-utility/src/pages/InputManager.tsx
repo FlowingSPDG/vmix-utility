@@ -132,10 +132,10 @@ const InputManager = () => {
     
     if (newTitle !== undefined && input && selectedConnection) {
       try {
-        // Send SetText function to update input title in vMix
+        // Send SetInputName function to update input title in vMix
         await invoke('send_vmix_function', {
           host: selectedConnection,
-          function: `SetText&Input=${input.number}&Value=${encodeURIComponent(newTitle)}`
+          function: `SetInputName&Input=${input.number}&Value=${encodeURIComponent(newTitle)}`
         });
 
         // Update local state
