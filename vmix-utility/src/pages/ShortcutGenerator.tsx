@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { invoke } from '@tauri-apps/api/core';
+import { openUrl } from '@tauri-apps/plugin-opener';
 import type { SelectChangeEvent } from '@mui/material';
 import {
   Box,
@@ -21,7 +22,10 @@ import {
   Chip,
   Stack,
   Divider,
-  ButtonGroup
+  ButtonGroup,
+  Card,
+  CardContent,
+  Grid
 } from '@mui/material';
 import LinkIcon from '@mui/icons-material/Link';
 import CodeIcon from '@mui/icons-material/Code';
@@ -30,6 +34,7 @@ import PlayArrowIcon from '@mui/icons-material/PlayArrow';
 import AddIcon from '@mui/icons-material/Add';
 import DeleteIcon from '@mui/icons-material/Delete';
 import ContentCopyIcon from '@mui/icons-material/ContentCopy';
+import OpenInBrowserIcon from '@mui/icons-material/OpenInBrowser';
 
 interface VmixConnection {
   host: string;
@@ -82,7 +87,15 @@ const ShortcutGenerator = () => {
     const fetchConnections = async () => {
       try {
         const vmixConnections = await invoke<VmixConnection[]>('get_vmix_statuses');
-        setConnections(vmixConnections.filter(conn => conn.status === 'Connected'));
+        const connectedConnections = vmixConnections.filter(conn => conn.status === 'Connected');
+        setConnections(connectedConnections);
+        
+        // Auto-select first available connection
+        if (connectedConnections.length > 0 && !selectedConnection) {
+          const firstConnection = connectedConnections[0].host;
+          setSelectedConnection(firstConnection);
+          fetchInputs(firstConnection);
+        }
       } catch (error) {
         console.error('Failed to fetch vMix connections:', error);
         setConnections([]);
@@ -99,14 +112,15 @@ const ShortcutGenerator = () => {
       const inputs = await invoke<VmixInput[]>('get_vmix_inputs', { host });
       setVmixInputs(inputs);
       
-      // Generate default shortcuts for all inputs
+      // Generate default shortcuts for all inputs using shared settings
       const defaultShortcuts = inputs.map((input, index) => ({
         id: index + 1,
         number: input.number,
-        title: `Cut to ${input.title}`,
-        functionName: 'Cut',
+        title: `${sharedFunctionName} to ${input.title}`,
+        functionName: sharedFunctionName,
         queryParams: [
-          { id: 1, key: 'Input', value: input.number.toString() }
+          { id: 1, key: 'Input', value: input.number.toString() },
+          ...sharedQueryParams.map(param => ({ ...param, id: param.id + 1000 }))
         ]
       }));
       
@@ -130,33 +144,61 @@ const ShortcutGenerator = () => {
     }
   };
 
+  // Shared function configuration
+  const [sharedFunctionName, setSharedFunctionName] = useState('Cut');
+  const [sharedQueryParams, setSharedQueryParams] = useState<QueryParam[]>([]);
+  
   // State for new query param
   const [newParamKey, setNewParamKey] = useState('');
   const [newParamValue, setNewParamValue] = useState('');
 
-  const handleAddParam = (inputId: number) => {
+  const handleAddSharedParam = () => {
     if (newParamKey && newParamValue) {
-      setInputs(inputs.map(input => {
-        if (input.id === inputId) {
-          const newId = input.queryParams.length > 0
-            ? Math.max(...input.queryParams.map(p => p.id)) + 1
-            : 1;
-          
-          return {
-            ...input,
-            queryParams: [
-              ...input.queryParams,
-              { id: newId, key: newParamKey, value: newParamValue }
-            ]
-          };
-        }
-        return input;
-      }));
+      const newId = sharedQueryParams.length > 0
+        ? Math.max(...sharedQueryParams.map(p => p.id)) + 1
+        : 1;
+      
+      setSharedQueryParams([
+        ...sharedQueryParams,
+        { id: newId, key: newParamKey, value: newParamValue }
+      ]);
       
       setNewParamKey('');
       setNewParamValue('');
     }
   };
+
+  const handleDeleteSharedParam = (paramId: number) => {
+    setSharedQueryParams(sharedQueryParams.filter(param => param.id !== paramId));
+  };
+
+  const handleSharedParamChange = (paramId: number, key: string, value: string) => {
+    setSharedQueryParams(sharedQueryParams.map(param => 
+      param.id === paramId 
+        ? { ...param, key, value }
+        : param
+    ));
+  };
+
+  // Update all inputs when shared settings change
+  const updateAllInputsWithSharedSettings = () => {
+    setInputs(inputs.map(input => ({
+      ...input,
+      functionName: sharedFunctionName,
+      title: `${sharedFunctionName} to ${vmixInputs.find(vi => vi.number === input.number)?.title || 'Unknown'}`,
+      queryParams: [
+        { id: 1, key: 'Input', value: input.number.toString() },
+        ...sharedQueryParams.map(param => ({ ...param, id: param.id + 1000 }))
+      ]
+    })));
+  };
+
+  // Update inputs when shared settings change
+  useEffect(() => {
+    if (inputs.length > 0) {
+      updateAllInputsWithSharedSettings();
+    }
+  }, [sharedFunctionName, sharedQueryParams]);
 
   const handleDeleteParam = (inputId: number, paramId: number) => {
     setInputs(inputs.map(input => {
@@ -192,6 +234,15 @@ const ShortcutGenerator = () => {
       }
     }
     return script;
+  };
+
+  const openTallyInBrowser = async () => {
+    try {
+      await openUrl('http://localhost:8088/tally/?key=230834ea-8be2-486f-847a-98cd4ae7b53b');
+    } catch (error) {
+      console.error('Failed to open tally URL:', error);
+      alert('Failed to open tally URL in browser');
+    }
   };
 
   const generateTally = (input: Input) => {
@@ -260,31 +311,109 @@ const ShortcutGenerator = () => {
         )}
       </Paper>
 
-      <TableContainer component={Paper}>
-        <Table>
-          <TableHead>
-            <TableRow>
-              <TableCell>Number</TableCell>
-              <TableCell>Title</TableCell>
-              <TableCell>Generated URL</TableCell>
-              <TableCell>Actions</TableCell>
-            </TableRow>
-          </TableHead>
-          <TableBody>
-            {inputs.map((input) => (
-              <TableRow key={input.id}>
-                <TableCell>{input.number}</TableCell>
-                <TableCell>{input.title}</TableCell>
-                <TableCell>
+      {/* Shared Function Configuration */}
+      <Paper sx={{ p: 2, mb: 3 }}>
+        <Typography variant="h6" gutterBottom>
+          Function Configuration (applies to all inputs)
+        </Typography>
+        
+        {/* Function Name */}
+        <TextField
+          label="Function Name"
+          value={sharedFunctionName}
+          onChange={(e) => setSharedFunctionName(e.target.value)}
+          size="small"
+          sx={{ mb: 2, mr: 2, width: '200px' }}
+        />
+        
+        {/* Shared Query Parameters */}
+        <Typography variant="subtitle2" gutterBottom>
+          Additional Query Parameters:
+        </Typography>
+        
+        {sharedQueryParams.map((param) => (
+          <Box key={param.id} sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
+            <TextField
+              label="Key"
+              value={param.key}
+              onChange={(e) => handleSharedParamChange(param.id, e.target.value, param.value)}
+              size="small"
+              sx={{ mr: 1, width: '150px' }}
+            />
+            <TextField
+              label="Value"
+              value={param.value}
+              onChange={(e) => handleSharedParamChange(param.id, param.key, e.target.value)}
+              size="small"
+              sx={{ mr: 1, width: '150px' }}
+            />
+            <IconButton
+              size="small"
+              color="error"
+              onClick={() => handleDeleteSharedParam(param.id)}
+            >
+              <DeleteIcon fontSize="small" />
+            </IconButton>
+          </Box>
+        ))}
+        
+        {/* Add New Parameter */}
+        <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
+          <TextField
+            label="New Parameter Key"
+            value={newParamKey}
+            onChange={(e) => setNewParamKey(e.target.value)}
+            size="small"
+            sx={{ mr: 1, width: '150px' }}
+          />
+          <TextField
+            label="New Parameter Value"
+            value={newParamValue}
+            onChange={(e) => setNewParamValue(e.target.value)}
+            size="small"
+            sx={{ mr: 1, width: '150px' }}
+          />
+          <Button
+            variant="outlined"
+            size="small"
+            startIcon={<AddIcon />}
+            onClick={handleAddSharedParam}
+            disabled={!newParamKey || !newParamValue}
+          >
+            Add Parameter
+          </Button>
+        </Box>
+      </Paper>
+
+      <Grid container spacing={3}>
+        {inputs.map((input) => (
+          <Grid item xs={12} key={input.id}>
+            <Card>
+              <CardContent>
+                <Typography variant="h6" gutterBottom>
+                  Input {input.number}: {vmixInputs.find(vi => vi.number === input.number)?.title || 'Unknown'}
+                </Typography>
+                
+                <Typography variant="body2" color="textSecondary" sx={{ mb: 2 }}>
+                  Function: {input.functionName} | Parameters: {input.queryParams.map(p => `${p.key}=${p.value}`).join(', ')}
+                </Typography>
+                
+                {/* Generated URL in Code Block */}
+                <Typography variant="subtitle2" gutterBottom>
+                  Generated URL:
+                </Typography>
+                <Paper sx={{ p: 2, bgcolor: '#f5f5f5', mb: 2 }}>
                   <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                    <Typography
-                      variant="body2"
-                      sx={{
-                        maxWidth: '300px',
-                        overflow: 'hidden',
-                        textOverflow: 'ellipsis',
-                        whiteSpace: 'nowrap',
-                        mr: 1
+                    <Typography 
+                      component="pre" 
+                      variant="body2" 
+                      sx={{ 
+                        fontFamily: 'monospace', 
+                        fontSize: '0.8rem',
+                        wordBreak: 'break-all',
+                        whiteSpace: 'pre-wrap',
+                        flex: 1,
+                        margin: 0
                       }}
                     >
                       {generateUrl(input)}
@@ -295,45 +424,43 @@ const ShortcutGenerator = () => {
                         navigator.clipboard.writeText(generateUrl(input));
                         alert('URL copied to clipboard!');
                       }}
+                      sx={{ ml: 1 }}
                     >
                       <ContentCopyIcon fontSize="small" />
                     </IconButton>
                   </Box>
-                </TableCell>
-                <TableCell>
-                  <ButtonGroup variant="outlined" size="small">
-                    <Button
-                      startIcon={<CodeIcon />}
-                      onClick={() => {
-                        navigator.clipboard.writeText(generateScript(input));
-                        alert('Script copied to clipboard!');
-                      }}
-                    >
-                      Script
-                    </Button>
-                    <Button
-                      startIcon={<SignalCellularAltIcon />}
-                      onClick={() => {
-                        navigator.clipboard.writeText(generateTally(input));
-                        alert('Tally code copied to clipboard!');
-                      }}
-                    >
-                      TALLY
-                    </Button>
-                    <Button
-                      startIcon={<PlayArrowIcon />}
-                      color="primary"
-                      onClick={() => tryCommand(input)}
-                    >
-                      Try!
-                    </Button>
-                  </ButtonGroup>
-                </TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
-      </TableContainer>
+                </Paper>
+                
+                {/* Action Buttons */}
+                <ButtonGroup variant="outlined" size="small">
+                  <Button
+                    startIcon={<CodeIcon />}
+                    onClick={() => {
+                      navigator.clipboard.writeText(generateScript(input));
+                      alert('Function script copied to clipboard!');
+                    }}
+                  >
+                    SCRIPT
+                  </Button>
+                  <Button
+                    startIcon={<OpenInBrowserIcon />}
+                    onClick={openTallyInBrowser}
+                  >
+                    TALLY
+                  </Button>
+                  <Button
+                    startIcon={<PlayArrowIcon />}
+                    color="primary"
+                    onClick={() => tryCommand(input)}
+                  >
+                    TRY!
+                  </Button>
+                </ButtonGroup>
+              </CardContent>
+            </Card>
+          </Grid>
+        ))}
+      </Grid>
     </Box>
   );
 };
