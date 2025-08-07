@@ -66,6 +66,23 @@ const InputManager = () => {
   const [editingStates, setEditingStates] = useState<Record<number, string>>({});
   const [order, setOrder] = useState<Order>('asc');
   const [orderBy, setOrderBy] = useState<OrderBy>('number');
+  
+  // Get auto-refresh config from localStorage
+  const getAutoRefreshConfig = (host: string) => {
+    const stored = localStorage.getItem('vmix-auto-refresh-config');
+    if (stored) {
+      const config = JSON.parse(stored);
+      return config[host] || { enabled: true, duration: 3 };
+    }
+    return { enabled: true, duration: 3 };
+  };
+  
+  const setAutoRefreshConfig = (host: string, config: {enabled: boolean, duration: number}) => {
+    const stored = localStorage.getItem('vmix-auto-refresh-config');
+    const allConfig = stored ? JSON.parse(stored) : {};
+    allConfig[host] = config;
+    localStorage.setItem('vmix-auto-refresh-config', JSON.stringify(allConfig));
+  };
 
   useEffect(() => {
     const fetchConnections = async () => {
@@ -88,6 +105,20 @@ const InputManager = () => {
 
     fetchConnections();
   }, []);
+
+  // Auto-refresh inputs based on connection-specific settings
+  useEffect(() => {
+    if (!selectedConnection) return;
+    
+    const config = getAutoRefreshConfig(selectedConnection);
+    if (!config.enabled) return;
+    
+    const interval = setInterval(() => {
+      fetchInputs(selectedConnection);
+    }, config.duration * 1000);
+    
+    return () => clearInterval(interval);
+  }, [selectedConnection]);
 
   const fetchInputs = async (host: string) => {
     setLoading(true);
@@ -224,16 +255,34 @@ const InputManager = () => {
           </Alert>
         )}
 
-        {selectedConnection && (
-          <Button 
-            variant="outlined" 
-            onClick={() => fetchInputs(selectedConnection)}
-            disabled={loading}
-          >
-            {loading ? <CircularProgress size={20} sx={{ mr: 1 }} /> : null}
-            Refresh Inputs
-          </Button>
-        )}
+        {selectedConnection && (() => {
+          const config = getAutoRefreshConfig(selectedConnection);
+          return (
+            <Box sx={{ display: 'flex', gap: 1 }}>
+              <Button 
+                variant={config.enabled ? "contained" : "outlined"}
+                color={config.enabled ? "success" : "primary"}
+                onClick={() => {
+                  const newConfig = { ...config, enabled: !config.enabled };
+                  setAutoRefreshConfig(selectedConnection, newConfig);
+                  // Force re-render by updating a dummy state
+                  setError(prev => prev);
+                }}
+                size="small"
+              >
+                {config.enabled ? `Auto-Refresh ON (${config.duration}s)` : "Auto-Refresh OFF"}
+              </Button>
+              <Button 
+                variant="outlined" 
+                onClick={() => fetchInputs(selectedConnection)}
+                disabled={loading}
+              >
+                {loading ? <CircularProgress size={20} sx={{ mr: 1 }} /> : null}
+                Refresh Inputs
+              </Button>
+            </Box>
+          );
+        })()}
       </Paper>
       
       <TableContainer component={Paper}>

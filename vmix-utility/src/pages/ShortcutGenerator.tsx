@@ -1,42 +1,29 @@
 import { useState, useEffect } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { openUrl } from '@tauri-apps/plugin-opener';
-import type { SelectChangeEvent } from '@mui/material';
 import {
   Box,
   Typography,
   Paper,
   Button,
   TextField,
-  Table,
-  TableBody,
-  TableCell,
-  TableContainer,
-  TableHead,
-  TableRow,
   IconButton,
   Select,
   MenuItem,
   FormControl,
   InputLabel,
-  Chip,
-  Stack,
   Divider,
   ButtonGroup,
-  Card,
-  CardContent,
-  Grid,
   Snackbar,
   Alert
 } from '@mui/material';
-import LinkIcon from '@mui/icons-material/Link';
 import CodeIcon from '@mui/icons-material/Code';
-import SignalCellularAltIcon from '@mui/icons-material/SignalCellularAlt';
 import PlayArrowIcon from '@mui/icons-material/PlayArrow';
 import AddIcon from '@mui/icons-material/Add';
 import DeleteIcon from '@mui/icons-material/Delete';
 import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 import OpenInBrowserIcon from '@mui/icons-material/OpenInBrowser';
+import RefreshIcon from '@mui/icons-material/Refresh';
 
 interface VmixConnection {
   host: string;
@@ -85,6 +72,23 @@ const ShortcutGenerator = () => {
     {open: false, message: '', severity: 'info'}
   );
   const [inputTypeFilter, setInputTypeFilter] = useState<string>('All');
+  
+  // Get auto-refresh config from localStorage
+  const getAutoRefreshConfig = (host: string) => {
+    const stored = localStorage.getItem('vmix-auto-refresh-config');
+    if (stored) {
+      const config = JSON.parse(stored);
+      return config[host] || { enabled: true, duration: 3 };
+    }
+    return { enabled: true, duration: 3 };
+  };
+  
+  const setAutoRefreshConfig = (host: string, config: {enabled: boolean, duration: number}) => {
+    const stored = localStorage.getItem('vmix-auto-refresh-config');
+    const allConfig = stored ? JSON.parse(stored) : {};
+    allConfig[host] = config;
+    localStorage.setItem('vmix-auto-refresh-config', JSON.stringify(allConfig));
+  };
   
   // Shortcut generation state
   const [inputs, setInputs] = useState<Input[]>([]);
@@ -210,6 +214,20 @@ const ShortcutGenerator = () => {
       updateAllInputsWithSharedSettings();
     }
   }, [sharedFunctionName, sharedQueryParams]);
+
+  // Auto-refresh inputs based on connection-specific settings
+  useEffect(() => {
+    if (!selectedConnection) return;
+    
+    const config = getAutoRefreshConfig(selectedConnection);
+    if (!config.enabled) return;
+    
+    const interval = setInterval(() => {
+      fetchInputs(selectedConnection);
+    }, config.duration * 1000);
+    
+    return () => clearInterval(interval);
+  }, [selectedConnection]);
 
   const showToast = (message: string, severity: 'success' | 'error' | 'info' = 'success') => {
     setToast({open: true, message, severity});
@@ -349,27 +367,61 @@ const ShortcutGenerator = () => {
           </Box>
         )}
 
-        {/* Input Type Filter */}
+        {/* Controls Row */}
         {vmixInputs.length > 0 && (
-          <FormControl sx={{ minWidth: 200 }}>
-            <InputLabel id="input-type-filter-label">Filter by Input Type</InputLabel>
-            <Select
-              labelId="input-type-filter-label"
-              value={inputTypeFilter}
-              label="Filter by Input Type"
-              onChange={(e) => setInputTypeFilter(e.target.value as string)}
+          <Box sx={{ display: 'flex', gap: 2, alignItems: 'center' }}>
+            {/* Input Type Filter */}
+            <FormControl sx={{ minWidth: 200 }}>
+              <InputLabel id="input-type-filter-label">Filter by Input Type</InputLabel>
+              <Select
+                labelId="input-type-filter-label"
+                value={inputTypeFilter}
+                label="Filter by Input Type"
+                onChange={(e) => setInputTypeFilter(e.target.value as string)}
+                size="small"
+              >
+                {getAvailableInputTypes().map((type) => (
+                  <MenuItem key={type} value={type}>
+                    {type} {type === 'All' ? `(${inputs.length})` : `(${inputs.filter(input => {
+                      const vmixInput = vmixInputs.find(vi => vi.number === input.number);
+                      return vmixInput?.input_type === type;
+                    }).length})`}
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+            
+            {/* Auto-refresh Toggle */}
+            {selectedConnection && (() => {
+              const config = getAutoRefreshConfig(selectedConnection);
+              return (
+                <Button 
+                  variant={config.enabled ? "contained" : "outlined"}
+                  color={config.enabled ? "success" : "primary"}
+                  onClick={() => {
+                    const newConfig = { ...config, enabled: !config.enabled };
+                    setAutoRefreshConfig(selectedConnection, newConfig);
+                    // Force re-render by updating a dummy state
+                    setError(prev => prev);
+                  }}
+                  size="small"
+                >
+                  {config.enabled ? `Auto-Refresh ON (${config.duration}s)` : "Auto-Refresh OFF"}
+                </Button>
+              );
+            })()}
+            
+            {/* Manual Refresh */}
+            <Button
+              variant="outlined"
+              startIcon={<RefreshIcon />}
+              onClick={() => selectedConnection && fetchInputs(selectedConnection)}
+              disabled={loading || !selectedConnection}
               size="small"
             >
-              {getAvailableInputTypes().map((type) => (
-                <MenuItem key={type} value={type}>
-                  {type} {type === 'All' ? `(${inputs.length})` : `(${inputs.filter(input => {
-                    const vmixInput = vmixInputs.find(vi => vi.number === input.number);
-                    return vmixInput?.input_type === type;
-                  }).length})`}
-                </MenuItem>
-              ))}
-            </Select>
-          </FormControl>
+              Refresh
+            </Button>
+          </Box>
         )}
       </Paper>
 
