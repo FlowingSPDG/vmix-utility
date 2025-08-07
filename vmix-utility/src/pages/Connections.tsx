@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { invoke } from '@tauri-apps/api/tauri';
+import { invoke } from '@tauri-apps/api/core';
 import { 
   Box, 
   Typography, 
@@ -27,6 +27,14 @@ interface Connection {
   status: 'Connected' | 'Disconnected';
   activeInput: number;
   previewInput: number;
+}
+
+interface VmixConnection {
+  host: string;
+  label: string;
+  status: 'Connected' | 'Disconnected';
+  active_input: number;
+  preview_input: number;
 }
 
 const Connections: React.FC = () => {
