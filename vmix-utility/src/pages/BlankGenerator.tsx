@@ -51,12 +51,19 @@ const BlankGenerator = () => {
     const fetchConnections = async () => {
       try {
         const vmixConnections = await invoke<VmixConnection[]>('get_vmix_statuses');
-        setConnections(vmixConnections.map((conn, index) => ({
+        const mappedConnections = vmixConnections.map((conn, index) => ({
           id: index + 1,
           host: conn.host,
           label: conn.label,
           status: conn.status,
-        })));
+        }));
+        setConnections(mappedConnections);
+        
+        // Auto-select first available connection
+        const connectedConnections = mappedConnections.filter(conn => conn.status === 'Connected');
+        if (connectedConnections.length > 0 && selectedConnection === '') {
+          setSelectedConnection(connectedConnections[0].id);
+        }
       } catch (error) {
         console.error('Failed to fetch vMix connections:', error);
         // Set empty connections if no connections available

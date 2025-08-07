@@ -76,9 +76,9 @@ impl VmixHttpClient {
         }
     }
 
-    // TODO: Implement function query
     async fn send_function(&self, function: &str) -> Result<()> {
-        let url = format!("{}/?Function={}", self.base_url, function);
+        // Function string already contains "Function=..." so append directly
+        let url = format!("{}/?{}", self.base_url, function);
         let response = self.client
             .get(&url)
             .send()

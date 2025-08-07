@@ -25,7 +25,9 @@ import {
   ButtonGroup,
   Card,
   CardContent,
-  Grid
+  Grid,
+  Snackbar,
+  Alert
 } from '@mui/material';
 import LinkIcon from '@mui/icons-material/Link';
 import CodeIcon from '@mui/icons-material/Code';
@@ -79,6 +81,10 @@ const ShortcutGenerator = () => {
   const [vmixInputs, setVmixInputs] = useState<VmixInput[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [toast, setToast] = useState<{open: boolean, message: string, severity: 'success' | 'error' | 'info'}>(
+    {open: false, message: '', severity: 'info'}
+  );
+  const [inputTypeFilter, setInputTypeFilter] = useState<string>('All');
   
   // Shortcut generation state
   const [inputs, setInputs] = useState<Input[]>([]);
@@ -119,12 +125,14 @@ const ShortcutGenerator = () => {
         title: `${sharedFunctionName} to ${input.title}`,
         functionName: sharedFunctionName,
         queryParams: [
-          { id: 1, key: 'Input', value: input.number.toString() },
+          { id: 1, key: 'Input', value: input.key },
           ...sharedQueryParams.map(param => ({ ...param, id: param.id + 1000 }))
         ]
       }));
       
       setInputs(defaultShortcuts);
+      // Reset filter when inputs change
+      setInputTypeFilter('All');
     } catch (error) {
       console.error('Failed to fetch vMix inputs:', error);
       setError(`Failed to fetch inputs: ${error}`);
@@ -182,15 +190,18 @@ const ShortcutGenerator = () => {
 
   // Update all inputs when shared settings change
   const updateAllInputsWithSharedSettings = () => {
-    setInputs(inputs.map(input => ({
-      ...input,
-      functionName: sharedFunctionName,
-      title: `${sharedFunctionName} to ${vmixInputs.find(vi => vi.number === input.number)?.title || 'Unknown'}`,
-      queryParams: [
-        { id: 1, key: 'Input', value: input.number.toString() },
-        ...sharedQueryParams.map(param => ({ ...param, id: param.id + 1000 }))
-      ]
-    })));
+    setInputs(inputs.map(input => {
+      const vmixInput = vmixInputs.find(vi => vi.number === input.number);
+      return {
+        ...input,
+        functionName: sharedFunctionName,
+        title: `${sharedFunctionName} to ${vmixInput?.title || 'Unknown'}`,
+        queryParams: [
+          { id: 1, key: 'Input', value: vmixInput?.key || input.number.toString() },
+          ...sharedQueryParams.map(param => ({ ...param, id: param.id + 1000 }))
+        ]
+      };
+    }));
   };
 
   // Update inputs when shared settings change
@@ -199,6 +210,33 @@ const ShortcutGenerator = () => {
       updateAllInputsWithSharedSettings();
     }
   }, [sharedFunctionName, sharedQueryParams]);
+
+  const showToast = (message: string, severity: 'success' | 'error' | 'info' = 'success') => {
+    setToast({open: true, message, severity});
+  };
+
+  const handleCloseToast = () => {
+    setToast(prev => ({...prev, open: false}));
+  };
+
+  // Get unique input types from vmixInputs
+  const getAvailableInputTypes = () => {
+    const types = [...new Set(vmixInputs.map(input => input.input_type))]
+      .filter(type => type && type !== 'Unknown')
+      .sort();
+    return ['All', ...types];
+  };
+
+  // Filter inputs based on selected type
+  const getFilteredInputs = () => {
+    if (inputTypeFilter === 'All') {
+      return inputs;
+    }
+    return inputs.filter(input => {
+      const vmixInput = vmixInputs.find(vi => vi.number === input.number);
+      return vmixInput?.input_type === inputTypeFilter;
+    });
+  };
 
   const handleDeleteParam = (inputId: number, paramId: number) => {
     setInputs(inputs.map(input => {
@@ -239,9 +277,10 @@ const ShortcutGenerator = () => {
   const openTallyInBrowser = async () => {
     try {
       await openUrl('http://localhost:8088/tally/?key=230834ea-8be2-486f-847a-98cd4ae7b53b');
+      showToast('Tally interface opened in browser', 'info');
     } catch (error) {
       console.error('Failed to open tally URL:', error);
-      alert('Failed to open tally URL in browser');
+      showToast('Failed to open tally URL in browser', 'error');
     }
   };
 
@@ -251,7 +290,7 @@ const ShortcutGenerator = () => {
 
   const tryCommand = async (input: Input) => {
     if (!selectedConnection) {
-      alert('Please select a vMix connection first');
+      showToast('Please select a vMix connection first', 'error');
       return;
     }
 
@@ -261,10 +300,10 @@ const ShortcutGenerator = () => {
         host: selectedConnection,
         function: functionString
       });
-      alert(`Command sent successfully: ${functionString}`);
+      showToast(`Command sent successfully: ${functionString}`, 'success');
     } catch (error) {
       console.error('Failed to send command:', error);
-      alert(`Failed to send command: ${error}`);
+      showToast(`Failed to send command: ${error}`, 'error');
     }
   };
 
@@ -308,6 +347,29 @@ const ShortcutGenerator = () => {
               Loading inputs...
             </Typography>
           </Box>
+        )}
+
+        {/* Input Type Filter */}
+        {vmixInputs.length > 0 && (
+          <FormControl sx={{ minWidth: 200 }}>
+            <InputLabel id="input-type-filter-label">Filter by Input Type</InputLabel>
+            <Select
+              labelId="input-type-filter-label"
+              value={inputTypeFilter}
+              label="Filter by Input Type"
+              onChange={(e) => setInputTypeFilter(e.target.value as string)}
+              size="small"
+            >
+              {getAvailableInputTypes().map((type) => (
+                <MenuItem key={type} value={type}>
+                  {type} {type === 'All' ? `(${inputs.length})` : `(${inputs.filter(input => {
+                    const vmixInput = vmixInputs.find(vi => vi.number === input.number);
+                    return vmixInput?.input_type === type;
+                  }).length})`}
+                </MenuItem>
+              ))}
+            </Select>
+          </FormControl>
         )}
       </Paper>
 
@@ -385,82 +447,100 @@ const ShortcutGenerator = () => {
         </Box>
       </Paper>
 
-      <Grid container spacing={3}>
-        {inputs.map((input) => (
-          <Grid item xs={12} key={input.id}>
-            <Card>
-              <CardContent>
-                <Typography variant="h6" gutterBottom>
+      <Paper>
+        {getFilteredInputs().map((input, index) => (
+          <Box key={input.id}>
+            <Box sx={{ p: 2, display: 'flex', alignItems: 'center', gap: 2 }}>
+              {/* Input Info */}
+              <Box sx={{ minWidth: '200px' }}>
+                <Typography variant="body1" fontWeight="medium">
                   Input {input.number}: {vmixInputs.find(vi => vi.number === input.number)?.title || 'Unknown'}
                 </Typography>
-                
-                <Typography variant="body2" color="textSecondary" sx={{ mb: 2 }}>
-                  Function: {input.functionName} | Parameters: {input.queryParams.map(p => `${p.key}=${p.value}`).join(', ')}
+                <Typography variant="caption" color="textSecondary">
+                  {input.functionName} | {input.queryParams.map(p => `${p.key}=${p.value}`).join(', ')}
                 </Typography>
-                
-                {/* Generated URL in Code Block */}
-                <Typography variant="subtitle2" gutterBottom>
-                  Generated URL:
-                </Typography>
-                <Paper sx={{ p: 2, bgcolor: '#f5f5f5', mb: 2 }}>
-                  <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                    <Typography 
-                      component="pre" 
-                      variant="body2" 
-                      sx={{ 
-                        fontFamily: 'monospace', 
-                        fontSize: '0.8rem',
-                        wordBreak: 'break-all',
-                        whiteSpace: 'pre-wrap',
-                        flex: 1,
-                        margin: 0
-                      }}
-                    >
-                      {generateUrl(input)}
-                    </Typography>
-                    <IconButton
-                      size="small"
-                      onClick={() => {
-                        navigator.clipboard.writeText(generateUrl(input));
-                        alert('URL copied to clipboard!');
-                      }}
-                      sx={{ ml: 1 }}
-                    >
-                      <ContentCopyIcon fontSize="small" />
-                    </IconButton>
-                  </Box>
-                </Paper>
-                
-                {/* Action Buttons */}
-                <ButtonGroup variant="outlined" size="small">
-                  <Button
-                    startIcon={<CodeIcon />}
-                    onClick={() => {
-                      navigator.clipboard.writeText(generateScript(input));
-                      alert('Function script copied to clipboard!');
+              </Box>
+              
+              {/* Generated URL */}
+              <Box sx={{ flex: 1, minWidth: 0 }}>
+                <Box sx={{ display: 'flex', alignItems: 'center', bgcolor: '#f5f5f5', p: 1, borderRadius: 1 }}>
+                  <Typography 
+                    component="pre" 
+                    variant="caption" 
+                    sx={{ 
+                      fontFamily: 'monospace', 
+                      fontSize: '0.75rem',
+                      wordBreak: 'break-all',
+                      whiteSpace: 'pre-wrap',
+                      flex: 1,
+                      margin: 0,
+                      overflow: 'hidden'
                     }}
                   >
-                    SCRIPT
-                  </Button>
-                  <Button
-                    startIcon={<OpenInBrowserIcon />}
-                    onClick={openTallyInBrowser}
+                    {generateUrl(input)}
+                  </Typography>
+                  <IconButton
+                    size="small"
+                    onClick={() => {
+                      navigator.clipboard.writeText(generateUrl(input));
+                      showToast('URL copied to clipboard!');
+                    }}
+                    sx={{ ml: 1 }}
                   >
-                    TALLY
-                  </Button>
-                  <Button
-                    startIcon={<PlayArrowIcon />}
-                    color="primary"
-                    onClick={() => tryCommand(input)}
-                  >
-                    TRY!
-                  </Button>
-                </ButtonGroup>
-              </CardContent>
-            </Card>
-          </Grid>
+                    <ContentCopyIcon fontSize="small" />
+                  </IconButton>
+                </Box>
+              </Box>
+              
+              {/* Action Buttons */}
+              <ButtonGroup variant="outlined" size="small">
+                <Button
+                  startIcon={<CodeIcon />}
+                  onClick={() => {
+                    navigator.clipboard.writeText(generateScript(input));
+                    showToast('Function script copied to clipboard!');
+                  }}
+                  size="small"
+                >
+                  SCRIPT
+                </Button>
+                <Button
+                  startIcon={<OpenInBrowserIcon />}
+                  onClick={openTallyInBrowser}
+                  size="small"
+                >
+                  TALLY
+                </Button>
+                <Button
+                  startIcon={<PlayArrowIcon />}
+                  color="primary"
+                  onClick={() => tryCommand(input)}
+                  size="small"
+                >
+                  TRY!
+                </Button>
+              </ButtonGroup>
+            </Box>
+            {index < getFilteredInputs().length - 1 && <Divider />}
+          </Box>
         ))}
-      </Grid>
+      </Paper>
+
+      {/* Toast Notification */}
+      <Snackbar 
+        open={toast.open} 
+        autoHideDuration={3000} 
+        onClose={handleCloseToast}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+      >
+        <Alert 
+          severity={toast.severity} 
+          sx={{ width: '100%' }}
+          variant="filled"
+        >
+          {toast.message}
+        </Alert>
+      </Snackbar>
     </Box>
   );
 };

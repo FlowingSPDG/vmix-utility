@@ -71,7 +71,15 @@ const InputManager = () => {
     const fetchConnections = async () => {
       try {
         const vmixConnections = await invoke<VmixConnection[]>('get_vmix_statuses');
-        setConnections(vmixConnections.filter(conn => conn.status === 'Connected'));
+        const connectedConnections = vmixConnections.filter(conn => conn.status === 'Connected');
+        setConnections(connectedConnections);
+        
+        // Auto-select first available connection and fetch inputs
+        if (connectedConnections.length > 0 && selectedConnection === '') {
+          const firstConnection = connectedConnections[0].host;
+          setSelectedConnection(firstConnection);
+          fetchInputs(firstConnection);
+        }
       } catch (error) {
         console.error('Failed to fetch vMix connections:', error);
         setConnections([]);
