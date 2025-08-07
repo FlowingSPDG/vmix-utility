@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { invoke } from '@tauri-apps/api/core';
 import type { SelectChangeEvent } from '@mui/material';
 import {
   Box,
@@ -30,6 +31,22 @@ import AddIcon from '@mui/icons-material/Add';
 import DeleteIcon from '@mui/icons-material/Delete';
 import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 
+interface VmixConnection {
+  host: string;
+  label: string;
+  status: 'Connected' | 'Disconnected';
+  active_input: number;
+  preview_input: number;
+}
+
+interface VmixInput {
+  key: string;
+  number: number;
+  title: string;
+  input_type: string;
+  state: string;
+}
+
 interface VMixConnection {
   id: number;
   name: string;
@@ -52,51 +69,70 @@ interface Input {
 }
 
 const ShortcutGenerator = () => {
-  // Mock vMix connections
-  const [vmixConnections, setVmixConnections] = useState<VMixConnection[]>([
-    { id: 1, name: 'Main vMix', ip: '127.0.0.1', port: 8088 },
-    { id: 2, name: 'Backup vMix', ip: '192.168.1.100', port: 8088 },
-  ]);
+  const [connections, setConnections] = useState<VmixConnection[]>([]);
+  const [selectedConnection, setSelectedConnection] = useState<string>('');
+  const [vmixInputs, setVmixInputs] = useState<VmixInput[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   
-  const [selectedVMix, setSelectedVMix] = useState<number>(1);
-  
-  // Mock inputs
-  const [inputs, setInputs] = useState<Input[]>([
-    {
-      id: 1,
-      number: 1,
-      title: 'Cut to Input 1',
-      functionName: 'Cut',
-      queryParams: [
-        { id: 1, key: 'Input', value: '1' }
-      ]
-    },
-    {
-      id: 2,
-      number: 2,
-      title: 'Fade to Input 2',
-      functionName: 'Fade',
-      queryParams: [
-        { id: 1, key: 'Input', value: '2' },
-        { id: 2, key: 'Duration', value: '1000' }
-      ]
-    },
-    {
-      id: 3,
-      number: 3,
-      title: 'Start Recording',
-      functionName: 'StartRecording',
-      queryParams: []
-    },
-  ]);
-  
+  // Shortcut generation state
+  const [inputs, setInputs] = useState<Input[]>([]);
+
+  useEffect(() => {
+    const fetchConnections = async () => {
+      try {
+        const vmixConnections = await invoke<VmixConnection[]>('get_vmix_statuses');
+        setConnections(vmixConnections.filter(conn => conn.status === 'Connected'));
+      } catch (error) {
+        console.error('Failed to fetch vMix connections:', error);
+        setConnections([]);
+      }
+    };
+
+    fetchConnections();
+  }, []);
+
+  const fetchInputs = async (host: string) => {
+    setLoading(true);
+    setError(null);
+    try {
+      const inputs = await invoke<VmixInput[]>('get_vmix_inputs', { host });
+      setVmixInputs(inputs);
+      
+      // Generate default shortcuts for the inputs
+      const defaultShortcuts = inputs.slice(0, 5).map((input, index) => ({
+        id: index + 1,
+        number: input.number,
+        title: `Cut to ${input.title}`,
+        functionName: 'Cut',
+        queryParams: [
+          { id: 1, key: 'Input', value: input.number.toString() }
+        ]
+      }));
+      
+      setInputs(defaultShortcuts);
+    } catch (error) {
+      console.error('Failed to fetch vMix inputs:', error);
+      setError(`Failed to fetch inputs: ${error}`);
+      setVmixInputs([]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleConnectionChange = (host: string) => {
+    setSelectedConnection(host);
+    if (host) {
+      fetchInputs(host);
+    } else {
+      setVmixInputs([]);
+      setInputs([]);
+    }
+  };
+
   // State for new query param
   const [newParamKey, setNewParamKey] = useState('');
   const [newParamValue, setNewParamValue] = useState('');
-
-  const handleVMixChange = (event: SelectChangeEvent) => {
-    setSelectedVMix(Number(event.target.value));
-  };
 
   const handleAddParam = (inputId: number) => {
     if (newParamKey && newParamValue) {
@@ -135,10 +171,9 @@ const ShortcutGenerator = () => {
   };
 
   const generateUrl = (input: Input) => {
-    const selectedConnection = vmixConnections.find(conn => conn.id === selectedVMix);
     if (!selectedConnection) return '';
     
-    let url = `http://${selectedConnection.ip}:${selectedConnection.port}/api?Function=${input.functionName}`;
+    let url = `http://${selectedConnection}:8088/api/?Function=${input.functionName}`;
     
     if (input.queryParams.length > 0) {
       for (const param of input.queryParams) {
@@ -150,19 +185,36 @@ const ShortcutGenerator = () => {
   };
 
   const generateScript = (input: Input) => {
-    return `Function=${input.functionName}`;
+    let script = `Function=${input.functionName}`;
+    if (input.queryParams.length > 0) {
+      for (const param of input.queryParams) {
+        script += `&${param.key}=${param.value}`;
+      }
+    }
+    return script;
   };
 
   const generateTally = (input: Input) => {
-    // This is a placeholder for tally generation logic
-    return `TALLY:${input.functionName}`;
+    return `TALLY:${input.functionName}:${input.queryParams.map(p => `${p.key}=${p.value}`).join(',')}`;
   };
 
-  const tryCommand = (input: Input) => {
-    const url = generateUrl(input);
-    // This would typically make an actual API call to vMix
-    console.log(`Trying command: ${url}`);
-    alert(`Command would be sent to vMix: ${url}`);
+  const tryCommand = async (input: Input) => {
+    if (!selectedConnection) {
+      alert('Please select a vMix connection first');
+      return;
+    }
+
+    try {
+      const functionString = generateScript(input);
+      await invoke('send_vmix_function', {
+        host: selectedConnection,
+        function: functionString
+      });
+      alert(`Command sent successfully: ${functionString}`);
+    } catch (error) {
+      console.error('Failed to send command:', error);
+      alert(`Failed to send command: ${error}`);
+    }
   };
 
   return (
@@ -176,17 +228,36 @@ const ShortcutGenerator = () => {
           <InputLabel id="vmix-select-label">Select vMix Connection</InputLabel>
           <Select
             labelId="vmix-select-label"
-            value={selectedVMix.toString()}
+            value={selectedConnection}
             label="Select vMix Connection"
-            onChange={handleVMixChange}
+            onChange={(e) => handleConnectionChange(e.target.value as string)}
           >
-            {vmixConnections.map((conn) => (
-              <MenuItem key={conn.id} value={conn.id}>
-                {conn.name} ({conn.ip}:{conn.port})
+            <MenuItem value="">
+              <em>Select a vMix connection</em>
+            </MenuItem>
+            {connections.map((conn) => (
+              <MenuItem key={conn.host} value={conn.host}>
+                {conn.label} ({conn.host})
               </MenuItem>
             ))}
           </Select>
         </FormControl>
+
+        {error && (
+          <Box sx={{ mb: 2 }}>
+            <Typography color="error" variant="body2">
+              {error}
+            </Typography>
+          </Box>
+        )}
+
+        {loading && (
+          <Box sx={{ mb: 2, display: 'flex', alignItems: 'center' }}>
+            <Typography variant="body2" sx={{ mr: 1 }}>
+              Loading inputs...
+            </Typography>
+          </Box>
+        )}
       </Paper>
 
       <TableContainer component={Paper}>

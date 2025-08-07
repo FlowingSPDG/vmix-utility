@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { invoke } from '@tauri-apps/api/core';
 import type { SelectChangeEvent } from '@mui/material';
 import {
   Box,
@@ -14,6 +15,14 @@ import {
   FormControl,
   InputLabel,
 } from '@mui/material';
+
+interface VmixConnection {
+  host: string;
+  label: string;
+  status: 'Connected' | 'Disconnected';
+  active_input: number;
+  preview_input: number;
+}
 
 interface Connection {
   id: number;
@@ -31,11 +40,23 @@ const BlankGenerator = () => {
 
   // 接続一覧を取得
   useEffect(() => {
-    // TODO: 実際のAPIから接続一覧を取得する
-    setConnections([
-      { id: 1, host: '192.168.1.100', label: 'Main vMix', status: 'Connected' },
-      { id: 2, host: '192.168.1.101', label: 'Game vMix', status: 'Connected' },
-    ]);
+    const fetchConnections = async () => {
+      try {
+        const vmixConnections = await invoke<VmixConnection[]>('get_vmix_statuses');
+        setConnections(vmixConnections.map((conn, index) => ({
+          id: index + 1,
+          host: conn.host,
+          label: conn.label,
+          status: conn.status,
+        })));
+      } catch (error) {
+        console.error('Failed to fetch vMix connections:', error);
+        // Set empty connections if no connections available
+        setConnections([]);
+      }
+    };
+
+    fetchConnections();
   }, []);
 
   const handleTransparentChange = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -50,7 +71,7 @@ const BlankGenerator = () => {
     setSelectedConnection(event.target.value as number);
   };
 
-  const handleGenerate = () => {
+  const handleGenerate = async () => {
     if (selectedConnection === '') {
       return;
     }
@@ -60,13 +81,29 @@ const BlankGenerator = () => {
       return;
     }
 
-    // TODO: 選択されたvMix接続に対してブランク生成を実行
-    console.log(`Generated ${count} blank${count !== 1 ? 's' : ''} with transparent=${transparent} on ${connection.host}`);
-    
-    setGenerated(true);
-    setTimeout(() => {
-      setGenerated(false);
-    }, 3000);
+    try {
+      // Generate blanks using vMix API
+      for (let i = 0; i < count; i++) {
+        const functionName = transparent 
+          ? `AddInput&Value=Colour&Title=Blank ${i + 1} (Transparent)&Colour=Transparent` 
+          : `AddInput&Value=Colour&Title=Blank ${i + 1}&Colour=Black`;
+        
+        await invoke('send_vmix_function', {
+          host: connection.host,
+          function: functionName
+        });
+      }
+
+      console.log(`Generated ${count} blank${count !== 1 ? 's' : ''} with transparent=${transparent} on ${connection.host}`);
+      
+      setGenerated(true);
+      setTimeout(() => {
+        setGenerated(false);
+      }, 3000);
+    } catch (error) {
+      console.error('Failed to generate blanks:', error);
+      // Could add error state here
+    }
   };
 
   return (

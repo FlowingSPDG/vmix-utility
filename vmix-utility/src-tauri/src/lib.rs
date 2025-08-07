@@ -27,8 +27,19 @@ struct Input {
     number: String,
     #[serde(rename = "@title")]
     title: String,
+    #[serde(rename = "@type")]
+    input_type: Option<String>,
     #[serde(rename = "@state")]
     state: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+struct VmixInput {
+    key: String,
+    number: i32,
+    title: String,
+    input_type: String,
+    state: String,
 }
 
 #[derive(Debug, Clone)]
@@ -107,6 +118,25 @@ async fn send_vmix_function(host: String, function: String) -> Result<String, St
     let vmix = VmixHttpClient::new(&host, 8088);
     vmix.send_function(&function).await.map_err(|e| e.to_string())?;
     Ok("Function sent successfully".to_string())
+}
+
+// Command to get vMix inputs
+#[tauri::command]
+async fn get_vmix_inputs(host: String) -> Result<Vec<VmixInput>, String> {
+    let vmix = VmixHttpClient::new(&host, 8088);
+    let vmix_data = vmix.get_vmix_data().await.map_err(|e| e.to_string())?;
+    
+    let inputs: Vec<VmixInput> = vmix_data.inputs.input.iter().map(|input| {
+        VmixInput {
+            key: input.key.clone(),
+            number: input.number.parse().unwrap_or(0),
+            title: input.title.clone(),
+            input_type: input.input_type.clone().unwrap_or_else(|| "Unknown".to_string()),
+            state: input.state.clone().unwrap_or_else(|| "Unknown".to_string()),
+        }
+    }).collect();
+    
+    Ok(inputs)
 }
 
 struct AppState {
@@ -215,7 +245,8 @@ pub fn run() {
             disconnect_vmix,
             get_vmix_status,
             get_vmix_statuses,
-            send_vmix_function
+            send_vmix_function,
+            get_vmix_inputs
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

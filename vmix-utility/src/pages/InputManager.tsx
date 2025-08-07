@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { invoke } from '@tauri-apps/api/core';
 import {
   Box,
   Typography,
@@ -12,12 +13,35 @@ import {
   TextField,
   Button,
   TableSortLabel,
-  IconButton
+  IconButton,
+  FormControl,
+  InputLabel,
+  Select,
+  MenuItem,
+  CircularProgress,
+  Alert,
+  Chip
 } from '@mui/material';
 import DeleteIcon from '@mui/icons-material/Delete';
 import EditIcon from '@mui/icons-material/Edit';
 import SaveIcon from '@mui/icons-material/Save';
 import CancelIcon from '@mui/icons-material/Cancel';
+
+interface VmixConnection {
+  host: string;
+  label: string;
+  status: 'Connected' | 'Disconnected';
+  active_input: number;
+  preview_input: number;
+}
+
+interface VmixInput {
+  key: string;
+  number: number;
+  title: string;
+  input_type: string;
+  state: string;
+}
 
 interface Input {
   id: number;
@@ -25,23 +49,68 @@ interface Input {
   title: string;
   type: string;
   key: string;
+  state: string;
 }
 
 type Order = 'asc' | 'desc';
 type OrderBy = 'number' | 'title' | 'type';
 
 const InputManager = () => {
-  const [inputs, setInputs] = useState<Input[]>([
-    { id: 1, number: 1, title: 'Camera 1', type: 'Camera', key: 'cam1' },
-    { id: 2, number: 2, title: 'Camera 2', type: 'Camera', key: 'cam2' },
-    { id: 3, number: 3, title: 'Lower Third', type: 'GT', key: 'lt1' },
-    { id: 4, number: 4, title: 'Background', type: 'Still', key: 'bg1' },
-  ]);
+  const [inputs, setInputs] = useState<Input[]>([]);
+  const [connections, setConnections] = useState<VmixConnection[]>([]);
+  const [selectedConnection, setSelectedConnection] = useState<string>('');
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   
   // Track editing state for each input
   const [editingStates, setEditingStates] = useState<Record<number, string>>({});
   const [order, setOrder] = useState<Order>('asc');
   const [orderBy, setOrderBy] = useState<OrderBy>('number');
+
+  useEffect(() => {
+    const fetchConnections = async () => {
+      try {
+        const vmixConnections = await invoke<VmixConnection[]>('get_vmix_statuses');
+        setConnections(vmixConnections.filter(conn => conn.status === 'Connected'));
+      } catch (error) {
+        console.error('Failed to fetch vMix connections:', error);
+        setConnections([]);
+      }
+    };
+
+    fetchConnections();
+  }, []);
+
+  const fetchInputs = async (host: string) => {
+    setLoading(true);
+    setError(null);
+    try {
+      const vmixInputs = await invoke<VmixInput[]>('get_vmix_inputs', { host });
+      setInputs(vmixInputs.map((input, index) => ({
+        id: index + 1,
+        number: input.number,
+        title: input.title,
+        type: input.input_type,
+        key: input.key,
+        state: input.state,
+      })));
+    } catch (error) {
+      console.error('Failed to fetch vMix inputs:', error);
+      setError(`Failed to fetch inputs from ${host}: ${error}`);
+      setInputs([]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleConnectionChange = (host: string) => {
+    setSelectedConnection(host);
+    if (host) {
+      fetchInputs(host);
+    } else {
+      setInputs([]);
+    }
+  };
 
   const handleEditClick = (input: Input) => {
     setEditingStates({
@@ -57,19 +126,33 @@ const InputManager = () => {
     });
   };
 
-  const handleSaveClick = (id: number) => {
+  const handleSaveClick = async (id: number) => {
     const newTitle = editingStates[id];
-    if (newTitle !== undefined) {
-      setInputs(inputs.map(input =>
-        input.id === id
-          ? { ...input, title: newTitle }
-          : input
-      ));
-      
-      // Remove this input from editing state
-      const newEditingStates = { ...editingStates };
-      delete newEditingStates[id];
-      setEditingStates(newEditingStates);
+    const input = inputs.find(inp => inp.id === id);
+    
+    if (newTitle !== undefined && input && selectedConnection) {
+      try {
+        // Send SetText function to update input title in vMix
+        await invoke('send_vmix_function', {
+          host: selectedConnection,
+          function: `SetText&Input=${input.number}&Value=${encodeURIComponent(newTitle)}`
+        });
+
+        // Update local state
+        setInputs(inputs.map(inp =>
+          inp.id === id
+            ? { ...inp, title: newTitle }
+            : inp
+        ));
+        
+        // Remove this input from editing state
+        const newEditingStates = { ...editingStates };
+        delete newEditingStates[id];
+        setEditingStates(newEditingStates);
+      } catch (error) {
+        console.error('Failed to update input title:', error);
+        setError(`Failed to update input title: ${error}`);
+      }
     }
   };
 
@@ -106,6 +189,44 @@ const InputManager = () => {
       <Typography variant="h4" component="h1" gutterBottom>
         Input Manager
       </Typography>
+
+      <Paper sx={{ p: 2, mb: 3 }}>
+        <FormControl fullWidth sx={{ mb: 2 }}>
+          <InputLabel id="connection-select-label">vMix Connection</InputLabel>
+          <Select
+            labelId="connection-select-label"
+            value={selectedConnection}
+            label="vMix Connection"
+            onChange={(e) => handleConnectionChange(e.target.value as string)}
+          >
+            <MenuItem value="">
+              <em>Select a vMix connection</em>
+            </MenuItem>
+            {connections.map((conn) => (
+              <MenuItem key={conn.host} value={conn.host}>
+                {conn.label} ({conn.host})
+              </MenuItem>
+            ))}
+          </Select>
+        </FormControl>
+
+        {error && (
+          <Alert severity="error" sx={{ mb: 2 }} onClose={() => setError(null)}>
+            {error}
+          </Alert>
+        )}
+
+        {selectedConnection && (
+          <Button 
+            variant="outlined" 
+            onClick={() => fetchInputs(selectedConnection)}
+            disabled={loading}
+          >
+            {loading ? <CircularProgress size={20} sx={{ mr: 1 }} /> : null}
+            Refresh Inputs
+          </Button>
+        )}
+      </Paper>
       
       <TableContainer component={Paper}>
         <Table>
@@ -138,18 +259,37 @@ const InputManager = () => {
                   Type
                 </TableSortLabel>
               </TableCell>
+              <TableCell>State</TableCell>
               <TableCell>Key</TableCell>
               <TableCell>Actions</TableCell>
             </TableRow>
           </TableHead>
           <TableBody>
-            {sortedInputs.map((input) => {
-              const isEditing = editingStates[input.id] !== undefined;
-              
-              return (
-                <TableRow key={input.id}>
-                  <TableCell>{input.number}</TableCell>
-                  <TableCell>
+            {loading ? (
+              <TableRow>
+                <TableCell colSpan={6} align="center">
+                  <CircularProgress />
+                  <Typography variant="body2" sx={{ mt: 1 }}>
+                    Loading inputs...
+                  </Typography>
+                </TableCell>
+              </TableRow>
+            ) : inputs.length === 0 ? (
+              <TableRow>
+                <TableCell colSpan={6} align="center">
+                  <Typography color="textSecondary">
+                    {selectedConnection ? 'No inputs found' : 'Select a vMix connection to view inputs'}
+                  </Typography>
+                </TableCell>
+              </TableRow>
+            ) : (
+              sortedInputs.map((input) => {
+                const isEditing = editingStates[input.id] !== undefined;
+                
+                return (
+                  <TableRow key={input.id}>
+                    <TableCell>{input.number}</TableCell>
+                    <TableCell>
                     <Box sx={{ display: 'flex', alignItems: 'center' }}>
                       <TextField
                         value={isEditing ? editingStates[input.id] : input.title}
@@ -191,7 +331,19 @@ const InputManager = () => {
                     </Box>
                   </TableCell>
                   <TableCell>{input.type}</TableCell>
-                  <TableCell>{input.key}</TableCell>
+                  <TableCell>
+                    <Chip 
+                      label={input.state}
+                      color={input.state === 'Running' ? 'success' : input.state === 'Paused' ? 'warning' : 'default'}
+                      variant="outlined"
+                      size="small"
+                    />
+                  </TableCell>
+                  <TableCell>
+                    <Typography variant="caption" color="textSecondary">
+                      {input.key.substring(0, 8)}...
+                    </Typography>
+                  </TableCell>
                   <TableCell>
                     <IconButton
                       color="error"
@@ -203,7 +355,8 @@ const InputManager = () => {
                   </TableCell>
                 </TableRow>
               );
-            })}
+            })
+            )}
           </TableBody>
         </Table>
       </TableContainer>
