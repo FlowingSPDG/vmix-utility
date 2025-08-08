@@ -17,7 +17,9 @@ import {
   Divider,
   ButtonGroup,
   Snackbar,
-  Alert
+  Alert,
+  Autocomplete,
+  Chip
 } from '@mui/material';
 import CodeIcon from '@mui/icons-material/Code';
 import PlayArrowIcon from '@mui/icons-material/PlayArrow';
@@ -25,7 +27,7 @@ import AddIcon from '@mui/icons-material/Add';
 import DeleteIcon from '@mui/icons-material/Delete';
 import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 import OpenInBrowserIcon from '@mui/icons-material/OpenInBrowser';
-import RefreshIcon from '@mui/icons-material/Refresh';
+import shortcuts from '../assets/shortcuts.json';
 
 interface VmixConnection {
   host: string;
@@ -62,6 +64,12 @@ interface Input {
   title: string;
   functionName: string;
   queryParams: QueryParam[];
+}
+
+interface ShortcutData {
+  Name: string;
+  Description: string;
+  Parameters: Array<{ Type: number }> | null;
 }
 
 // Virtualized row component for react-window
@@ -227,6 +235,17 @@ const VirtualizedInputItem = memo(({ index, style, data }: {
 VirtualizedInputItem.displayName = 'VirtualizedInputItem';
 
 const ShortcutGenerator = () => {
+  // Process shortcuts data for autocomplete
+  const shortcutsData: ShortcutData[] = Array.isArray(shortcuts) ? shortcuts : [];
+  
+  // Filter shortcuts based on search term
+  const getFilteredShortcuts = (searchTerm: string) => {
+    if (!searchTerm) return [];
+    return shortcutsData.filter(shortcut => 
+      shortcut.Name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      shortcut.Description.toLowerCase().includes(searchTerm.toLowerCase())
+    );
+  };
   const { connections, inputs: vmixStatusInputs } = useVMixStatus();
   const [selectedConnection, setSelectedConnection] = useState<string>('');
   const [vmixInputs, setVmixInputs] = useState<VmixInput[]>([]);
@@ -471,14 +490,95 @@ const ShortcutGenerator = () => {
           Function Configuration (applies to all inputs)
         </Typography>
         
-        {/* Function Name */}
-        <TextField
-          label="Function Name"
-          value={sharedFunctionName}
-          onChange={(e) => setSharedFunctionName(e.target.value)}
-          size="small"
-          sx={{ mb: 2, mr: 2, width: '200px' }}
-        />
+        {/* Function Name with Autocomplete */}
+        <Box sx={{ mb: 2 }}>
+          <Autocomplete
+            freeSolo
+            options={shortcutsData}
+            getOptionLabel={(option) => {
+              if (typeof option === 'string') return option;
+              return option.Name;
+            }}
+            inputValue={sharedFunctionName}
+            onInputChange={(event, newInputValue) => {
+              setSharedFunctionName(newInputValue);
+            }}
+            onChange={(event, newValue) => {
+              if (newValue && typeof newValue !== 'string') {
+                setSharedFunctionName(newValue.Name);
+              }
+            }}
+            renderInput={(params) => (
+              <TextField
+                {...params}
+                label="Function Name"
+                size="small"
+                sx={{ mb: 1, mr: 2, width: '300px' }}
+                helperText="Type to search for vMix functions. Select from suggestions or enter custom function name."
+              />
+            )}
+            renderOption={(props, option) => (
+              <Box component="li" {...props}>
+                <Box>
+                  <Typography variant="body2" fontWeight="bold">
+                    {option.Name}
+                  </Typography>
+                  <Typography variant="caption" color="text.secondary">
+                    {option.Description}
+                  </Typography>
+                  {option.Parameters && (
+                    <Typography variant="caption" color="text.secondary" display="block">
+                      Parameters: {option.Parameters.length} required
+                    </Typography>
+                  )}
+                </Box>
+              </Box>
+            )}
+            filterOptions={(options, { inputValue }) => {
+              const filtered = getFilteredShortcuts(inputValue);
+              return filtered.slice(0, 10); // Limit to 10 suggestions
+            }}
+          />
+          
+          {/* Show selected function details */}
+          {sharedFunctionName && (() => {
+            const selectedShortcut = shortcutsData.find(s => s.Name === sharedFunctionName);
+            if (selectedShortcut) {
+              return (
+                <Box sx={{ mt: 1, p: 1, bgcolor: 'grey.50', borderRadius: 1 }}>
+                  <Typography variant="caption" color="text.secondary">
+                    <strong>Description:</strong> {selectedShortcut.Description}
+                  </Typography>
+                  {selectedShortcut.Parameters && (
+                    <Typography variant="caption" color="text.secondary" display="block">
+                      <strong>Parameters:</strong> {selectedShortcut.Parameters.length} required
+                    </Typography>
+                  )}
+                </Box>
+              );
+            }
+            return null;
+          })()}
+        </Box>
+        
+        {/* Quick Function Selection */}
+        <Box sx={{ mb: 2 }}>
+          <Typography variant="subtitle2" gutterBottom>
+            Quick Functions:
+          </Typography>
+          <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
+            {['PreviewInput','Cut', 'Fade', 'Merge', 'Stinger1', 'Stinger2', 'Stinger3', 'Stinger4'].map((funcName) => (
+              <Chip
+                key={funcName}
+                label={funcName}
+                size="small"
+                onClick={() => setSharedFunctionName(funcName)}
+                color={sharedFunctionName === funcName ? 'primary' : 'default'}
+                variant={sharedFunctionName === funcName ? 'filled' : 'outlined'}
+              />
+            ))}
+          </Box>
+        </Box>
         
         {/* Shared Query Parameters */}
         <Typography variant="subtitle2" gutterBottom>
