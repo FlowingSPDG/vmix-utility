@@ -21,7 +21,6 @@ import {
   Alert,
   Chip,
   IconButton,
-  Menu,
   MenuItem,
   Switch,
   Select,
@@ -35,7 +34,6 @@ import AddIcon from '@mui/icons-material/Add';
 import DeleteIcon from '@mui/icons-material/Delete';
 import RefreshIcon from '@mui/icons-material/Refresh';
 import MoreVertIcon from '@mui/icons-material/MoreVert';
-import PlayArrowIcon from '@mui/icons-material/PlayArrow';
 import ReconnectIcon from '@mui/icons-material/Refresh';
 import EditIcon from '@mui/icons-material/Edit';
 
@@ -55,7 +53,6 @@ const Connections: React.FC = () => {
   const [open, setOpen] = useState(false);
   const [newHost, setNewHost] = useState('');
   const [connecting, setConnecting] = useState(false);
-  const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
   const [selectedConnection, setSelectedConnection] = useState<Connection | null>(null);
   const [labelDialogOpen, setLabelDialogOpen] = useState(false);
   const [editingConnection, setEditingConnection] = useState<Connection | null>(null);
@@ -210,22 +207,12 @@ const Connections: React.FC = () => {
     setNewLabel('');
   };
 
-  const handleMenuClick = (event: React.MouseEvent<HTMLElement>, connection: Connection) => {
-    setAnchorEl(event.currentTarget);
-    setSelectedConnection(connection);
-  };
-
-  const handleMenuClose = () => {
-    setAnchorEl(null);
-    setSelectedConnection(null);
-  };
 
   const sendVmixFunction = async (functionName: string) => {
     if (!selectedConnection) return;
     
     try {
       await sendVMixFunction(selectedConnection.host, functionName);
-      handleMenuClose();
     } catch (error) {
       console.error('Failed to send function:', error);
       setError(`Failed to send ${functionName} to ${selectedConnection.host}: ${error}`);
@@ -398,12 +385,7 @@ const Connections: React.FC = () => {
                         <ReconnectIcon />
                       </IconButton>
                     ) : (
-                      <IconButton
-                        onClick={(e) => handleMenuClick(e, connection)}
-                        disabled={connection.status !== 'Connected'}
-                      >
-                        <MoreVertIcon />
-                      </IconButton>
+                      <></>
                     )}
                     <IconButton 
                       color="error" 
@@ -418,30 +400,6 @@ const Connections: React.FC = () => {
           </TableBody>
         </Table>
       </TableContainer>
-
-      {/* vMix Function Menu */}
-      <Menu
-        anchorEl={anchorEl}
-        open={Boolean(anchorEl)}
-        onClose={handleMenuClose}
-      >
-        <MenuItem onClick={() => sendVmixFunction('Cut')}>
-          <PlayArrowIcon sx={{ mr: 1 }} />
-          Cut
-        </MenuItem>
-        <MenuItem onClick={() => sendVmixFunction('Preview')}>
-          <PlayArrowIcon sx={{ mr: 1 }} />
-          Preview
-        </MenuItem>
-        <MenuItem onClick={() => sendVmixFunction('Fade')}>
-          <PlayArrowIcon sx={{ mr: 1 }} />
-          Fade
-        </MenuItem>
-        <MenuItem onClick={() => sendVmixFunction('QuickPlay')}>
-          <PlayArrowIcon sx={{ mr: 1 }} />
-          Quick Play
-        </MenuItem>
-      </Menu>
 
       <Dialog open={open} onClose={handleClose} maxWidth="sm" fullWidth>
         <DialogTitle>Add New vMix Connection</DialogTitle>
