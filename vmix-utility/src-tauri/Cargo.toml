@@ -27,3 +27,4 @@ anyhow = "1.0.69"
 reqwest = { version = "0.11", features = ["json"] }
 tokio = { version = "1.0", features = ["full"] }
 quick-xml = { version = "0.31", features = ["serialize"] }
+url = "2.4"

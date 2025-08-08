@@ -166,12 +166,12 @@ const Connections: React.FC = () => {
         [newHost.trim()]: { enabled: true, duration: 5 }
       }));
       await fetchConnections(); // Refresh the list
-      handleClose();
     } catch (error) {
       console.error('Failed to connect:', error);
       setError(`Failed to connect to ${newHost}: ${error}`);
     } finally {
       setConnecting(false);
+      handleClose();
     }
   };
 
@@ -204,7 +204,8 @@ const Connections: React.FC = () => {
     try {
       await invoke('send_vmix_function', { 
         host: selectedConnection.host, 
-        function: functionName 
+        function_name: functionName,
+        params: null
       });
       handleMenuClose();
       // Optional: Show success message

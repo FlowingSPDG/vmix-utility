@@ -174,7 +174,11 @@ const InputManager = () => {
         // Send SetInputName function to update input title in vMix
         await invoke('send_vmix_function', {
           host: selectedConnection,
-          function: `SetInputName&Input=${input.number}&Value=${encodeURIComponent(newTitle)}`
+          function_name: 'SetInputName',
+          params: {
+            Input: input.number.toString(),
+            Value: newTitle
+          }
         });
 
         // Update local state

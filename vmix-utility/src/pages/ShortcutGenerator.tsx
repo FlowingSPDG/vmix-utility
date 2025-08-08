@@ -271,7 +271,7 @@ const ShortcutGenerator = () => {
   const generateUrl = (input: Input) => {
     if (!selectedConnection) return '';
     
-    let url = `http://${selectedConnection}:8088/api/?Function=${input.functionName}`;
+    let url = `http://${selectedConnection}:8088/api?Function=${input.functionName}`;
     
     if (input.queryParams.length > 0) {
       for (const param of input.queryParams) {
@@ -283,6 +283,7 @@ const ShortcutGenerator = () => {
   };
 
   const generateScript = (input: Input) => {
+    // Generate script in format for vMix Script API: Function=xxx&Input=xxx
     let script = `Function=${input.functionName}`;
     if (input.queryParams.length > 0) {
       for (const param of input.queryParams) {
@@ -290,6 +291,21 @@ const ShortcutGenerator = () => {
       }
     }
     return script;
+  };
+
+  const generateParamsObject = (input: Input) => {
+    // Generate parameters as object for backend
+    console.log('generateParamsObject input:', input);
+    console.log('queryParams:', input.queryParams);
+    
+    const params: { [key: string]: string } = {};
+    input.queryParams.forEach(param => {
+      console.log(`Adding param: ${param.key} = ${param.value}`);
+      params[param.key] = param.value;
+    });
+    
+    console.log('Final params object:', params);
+    return params;
   };
 
   const openTallyInBrowser = async () => {
@@ -313,12 +329,14 @@ const ShortcutGenerator = () => {
     }
 
     try {
-      const functionString = generateScript(input);
+      const params = generateParamsObject(input);
+      console.log(params);
       await invoke('send_vmix_function', {
         host: selectedConnection,
-        function: functionString
+        functionName: input.functionName,
+        params: Object.keys(params).length > 0 ? params : null
       });
-      showToast(`Command sent successfully: ${functionString}`, 'success');
+      showToast(`Command sent successfully: ${input.functionName}`, 'success');
     } catch (error) {
       console.error('Failed to send command:', error);
       showToast(`Failed to send command: ${error}`, 'error');
@@ -535,7 +553,7 @@ const ShortcutGenerator = () => {
                     size="small"
                     onClick={() => {
                       navigator.clipboard.writeText(generateUrl(input));
-                      showToast('URL copied to clipboard!');
+                      showToast('Script API command copied to clipboard!');
                     }}
                     sx={{ ml: 1 }}
                   >

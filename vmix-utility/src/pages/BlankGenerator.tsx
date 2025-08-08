@@ -106,13 +106,14 @@ const BlankGenerator = () => {
       // Generate blanks using vMix API
       for (let i = 0; i < count; i++) {
         const blankTitle = `Blank ${i + 1}${transparent ? ' (Transparent)' : ''}`;
-        const functionName = transparent 
-          ? `AddInput&Value=Colour|Transparent&Title=${encodeURIComponent(blankTitle)}` 
-          : `AddInput&Value=Colour|Black&Title=${encodeURIComponent(blankTitle)}`;
+        const params = transparent 
+          ? { Value: 'Colour|Transparent', Title: blankTitle }
+          : { Value: 'Colour|Black', Title: blankTitle };
         
         await invoke('send_vmix_function', {
           host: connection.host,
-          function: functionName
+          function_name: 'AddInput',
+          params: params
         });
         
         // Small delay between requests to avoid overwhelming vMix

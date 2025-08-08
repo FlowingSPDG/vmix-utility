@@ -7,6 +7,7 @@ use reqwest;
 use quick_xml::de;
 use tokio::time::{interval, sleep};
 use tauri::{Emitter, Manager};
+use url::Url;
 
 #[derive(Debug, Deserialize)]
 struct VmixXml {
@@ -95,11 +96,20 @@ impl VmixHttpClient {
         }
     }
 
-    async fn send_function(&self, function: &str) -> Result<()> {
-        // Function string already contains "Function=..." so append directly
-        let url = format!("{}/?{}", self.base_url, function);
+    async fn send_function(&self, function_name: &str, params: &HashMap<String, String>) -> Result<()> {
+        // Parse base URL and add query parameters using url::Url
+        let mut url = Url::parse(&self.base_url)?;
+        
+        // Add Function parameter automatically
+        url.query_pairs_mut().append_pair("Function", function_name);
+        
+        // Add all parameters from HashMap
+        for (key, value) in params {
+            url.query_pairs_mut().append_pair(key, value);
+        }
+        
         let response = self.client
-            .get(&url)
+            .get(url.as_str())
             .send()
             .await?;
         
@@ -139,9 +149,10 @@ impl VmixHttpClient {
 
 // Additional Tauri command for sending vMix functions
 #[tauri::command]
-async fn send_vmix_function(host: String, function: String) -> Result<String, String> {
+async fn send_vmix_function(host: String, function_name: String, params: Option<HashMap<String, String>>) -> Result<String, String> {
     let vmix = VmixHttpClient::new(&host, 8088);
-    vmix.send_function(&function).await.map_err(|e| e.to_string())?;
+    let params_map = params.unwrap_or_default();
+    vmix.send_function(&function_name, &params_map).await.map_err(|e| e.to_string())?;
     Ok("Function sent successfully".to_string())
 }
 
@@ -273,14 +284,12 @@ struct VmixConnection {
 #[tauri::command]
 async fn connect_vmix(state: tauri::State<'_, AppState>, host: String) -> Result<VmixConnection, String> {
     let vmix = VmixHttpClient::new(&host, 8088);
-    let status = vmix.get_status().await.map_err(|e| e.to_string())?;
+    let status = vmix.get_status().await.unwrap_or(false);
     
-    if status {
-        state.connections.lock().unwrap().push(vmix.clone());
-        // Initialize auto-refresh config for new connection
-        state.auto_refresh_configs.lock().unwrap()
-            .insert(host.clone(), AutoRefreshConfig::default());
-    }
+    state.connections.lock().unwrap().push(vmix.clone());
+    // Initialize auto-refresh config for new connection
+    state.auto_refresh_configs.lock().unwrap()
+        .insert(host.clone(), AutoRefreshConfig::default());
     
     let active_input = vmix.get_active_input().await.unwrap_or(0);
     let preview_input = vmix.get_preview_input().await.unwrap_or(0);
