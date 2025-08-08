@@ -21,6 +21,7 @@ import {
   DialogContentText,
   DialogTitle,
   CircularProgress,
+  Snackbar
 } from '@mui/material';
 
 interface Connection {
@@ -34,11 +35,15 @@ const BlankGenerator = () => {
   const { connections: vmixConnections } = useVMixStatus();
   const [transparent, setTransparent] = useState(false);
   const [count, setCount] = useState(1);
-  const [generated, setGenerated] = useState(false);
   const [selectedConnection, setSelectedConnection] = useState<number | ''>('');
   const [connections, setConnections] = useState<Connection[]>([]);
   const [showConfirmDialog, setShowConfirmDialog] = useState(false);
   const [generating, setGenerating] = useState(false);
+  
+  // Toast state
+  const [toastOpen, setToastOpen] = useState(false);
+  const [toastMessage, setToastMessage] = useState('');
+  const [toastSeverity, setToastSeverity] = useState<'success' | 'error'>('success');
 
   // Transform connections from useVMixStatus
   useEffect(() => {
@@ -101,13 +106,14 @@ const BlankGenerator = () => {
 
       console.log(`Generated ${count} blank${count !== 1 ? 's' : ''} with transparent=${transparent} on ${connection.host}`);
       
-      setGenerated(true);
-      setTimeout(() => {
-        setGenerated(false);
-      }, 3000);
+      setToastMessage(`Successfully generated ${count} blank${count !== 1 ? 's' : ''} with ${transparent ? 'transparent' : 'black'} background!`);
+      setToastSeverity('success');
+      setToastOpen(true);
     } catch (error) {
       console.error('Failed to generate blanks:', error);
-      // TODO: toast message
+      setToastMessage(`Failed to generate blanks: ${error}`);
+      setToastSeverity('error');
+      setToastOpen(true);
     } finally {
       setGenerating(false);
     }
@@ -117,17 +123,15 @@ const BlankGenerator = () => {
     setShowConfirmDialog(false);
   };
 
+  const handleToastClose = () => {
+    setToastOpen(false);
+  };
+
   return (
     <Box sx={{ p: 3 }}>
       <Typography variant="h4" component="h1" gutterBottom>
         Blank Generator
       </Typography>
-      
-      {generated && (
-        <Alert severity="success" sx={{ mb: 3 }}>
-          Successfully generated {count} blank{count !== 1 ? 's' : ''} with {transparent ? 'transparent' : 'solid'} background on {connections.find(c => c.id === selectedConnection)?.label}!
-        </Alert>
-      )}
       
       <Paper sx={{ p: 3 }}>
         <Typography variant="h6" gutterBottom>
@@ -229,6 +233,22 @@ const BlankGenerator = () => {
           </Button>
         </DialogActions>
       </Dialog>
+      
+      {/* Toast Notification */}
+      <Snackbar
+        open={toastOpen}
+        autoHideDuration={6000}
+        onClose={handleToastClose}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+      >
+        <Alert 
+          onClose={handleToastClose} 
+          severity={toastSeverity}
+          sx={{ width: '100%' }}
+        >
+          {toastMessage}
+        </Alert>
+      </Snackbar>
     </Box>
   );
 };
