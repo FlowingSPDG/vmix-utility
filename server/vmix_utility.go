@@ -7,7 +7,7 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/FlowingSPDG/vmix-utility/server/scraper"
+	"github.com/FlowingSPDG/vmix-utility/scraper"
 
 	vmixgo "github.com/FlowingSPDG/vmix-go"
 	"github.com/gin-gonic/gin"

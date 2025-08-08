@@ -7,14 +7,10 @@ import (
 	"github.com/gocolly/colly/v2"
 )
 
-type Parameter struct {
-	Type ParameterType
-}
-
 type Shortcut struct {
 	Name        string
 	Description string
-	Parameters  []Parameter // comma-separated queries
+	Parameters  []string // comma-separated queries
 }
 
 // OverrideShortcuts is a list of shortcuts that are not on the official documentation.
@@ -22,24 +18,24 @@ var OverrideShortcuts = []Shortcut{
 	{
 		Name:        "Cut",
 		Description: "Cut",
-		Parameters: []Parameter{
-			{Type: ParameterTypeInput},
-			{Type: ParameterTypeMix},
+		Parameters: []string{
+			"Input",
+			"Mix",
 		},
 	},
 	{
 		Name:        "Fade",
 		Description: "Fade",
-		Parameters: []Parameter{
-			{Type: ParameterTypeInput},
-			{Type: ParameterTypeMix},
+		Parameters: []string{
+			"Input",
+			"Mix",
 		},
 	},
 	{
 		Name:        "Merge",
 		Description: "Merge",
-		Parameters: []Parameter{
-			{Type: ParameterTypeInput},
+		Parameters: []string{
+			"Input",
 		},
 	},
 }
@@ -80,11 +76,10 @@ func GetShortcuts(helpVer int) ([]Shortcut, error) {
 							s.Parameters = nil
 						} else {
 							ts := strings.Split(t, ",")
-							s.Parameters = make([]Parameter, 0, len(ts))
+							s.Parameters = make([]string, 0, len(ts))
 							for _, p := range ts {
 								p = strings.TrimSpace(p)
-								pt := resolveParameterType(p)
-								s.Parameters = append(s.Parameters, Parameter{Type: pt})
+								s.Parameters = append(s.Parameters, p)
 							}
 						}
 					}

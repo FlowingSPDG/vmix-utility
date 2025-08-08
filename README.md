@@ -1,7 +1,6 @@
 [![build](https://github.com/FlowingSPDG/vmix-utility/actions/workflows/build.yaml/badge.svg)](https://github.com/FlowingSPDG/vmix-utility/actions/workflows/build.yaml)  
 ## vmix-utility
-vMix utility tool, this can be used for managing inputs, checking multiviews and etc.  
-Go, Gin and Vue.  
+TODO....
 
 ## Developer / 開発者
 Shugo Kawamura
@@ -9,15 +8,10 @@ GitHub : [**FlowingSPDG**](http://github.com/FlowingSPDG)
 X : [**@FlowingSPDG**](http://twitter.com/FlowingSPDG). 
 
 ## Usage / 使い方
-``./vmix_gen.exe -addr :8080 -vmix "http://localhost:8088" ``  
-``-addr`` Specifies where to listen request from browser. Default: `:8080` / ブラウザからのリクエストを受け付けるポートを指定します。初期値: `":8080"`  
-``-vmix`` : vMix API Endpoint URL. Default: `"http://localhost:8088"` / vMixのAPIエンドポイントURLです。初期値: `"http://localhost:8088"`
-
-![Screenshot1](https://user-images.githubusercontent.com/30292185/111716922-5e197580-889a-11eb-91d1-059b63ff5e1f.png "Screenshot")  
-![Screenshot2](https://user-images.githubusercontent.com/30292185/111715113-7d160880-8896-11eb-9a16-6af241f606b0.png "Screenshot")  
+TODO...
 
 ## Query Options
-#### [Function name(vMix Reference)](https://www.vmix.com/help26/index.htm?WebScripting.html)
+#### [Function name(vMix Reference)](https://www.vmix.com/help28/index.htm?WebScripting.html)
 Specifies `Function` query in URL parameter.  
 URL中の`Function`クエリパラメタを設定します。  
 #### Value

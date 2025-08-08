@@ -69,7 +69,7 @@ interface Input {
 interface ShortcutData {
   Name: string;
   Description: string;
-  Parameters: Array<{ Type: number }> | null;
+  Parameters: Array<string> | null;
 }
 
 // Virtualized row component for react-window
@@ -528,7 +528,7 @@ const ShortcutGenerator = () => {
                   </Typography>
                   {option.Parameters && (
                     <Typography variant="caption" color="text.secondary" display="block">
-                      Parameters: {option.Parameters.length} required
+                      Parameters: {option.Parameters.length} required: ({option.Parameters.join(', ')})
                     </Typography>
                   )}
                 </Box>
@@ -551,7 +551,7 @@ const ShortcutGenerator = () => {
                   </Typography>
                   {selectedShortcut.Parameters && (
                     <Typography variant="caption" color="text.secondary" display="block">
-                      <strong>Parameters:</strong> {selectedShortcut.Parameters.length} required
+                      <strong>Parameters:</strong> {selectedShortcut.Parameters.length} required: ({selectedShortcut.Parameters.join(', ')})
                     </Typography>
                   )}
                 </Box>
