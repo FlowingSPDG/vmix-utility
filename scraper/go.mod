@@ -1,4 +1,4 @@
-module github.com/FlowingSPDG/vmix-utility
+module github.com/FlowingSPDG/vmix-utility/scraper
 
 go 1.23
 
