@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo, useCallback, memo } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { openUrl } from '@tauri-apps/plugin-opener';
 import { useVMixStatus } from '../hooks/useVMixStatus';
@@ -63,6 +63,149 @@ interface Input {
   queryParams: QueryParam[];
 }
 
+// Memoized InputItem component to prevent unnecessary re-renders
+const InputItem = memo(({ 
+  input, 
+  vmixInput, 
+  selectedConnection, 
+  showToast, 
+  onTryCommand,
+  isLastItem 
+}: {
+  input: Input;
+  vmixInput?: VmixInput;
+  selectedConnection: string;
+  showToast: (message: string, severity?: 'success' | 'error' | 'info') => void;
+  onTryCommand: (input: Input) => void;
+  isLastItem: boolean;
+}) => {
+  const generateUrl = useCallback((input: Input) => {
+    if (!selectedConnection) return '';
+    
+    let url = `http://${selectedConnection}:8088/api?Function=${input.functionName}`;
+    
+    if (input.queryParams.length > 0) {
+      for (const param of input.queryParams) {
+        url += `&${param.key}=${param.value}`;
+      }
+    }
+    
+    return url;
+  }, [selectedConnection]);
+
+  const generateScript = useCallback((input: Input) => {
+    let script = `Function=${input.functionName}`;
+    if (input.queryParams.length > 0) {
+      for (const param of input.queryParams) {
+        script += `&${param.key}=${param.value}`;
+      }
+    }
+    return script;
+  }, []);
+
+  const openTallyInBrowser = useCallback(async (input: Input) => {
+    try {
+      const inputKey = input.queryParams.find(param => param.key === 'Input')?.value;
+      if (!inputKey) {
+        showToast('Input keyが見つかりません', 'error');
+        return;
+      }
+      await openUrl(`http://${selectedConnection}:8088/tally/?key=${inputKey}`);
+      showToast('Tallyインターフェースをブラウザで開きました', 'info');
+    } catch (error) {
+      console.error('Failed to open tally URL:', error);
+      showToast('Tally URLのブラウザオープンに失敗しました', 'error');
+    }
+  }, [showToast, input]);
+
+  const handleCopyUrl = useCallback(() => {
+    navigator.clipboard.writeText(generateUrl(input));
+    showToast('Script API command copied to clipboard!');
+  }, [input, generateUrl, showToast]);
+
+  const handleCopyScript = useCallback(() => {
+    navigator.clipboard.writeText(generateScript(input));
+    showToast('Function script copied to clipboard!');
+  }, [input, generateScript, showToast]);
+
+  const handleTryCommand = useCallback(() => {
+    onTryCommand(input);
+  }, [input, onTryCommand]);
+
+  return (
+    <Box>
+      <Box sx={{ p: 2, display: 'flex', alignItems: 'center', gap: 2 }}>
+        {/* Input Info */}
+        <Box sx={{ minWidth: '200px' }}>
+          <Typography variant="body1" fontWeight="medium">
+            Input {input.number}: {vmixInput?.title || 'Unknown'}
+          </Typography>
+          <Typography variant="caption" color="textSecondary">
+            {input.functionName} | {input.queryParams.map(p => `${p.key}=${p.value}`).join(', ')}
+          </Typography>
+        </Box>
+        
+        {/* Generated URL */}
+        <Box sx={{ flex: 1, minWidth: 0 }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', bgcolor: '#f5f5f5', p: 1, borderRadius: 1 }}>
+            <Typography 
+              component="pre" 
+              variant="caption" 
+              sx={{ 
+                fontFamily: 'monospace', 
+                fontSize: '0.75rem',
+                wordBreak: 'break-all',
+                whiteSpace: 'pre-wrap',
+                flex: 1,
+                margin: 0,
+                overflow: 'hidden'
+              }}
+            >
+              {generateUrl(input)}
+            </Typography>
+            <IconButton
+              size="small"
+              onClick={handleCopyUrl}
+              sx={{ ml: 1 }}
+            >
+              <ContentCopyIcon fontSize="small" />
+            </IconButton>
+          </Box>
+        </Box>
+        
+        {/* Action Buttons */}
+        <ButtonGroup variant="outlined" size="small">
+          <Button
+            startIcon={<CodeIcon />}
+            onClick={handleCopyScript}
+            size="small"
+          >
+            SCRIPT
+          </Button>
+          <Button
+            startIcon={<OpenInBrowserIcon />}
+            onClick={() => openTallyInBrowser(input)}
+            size="small"
+          >
+            TALLY
+          </Button>
+          <Button
+            startIcon={<PlayArrowIcon />}
+            color="primary"
+            onClick={handleTryCommand}
+            size="small"
+          >
+            TRY!
+          </Button>
+        </ButtonGroup>
+      </Box>
+      {!isLastItem && <Divider />}
+    </Box>
+  );
+});
+
+InputItem.displayName = 'InputItem';
+
 const ShortcutGenerator = () => {
   const { connections, inputs: vmixStatusInputs } = useVMixStatus();
   const [selectedConnection, setSelectedConnection] = useState<string>('');
@@ -98,26 +241,33 @@ const ShortcutGenerator = () => {
     if (selectedConnection && vmixStatusInputs[selectedConnection]) {
       const inputs = vmixStatusInputs[selectedConnection];
       setVmixInputs(inputs);
-      
-      // Generate default shortcuts for all inputs using shared settings
-      const defaultShortcuts = inputs.map((input, index) => ({
-        id: index + 1,
-        number: input.number,
-        title: `${sharedFunctionName} to ${input.title}`,
-        functionName: sharedFunctionName,
-        queryParams: [
-          { id: 1, key: 'Input', value: input.key },
-          ...sharedQueryParams.map(param => ({ ...param, id: param.id + 1000 }))
-        ]
-      }));
-      
-      setInputs(defaultShortcuts);
       setInputTypeFilter('All');
     } else {
       setVmixInputs([]);
       setInputs([]);
     }
-  }, [selectedConnection, vmixStatusInputs, sharedFunctionName, sharedQueryParams]);
+  }, [selectedConnection, vmixStatusInputs]);
+
+  // Generate shortcuts separately using useMemo for performance
+  const generatedInputs = useMemo(() => {
+    if (vmixInputs.length === 0) return [];
+    
+    return vmixInputs.map((input, index) => ({
+      id: index + 1,
+      number: input.number,
+      title: `${sharedFunctionName} to ${input.title}`,
+      functionName: sharedFunctionName,
+      queryParams: [
+        { id: 1, key: 'Input', value: input.key },
+        ...sharedQueryParams.map(param => ({ ...param, id: param.id + 1000 }))
+      ]
+    }));
+  }, [vmixInputs, sharedFunctionName, sharedQueryParams]);
+
+  // Update inputs when generated inputs change
+  useEffect(() => {
+    setInputs(generatedInputs);
+  }, [generatedInputs]);
 
   const handleConnectionChange = (host: string) => {
     setSelectedConnection(host);
@@ -127,7 +277,7 @@ const ShortcutGenerator = () => {
   const [newParamKey, setNewParamKey] = useState('');
   const [newParamValue, setNewParamValue] = useState('');
 
-  const handleAddSharedParam = () => {
+  const handleAddSharedParam = useCallback(() => {
     if (newParamKey && newParamValue) {
       const newId = sharedQueryParams.length > 0
         ? Math.max(...sharedQueryParams.map(p => p.id)) + 1
@@ -141,42 +291,20 @@ const ShortcutGenerator = () => {
       setNewParamKey('');
       setNewParamValue('');
     }
-  };
+  }, [newParamKey, newParamValue, sharedQueryParams]);
 
-  const handleDeleteSharedParam = (paramId: number) => {
-    setSharedQueryParams(sharedQueryParams.filter(param => param.id !== paramId));
-  };
+  const handleDeleteSharedParam = useCallback((paramId: number) => {
+    setSharedQueryParams(prev => prev.filter(param => param.id !== paramId));
+  }, []);
 
-  const handleSharedParamChange = (paramId: number, key: string, value: string) => {
-    setSharedQueryParams(sharedQueryParams.map(param => 
+  const handleSharedParamChange = useCallback((paramId: number, key: string, value: string) => {
+    setSharedQueryParams(prev => prev.map(param => 
       param.id === paramId 
         ? { ...param, key, value }
         : param
     ));
-  };
+  }, []);
 
-  // Update all inputs when shared settings change
-  const updateAllInputsWithSharedSettings = () => {
-    setInputs(inputs.map(input => {
-      const vmixInput = vmixInputs.find(vi => vi.number === input.number);
-      return {
-        ...input,
-        functionName: sharedFunctionName,
-        title: `${sharedFunctionName} to ${vmixInput?.title || 'Unknown'}`,
-        queryParams: [
-          { id: 1, key: 'Input', value: vmixInput?.key || input.number.toString() },
-          ...sharedQueryParams.map(param => ({ ...param, id: param.id + 1000 }))
-        ]
-      };
-    }));
-  };
-
-  // Update inputs when shared settings change
-  useEffect(() => {
-    if (inputs.length > 0) {
-      updateAllInputsWithSharedSettings();
-    }
-  }, [sharedFunctionName, sharedQueryParams]);
 
 
   const showToast = (message: string, severity: 'success' | 'error' | 'info' = 'success') => {
@@ -187,16 +315,16 @@ const ShortcutGenerator = () => {
     setToast(prev => ({...prev, open: false}));
   };
 
-  // Get unique input types from vmixInputs
-  const getAvailableInputTypes = () => {
+  // Get unique input types from vmixInputs - memoized for performance
+  const availableInputTypes = useMemo(() => {
     const types = [...new Set(vmixInputs.map(input => input.input_type))]
       .filter(type => type && type !== 'Unknown')
       .sort();
     return ['All', ...types];
-  };
+  }, [vmixInputs]);
 
-  // Filter inputs based on selected type
-  const getFilteredInputs = () => {
+  // Filter inputs based on selected type - memoized for performance
+  const filteredInputs = useMemo(() => {
     if (inputTypeFilter === 'All') {
       return inputs;
     }
@@ -204,7 +332,7 @@ const ShortcutGenerator = () => {
       const vmixInput = vmixInputs.find(vi => vi.number === input.number);
       return vmixInput?.input_type === inputTypeFilter;
     });
-  };
+  }, [inputs, inputTypeFilter, vmixInputs]);
 
   const handleDeleteParam = (inputId: number, paramId: number) => {
     setInputs(inputs.map(input => {
@@ -218,61 +346,15 @@ const ShortcutGenerator = () => {
     }));
   };
 
-  const generateUrl = (input: Input) => {
-    if (!selectedConnection) return '';
-    
-    let url = `http://${selectedConnection}:8088/api?Function=${input.functionName}`;
-    
-    if (input.queryParams.length > 0) {
-      for (const param of input.queryParams) {
-        url += `&${param.key}=${param.value}`;
-      }
-    }
-    
-    return url;
-  };
-
-  const generateScript = (input: Input) => {
-    // Generate script in format for vMix Script API: Function=xxx&Input=xxx
-    let script = `Function=${input.functionName}`;
-    if (input.queryParams.length > 0) {
-      for (const param of input.queryParams) {
-        script += `&${param.key}=${param.value}`;
-      }
-    }
-    return script;
-  };
-
-  const generateParamsObject = (input: Input) => {
-    // Generate parameters as object for backend
-    console.log('generateParamsObject input:', input);
-    console.log('queryParams:', input.queryParams);
-    
+  const generateParamsObject = useCallback((input: Input) => {
     const params: { [key: string]: string } = {};
     input.queryParams.forEach(param => {
-      console.log(`Adding param: ${param.key} = ${param.value}`);
       params[param.key] = param.value;
     });
-    
-    console.log('Final params object:', params);
     return params;
-  };
+  }, []);
 
-  const openTallyInBrowser = async () => {
-    try {
-      await openUrl('http://localhost:8088/tally/?key=230834ea-8be2-486f-847a-98cd4ae7b53b');
-      showToast('Tally interface opened in browser', 'info');
-    } catch (error) {
-      console.error('Failed to open tally URL:', error);
-      showToast('Failed to open tally URL in browser', 'error');
-    }
-  };
-
-  const generateTally = (input: Input) => {
-    return `TALLY:${input.functionName}:${input.queryParams.map(p => `${p.key}=${p.value}`).join(',')}`;
-  };
-
-  const tryCommand = async (input: Input) => {
+  const tryCommand = useCallback(async (input: Input) => {
     if (!selectedConnection) {
       showToast('Please select a vMix connection first', 'error');
       return;
@@ -280,7 +362,6 @@ const ShortcutGenerator = () => {
 
     try {
       const params = generateParamsObject(input);
-      console.log(params);
       await invoke('send_vmix_function', {
         host: selectedConnection,
         functionName: input.functionName,
@@ -291,7 +372,7 @@ const ShortcutGenerator = () => {
       console.error('Failed to send command:', error);
       showToast(`Failed to send command: ${error}`, 'error');
     }
-  };
+  }, [selectedConnection, generateParamsObject, showToast]);
 
   return (
     <Box sx={{ p: 3 }}>
@@ -348,7 +429,7 @@ const ShortcutGenerator = () => {
                 onChange={(e) => setInputTypeFilter(e.target.value as string)}
                 size="small"
               >
-                {getAvailableInputTypes().map((type) => (
+                {availableInputTypes.map((type) => (
                   <MenuItem key={type} value={type}>
                     {type} {type === 'All' ? `(${inputs.length})` : `(${inputs.filter(input => {
                       const vmixInput = vmixInputs.find(vi => vi.number === input.number);
@@ -439,81 +520,16 @@ const ShortcutGenerator = () => {
       </Paper>
 
       <Paper>
-        {getFilteredInputs().map((input, index) => (
-          <Box key={input.id}>
-            <Box sx={{ p: 2, display: 'flex', alignItems: 'center', gap: 2 }}>
-              {/* Input Info */}
-              <Box sx={{ minWidth: '200px' }}>
-                <Typography variant="body1" fontWeight="medium">
-                  Input {input.number}: {vmixInputs.find(vi => vi.number === input.number)?.title || 'Unknown'}
-                </Typography>
-                <Typography variant="caption" color="textSecondary">
-                  {input.functionName} | {input.queryParams.map(p => `${p.key}=${p.value}`).join(', ')}
-                </Typography>
-              </Box>
-              
-              {/* Generated URL */}
-              <Box sx={{ flex: 1, minWidth: 0 }}>
-                <Box sx={{ display: 'flex', alignItems: 'center', bgcolor: '#f5f5f5', p: 1, borderRadius: 1 }}>
-                  <Typography 
-                    component="pre" 
-                    variant="caption" 
-                    sx={{ 
-                      fontFamily: 'monospace', 
-                      fontSize: '0.75rem',
-                      wordBreak: 'break-all',
-                      whiteSpace: 'pre-wrap',
-                      flex: 1,
-                      margin: 0,
-                      overflow: 'hidden'
-                    }}
-                  >
-                    {generateUrl(input)}
-                  </Typography>
-                  <IconButton
-                    size="small"
-                    onClick={() => {
-                      navigator.clipboard.writeText(generateUrl(input));
-                      showToast('Script API command copied to clipboard!');
-                    }}
-                    sx={{ ml: 1 }}
-                  >
-                    <ContentCopyIcon fontSize="small" />
-                  </IconButton>
-                </Box>
-              </Box>
-              
-              {/* Action Buttons */}
-              <ButtonGroup variant="outlined" size="small">
-                <Button
-                  startIcon={<CodeIcon />}
-                  onClick={() => {
-                    navigator.clipboard.writeText(generateScript(input));
-                    showToast('Function script copied to clipboard!');
-                  }}
-                  size="small"
-                >
-                  SCRIPT
-                </Button>
-                <Button
-                  startIcon={<OpenInBrowserIcon />}
-                  onClick={openTallyInBrowser}
-                  size="small"
-                >
-                  TALLY
-                </Button>
-                <Button
-                  startIcon={<PlayArrowIcon />}
-                  color="primary"
-                  onClick={() => tryCommand(input)}
-                  size="small"
-                >
-                  TRY!
-                </Button>
-              </ButtonGroup>
-            </Box>
-            {index < getFilteredInputs().length - 1 && <Divider />}
-          </Box>
+        {filteredInputs.map((input, index) => (
+          <InputItem
+            key={input.id}
+            input={input}
+            vmixInput={vmixInputs.find(vi => vi.number === input.number)}
+            selectedConnection={selectedConnection}
+            showToast={showToast}
+            onTryCommand={tryCommand}
+            isLastItem={index === filteredInputs.length - 1}
+          />
         ))}
       </Paper>
 
