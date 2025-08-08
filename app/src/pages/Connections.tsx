@@ -28,7 +28,8 @@ import {
   FormControl,
   Backdrop,
   Card,
-  CardContent
+  CardContent,
+  DialogContentText
 } from '@mui/material';
 import AddIcon from '@mui/icons-material/Add';
 import DeleteIcon from '@mui/icons-material/Delete';
@@ -60,6 +61,10 @@ const Connections: React.FC = () => {
   const [editingConnection, setEditingConnection] = useState<Connection | null>(null);
   const [newLabel, setNewLabel] = useState('');
   const [isInitialLoading, setIsInitialLoading] = useState(true);
+  
+  // Delete confirmation dialog state
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [connectionToDelete, setConnectionToDelete] = useState<Connection | null>(null);
 
   // Transform global connections to local format
   useEffect(() => {
@@ -135,16 +140,30 @@ const Connections: React.FC = () => {
     }
   };
 
-  const handleDelete = async (id: number) => {
+  const handleDelete = (id: number) => {
     const connection = connections.find(c => c.id === id);
-    if (!connection) return;
-    
-    try {
-      await disconnectVMix(connection.host);
-    } catch (error) {
-      console.error('Failed to disconnect:', error);
-      setError(`Failed to disconnect from ${connection.host}: ${error}`);
+    if (connection) {
+      setConnectionToDelete(connection);
+      setDeleteDialogOpen(true);
     }
+  };
+
+  const handleDeleteConfirm = async () => {
+    if (connectionToDelete) {
+      try {
+        await disconnectVMix(connectionToDelete.host);
+      } catch (error) {
+        console.error('Failed to disconnect:', error);
+        setError(`Failed to disconnect from ${connectionToDelete.host}: ${error}`);
+      }
+    }
+    setDeleteDialogOpen(false);
+    setConnectionToDelete(null);
+  };
+
+  const handleDeleteCancel = () => {
+    setDeleteDialogOpen(false);
+    setConnectionToDelete(null);
   };
 
   const handleReconnect = async (host: string) => {
@@ -493,6 +512,32 @@ const Connections: React.FC = () => {
             disabled={!newLabel.trim()}
           >
             Save
+          </Button>
+        </DialogActions>
+      </Dialog>
+      
+      {/* Delete Confirmation Dialog */}
+      <Dialog
+        open={deleteDialogOpen}
+        onClose={handleDeleteCancel}
+        aria-labelledby="delete-dialog-title"
+        aria-describedby="delete-dialog-description"
+      >
+        <DialogTitle id="delete-dialog-title">
+          Delete Connection
+        </DialogTitle>
+        <DialogContent>
+          <DialogContentText id="delete-dialog-description">
+            Are you sure you want to delete the connection to "{connectionToDelete?.label}" ({connectionToDelete?.host})?
+            This will disconnect from the vMix instance and remove it from your saved connections.
+          </DialogContentText>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={handleDeleteCancel} color="primary">
+            Cancel
+          </Button>
+          <Button onClick={handleDeleteConfirm} color="error" variant="contained">
+            Delete
           </Button>
         </DialogActions>
       </Dialog>
