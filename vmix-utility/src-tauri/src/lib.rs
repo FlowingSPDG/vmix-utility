@@ -3,9 +3,11 @@ use anyhow::Result;
 use std::sync::{Arc, Mutex};
 use std::collections::HashMap;
 use std::time::{Duration, Instant};
+use std::path::PathBuf;
 use reqwest;
 use quick_xml::de;
 use tokio::time::{interval, sleep};
+use tokio::fs;
 use tauri::{Emitter, Manager};
 use url::Url;
 
@@ -59,6 +61,18 @@ struct VmixHttpClient {
 struct AutoRefreshConfig {
     enabled: bool,
     duration: u64, // seconds
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct ConnectionConfig {
+    host: String,
+    label: String,
+    auto_refresh: AutoRefreshConfig,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct AppConfig {
+    connections: Vec<ConnectionConfig>,
 }
 
 impl Default for AutoRefreshConfig {
@@ -180,6 +194,7 @@ struct AppState {
     auto_refresh_configs: Arc<Mutex<HashMap<String, AutoRefreshConfig>>>,
     last_status_cache: Arc<Mutex<HashMap<String, VmixConnection>>>,
     inputs_cache: Arc<Mutex<HashMap<String, Vec<VmixInput>>>>,
+    connection_labels: Arc<Mutex<HashMap<String, String>>>,
 }
 
 impl AppState {
@@ -189,12 +204,20 @@ impl AppState {
             auto_refresh_configs: Arc::new(Mutex::new(HashMap::new())),
             last_status_cache: Arc::new(Mutex::new(HashMap::new())),
             inputs_cache: Arc::new(Mutex::new(HashMap::new())),
+            connection_labels: Arc::new(Mutex::new(HashMap::new())),
         };
         
-        // Add localhost connection on startup
-        state.add_localhost_connection();
-        
         state
+    }
+    
+    async fn initialize(&self, app_handle: &tauri::AppHandle) {
+        // Try to load config first
+        if let Err(_) = self.load_config(app_handle).await {
+            // If loading fails, add default localhost connection
+            self.add_localhost_connection();
+            // Save the default configuration
+            let _ = self.save_config(app_handle).await;
+        }
     }
     
     fn add_localhost_connection(&self) {
@@ -206,6 +229,87 @@ impl AppState {
         // Initialize auto-refresh config for localhost
         self.auto_refresh_configs.lock().unwrap()
             .insert("localhost".to_string(), AutoRefreshConfig::default());
+            
+        // Set default label for localhost
+        self.connection_labels.lock().unwrap()
+            .insert("localhost".to_string(), "Local vMix".to_string());
+    }
+    
+    async fn get_config_path(app_handle: &tauri::AppHandle) -> Result<PathBuf, String> {
+        let app_data_dir = app_handle.path().app_data_dir().map_err(|e| e.to_string())?;
+        fs::create_dir_all(&app_data_dir).await.map_err(|e| e.to_string())?;
+        Ok(app_data_dir.join("config.json"))
+    }
+    
+    async fn save_config(&self, app_handle: &tauri::AppHandle) -> Result<(), String> {
+        let config_path = Self::get_config_path(app_handle).await?;
+        
+        let config = {
+            let connections = self.connections.lock().unwrap();
+            let labels = self.connection_labels.lock().unwrap();
+            let auto_configs = self.auto_refresh_configs.lock().unwrap();
+            
+            AppConfig {
+                connections: connections.iter().map(|conn| {
+                    let host = conn.host().to_string();
+                    ConnectionConfig {
+                        host: host.clone(),
+                        label: labels.get(&host).cloned().unwrap_or_else(|| host.clone()),
+                        auto_refresh: auto_configs.get(&host).cloned().unwrap_or_default(),
+                    }
+                }).collect(),
+            }
+        };
+        
+        let json_data = serde_json::to_string_pretty(&config).map_err(|e| e.to_string())?;
+        fs::write(&config_path, json_data).await.map_err(|e| e.to_string())?;
+        
+        Ok(())
+    }
+    
+    async fn load_config(&self, app_handle: &tauri::AppHandle) -> Result<(), String> {
+        let config_path = Self::get_config_path(app_handle).await?;
+        
+        if !config_path.exists() {
+            return Err("Config file does not exist".to_string());
+        }
+        
+        let json_data = fs::read_to_string(&config_path).await.map_err(|e| e.to_string())?;
+        let config: AppConfig = serde_json::from_str(&json_data).map_err(|e| e.to_string())?;
+        
+        // Clear existing connections
+        {
+            let mut connections = self.connections.lock().unwrap();
+            connections.clear();
+        }
+        {
+            let mut labels = self.connection_labels.lock().unwrap();
+            labels.clear();
+        }
+        {
+            let mut auto_configs = self.auto_refresh_configs.lock().unwrap();
+            auto_configs.clear();
+        }
+        
+        // Load connections from config
+        for conn_config in config.connections {
+            let vmix_client = VmixHttpClient::new(&conn_config.host, 8088);
+            
+            {
+                let mut connections = self.connections.lock().unwrap();
+                connections.push(vmix_client);
+            }
+            {
+                let mut labels = self.connection_labels.lock().unwrap();
+                labels.insert(conn_config.host.clone(), conn_config.label);
+            }
+            {
+                let mut auto_configs = self.auto_refresh_configs.lock().unwrap();
+                auto_configs.insert(conn_config.host, conn_config.auto_refresh);
+            }
+        }
+        
+        Ok(())
     }
 
     fn start_auto_refresh_task(&self, app_handle: tauri::AppHandle) {
@@ -213,6 +317,7 @@ impl AppState {
         let configs = Arc::clone(&self.auto_refresh_configs);
         let cache = Arc::clone(&self.last_status_cache);
         let inputs_cache = Arc::clone(&self.inputs_cache);
+        let labels = Arc::clone(&self.connection_labels);
 
         tokio::spawn(async move {
             let mut interval = interval(Duration::from_secs(1));
@@ -286,9 +391,14 @@ impl AppState {
                                 }
                             };
 
+                            let label = {
+                                let labels_guard = labels.lock().unwrap();
+                                labels_guard.get(&host).cloned().unwrap_or_else(|| host.clone())
+                            };
+
                             let new_connection = VmixConnection {
                                 host: host.clone(),
-                                label: host.clone(),
+                                label,
                                 status: connection_status,
                                 active_input,
                                 preview_input,
@@ -368,7 +478,7 @@ struct VmixConnection {
 }
 
 #[tauri::command]
-async fn connect_vmix(state: tauri::State<'_, AppState>, host: String) -> Result<VmixConnection, String> {
+async fn connect_vmix(state: tauri::State<'_, AppState>, app_handle: tauri::AppHandle, host: String) -> Result<VmixConnection, String> {
     let vmix = VmixHttpClient::new(&host, 8088);
     let status = vmix.get_status().await.unwrap_or(false);
     
@@ -395,9 +505,17 @@ async fn connect_vmix(state: tauri::State<'_, AppState>, host: String) -> Result
     let active_input = vmix.get_active_input().await.unwrap_or(0);
     let preview_input = vmix.get_preview_input().await.unwrap_or(0);
     
+    let label = {
+        let labels = state.connection_labels.lock().unwrap();
+        labels.get(&host).cloned().unwrap_or_else(|| host.clone())
+    };
+    
+    // Save configuration after connection change
+    let _ = state.save_config(&app_handle).await;
+    
     Ok(VmixConnection {
         host: host.clone(),
-        label: host,
+        label,
         status: if status { "Connected".to_string() } else { "Disconnected".to_string() },
         active_input,
         preview_input,
@@ -405,7 +523,7 @@ async fn connect_vmix(state: tauri::State<'_, AppState>, host: String) -> Result
 }
 
 #[tauri::command]
-async fn disconnect_vmix(state: tauri::State<'_, AppState>, host: String) -> Result<(), String> {
+async fn disconnect_vmix(state: tauri::State<'_, AppState>, app_handle: tauri::AppHandle, host: String) -> Result<(), String> {
     {
         let mut connections = state.connections.lock().unwrap();
         connections.retain(|c| c.host() != host);
@@ -418,19 +536,28 @@ async fn disconnect_vmix(state: tauri::State<'_, AppState>, host: String) -> Res
         let mut cache = state.last_status_cache.lock().unwrap();
         cache.remove(&host);
     }
+    
+    // Save configuration after disconnection
+    let _ = state.save_config(&app_handle).await;
+    
     Ok(())
 }
 
 #[tauri::command]
-async fn get_vmix_status(host: String) -> Result<VmixConnection, String> {
+async fn get_vmix_status(state: tauri::State<'_, AppState>, host: String) -> Result<VmixConnection, String> {
     let vmix = VmixHttpClient::new(&host, 8088);
     let status = vmix.get_status().await.map_err(|e| e.to_string())?;
     let active_input = vmix.get_active_input().await.unwrap_or(0);
     let preview_input = vmix.get_preview_input().await.unwrap_or(0);
     
+    let label = {
+        let labels = state.connection_labels.lock().unwrap();
+        labels.get(&host).cloned().unwrap_or_else(|| host.clone())
+    };
+    
     Ok(VmixConnection {
         host: host.clone(),
-        label: host,
+        label,
         status: if status { "Connected".to_string() } else { "Disconnected".to_string() },
         active_input,
         preview_input,
@@ -449,10 +576,16 @@ async fn get_vmix_statuses(state: tauri::State<'_, AppState>) -> Result<Vec<Vmix
         let status = vmix.get_status().await.map_err(|e| e.to_string())?;
         let active_input = vmix.get_active_input().await.unwrap_or(0);
         let preview_input = vmix.get_preview_input().await.unwrap_or(0);
+        let host = vmix.host().to_string();
+        
+        let label = {
+            let labels = state.connection_labels.lock().unwrap();
+            labels.get(&host).cloned().unwrap_or_else(|| host.clone())
+        };
         
         statuses.push(VmixConnection {
-            host: vmix.host().to_string(),
-            label: vmix.host().to_string(),
+            host,
+            label,
             status: if status { "Connected".to_string() } else { "Disconnected".to_string() },
             active_input,
             preview_input,
@@ -491,6 +624,37 @@ async fn get_all_auto_refresh_configs(
     Ok(state.auto_refresh_configs.lock().unwrap().clone())
 }
 
+#[tauri::command]
+async fn update_connection_label(
+    state: tauri::State<'_, AppState>,
+    app_handle: tauri::AppHandle,
+    host: String,
+    label: String
+) -> Result<(), String> {
+    state.connection_labels.lock().unwrap()
+        .insert(host, label);
+    
+    // Automatically save settings after label update
+    state.save_config(&app_handle).await?;
+    
+    Ok(())
+}
+
+#[tauri::command]
+async fn get_connection_labels(
+    state: tauri::State<'_, AppState>
+) -> Result<HashMap<String, String>, String> {
+    Ok(state.connection_labels.lock().unwrap().clone())
+}
+
+#[tauri::command]
+async fn save_settings(
+    state: tauri::State<'_, AppState>,
+    app_handle: tauri::AppHandle
+) -> Result<(), String> {
+    state.save_config(&app_handle).await
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -499,9 +663,14 @@ pub fn run() {
             let app_handle = app.handle().clone();
             let app_handle_clone = app_handle.clone();
             
-            // Start auto-refresh background task in the tokio runtime
+            // Initialize app state and load config
             tauri::async_runtime::spawn(async move {
                 let app_state = app_handle.state::<AppState>();
+                
+                // Initialize configuration
+                app_state.initialize(&app_handle).await;
+                
+                // Start auto-refresh background task
                 app_state.start_auto_refresh_task(app_handle_clone);
             });
             
@@ -517,7 +686,10 @@ pub fn run() {
             get_vmix_inputs,
             set_auto_refresh_config,
             get_auto_refresh_config,
-            get_all_auto_refresh_configs
+            get_all_auto_refresh_configs,
+            update_connection_label,
+            get_connection_labels,
+            save_settings
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

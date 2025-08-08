@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useVMixStatus } from '../hooks/useVMixStatus';
+import { invoke } from '@tauri-apps/api/core';
 import { 
   Box, 
   Typography, 
@@ -34,6 +35,7 @@ import RefreshIcon from '@mui/icons-material/Refresh';
 import MoreVertIcon from '@mui/icons-material/MoreVert';
 import PlayArrowIcon from '@mui/icons-material/PlayArrow';
 import ReconnectIcon from '@mui/icons-material/Refresh';
+import EditIcon from '@mui/icons-material/Edit';
 
 interface Connection {
   id: number;
@@ -54,6 +56,9 @@ const Connections: React.FC = () => {
   const [connecting, setConnecting] = useState(false);
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
   const [selectedConnection, setSelectedConnection] = useState<Connection | null>(null);
+  const [labelDialogOpen, setLabelDialogOpen] = useState(false);
+  const [editingConnection, setEditingConnection] = useState<Connection | null>(null);
+  const [newLabel, setNewLabel] = useState('');
 
   // Transform global connections to local format
   useEffect(() => {
@@ -124,6 +129,40 @@ const Connections: React.FC = () => {
       console.error('Failed to reconnect:', error);
       setError(`Failed to reconnect to ${host}: ${error}`);
     }
+  };
+
+  const handleEditLabel = (connection: Connection) => {
+    setEditingConnection(connection);
+    setNewLabel(connection.label);
+    setLabelDialogOpen(true);
+  };
+
+  const handleLabelSave = async () => {
+    if (!editingConnection || !newLabel.trim()) return;
+    
+    try {
+      // Use Tauri invoke to update label on backend (auto-saves config)
+      await invoke('update_connection_label', {
+        host: editingConnection.host,
+        label: newLabel.trim()
+      });
+      
+      // Force refresh the connection to show updated label immediately
+      await connectVMix(editingConnection.host);
+      
+      setLabelDialogOpen(false);
+      setEditingConnection(null);
+      setNewLabel('');
+    } catch (error) {
+      console.error('Failed to update label:', error);
+      setError(`Failed to update label: ${error}`);
+    }
+  };
+
+  const handleLabelCancel = () => {
+    setLabelDialogOpen(false);
+    setEditingConnection(null);
+    setNewLabel('');
   };
 
   const handleMenuClick = (event: React.MouseEvent<HTMLElement>, connection: Connection) => {
@@ -200,12 +239,23 @@ const Connections: React.FC = () => {
               connections.map((connection) => (
                 <TableRow key={connection.id}>
                   <TableCell>
-                    <Typography variant="body2" fontWeight="medium">
-                      {connection.host}
-                    </Typography>
-                    <Typography variant="caption" color="textSecondary">
-                      {connection.label}
-                    </Typography>
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                      <Box>
+                        <Typography variant="body2" fontWeight="medium">
+                          {connection.host}
+                        </Typography>
+                        <Typography variant="caption" color="textSecondary">
+                          {connection.label}
+                        </Typography>
+                      </Box>
+                      <IconButton
+                        size="small"
+                        onClick={() => handleEditLabel(connection)}
+                        title="Edit Label"
+                      >
+                        <EditIcon fontSize="small" />
+                      </IconButton>
+                    </Box>
                   </TableCell>
                   <TableCell>
                     <Chip 
@@ -343,6 +393,41 @@ const Connections: React.FC = () => {
             startIcon={connecting ? <CircularProgress size={16} /> : null}
           >
             {connecting ? 'Connecting...' : 'Add Connection'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Label Edit Dialog */}
+      <Dialog open={labelDialogOpen} onClose={handleLabelCancel} maxWidth="sm" fullWidth>
+        <DialogTitle>Edit Connection Label</DialogTitle>
+        <DialogContent>
+          <Typography variant="body2" color="textSecondary" sx={{ mb: 2 }}>
+            Host: {editingConnection?.host}
+          </Typography>
+          <TextField
+            autoFocus
+            margin="dense"
+            id="label"
+            label="Label"
+            type="text"
+            fullWidth
+            variant="outlined"
+            value={newLabel}
+            onChange={(e) => setNewLabel(e.target.value)}
+            placeholder="Enter a friendly name for this connection"
+            helperText="Give this vMix connection a memorable name"
+          />
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={handleLabelCancel}>
+            Cancel
+          </Button>
+          <Button 
+            onClick={handleLabelSave} 
+            variant="contained" 
+            disabled={!newLabel.trim()}
+          >
+            Save
           </Button>
         </DialogActions>
       </Dialog>
