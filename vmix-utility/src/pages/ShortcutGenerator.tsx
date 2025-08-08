@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo, useCallback, memo } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { openUrl } from '@tauri-apps/plugin-opener';
 import { useVMixStatus } from '../hooks/useVMixStatus';
+import { FixedSizeList as List } from 'react-window';
 import {
   Box,
   Typography,
@@ -63,22 +64,22 @@ interface Input {
   queryParams: QueryParam[];
 }
 
-// Memoized InputItem component to prevent unnecessary re-renders
-const InputItem = memo(({ 
-  input, 
-  vmixInput, 
-  selectedConnection, 
-  showToast, 
-  onTryCommand,
-  isLastItem 
-}: {
-  input: Input;
-  vmixInput?: VmixInput;
-  selectedConnection: string;
-  showToast: (message: string, severity?: 'success' | 'error' | 'info') => void;
-  onTryCommand: (input: Input) => void;
-  isLastItem: boolean;
+// Virtualized row component for react-window
+const VirtualizedInputItem = memo(({ index, style, data }: {
+  index: number;
+  style: React.CSSProperties;
+  data: {
+    filteredInputs: Input[];
+    vmixInputs: VmixInput[];
+    selectedConnection: string;
+    showToast: (message: string, severity?: 'success' | 'error' | 'info') => void;
+    onTryCommand: (input: Input) => void;
+  };
 }) => {
+  const { filteredInputs, vmixInputs, selectedConnection, showToast, onTryCommand } = data;
+  const input = filteredInputs[index];
+  const vmixInput = vmixInputs.find(vi => vi.number === input.number);
+  const isLastItem = index === filteredInputs.length - 1;
   const generateUrl = useCallback((input: Input) => {
     if (!selectedConnection) return '';
     
@@ -133,14 +134,33 @@ const InputItem = memo(({
   }, [input, onTryCommand]);
 
   return (
-    <Box>
+    <Box style={style}>
       <Box sx={{ p: 2, display: 'flex', alignItems: 'center', gap: 2 }}>
         {/* Input Info */}
-        <Box sx={{ minWidth: '200px' }}>
-          <Typography variant="body1" fontWeight="medium">
+        <Box sx={{ minWidth: '200px', maxWidth: '300px', overflow: 'hidden' }}>
+          <Typography 
+            variant="body1" 
+            fontWeight="medium"
+            sx={{
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap'
+            }}
+            title={`Input ${input.number}: ${vmixInput?.title || 'Unknown'}`}
+          >
             Input {input.number}: {vmixInput?.title || 'Unknown'}
           </Typography>
-          <Typography variant="caption" color="textSecondary">
+          <Typography 
+            variant="caption" 
+            color="textSecondary"
+            sx={{
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap',
+              display: 'block'
+            }}
+            title={`${input.functionName} | ${input.queryParams.map(p => `${p.key}=${p.value}`).join(', ')}`}
+          >
             {input.functionName} | {input.queryParams.map(p => `${p.key}=${p.value}`).join(', ')}
           </Typography>
         </Box>
@@ -204,7 +224,7 @@ const InputItem = memo(({
   );
 });
 
-InputItem.displayName = 'InputItem';
+VirtualizedInputItem.displayName = 'VirtualizedInputItem';
 
 const ShortcutGenerator = () => {
   const { connections, inputs: vmixStatusInputs } = useVMixStatus();
@@ -519,18 +539,22 @@ const ShortcutGenerator = () => {
         </Box>
       </Paper>
 
-      <Paper>
-        {filteredInputs.map((input, index) => (
-          <InputItem
-            key={input.id}
-            input={input}
-            vmixInput={vmixInputs.find(vi => vi.number === input.number)}
-            selectedConnection={selectedConnection}
-            showToast={showToast}
-            onTryCommand={tryCommand}
-            isLastItem={index === filteredInputs.length - 1}
-          />
-        ))}
+      <Paper sx={{ height: '600px', width: '100%' }}>
+        <List
+          width={"100%"}
+          height={600}
+          itemCount={filteredInputs.length}
+          itemSize={120}
+          itemData={{
+            filteredInputs,
+            vmixInputs,
+            selectedConnection,
+            showToast,
+            onTryCommand: tryCommand
+          }}
+        >
+          {VirtualizedInputItem}
+        </List>
       </Paper>
 
       {/* Toast Notification */}
