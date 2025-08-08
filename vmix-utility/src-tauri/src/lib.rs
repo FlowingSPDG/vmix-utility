@@ -179,6 +179,7 @@ struct AppState {
     connections: Arc<Mutex<Vec<VmixHttpClient>>>,
     auto_refresh_configs: Arc<Mutex<HashMap<String, AutoRefreshConfig>>>,
     last_status_cache: Arc<Mutex<HashMap<String, VmixConnection>>>,
+    inputs_cache: Arc<Mutex<HashMap<String, Vec<VmixInput>>>>,
 }
 
 impl AppState {
@@ -187,6 +188,7 @@ impl AppState {
             connections: Arc::new(Mutex::new(Vec::new())),
             auto_refresh_configs: Arc::new(Mutex::new(HashMap::new())),
             last_status_cache: Arc::new(Mutex::new(HashMap::new())),
+            inputs_cache: Arc::new(Mutex::new(HashMap::new())),
         }
     }
 
@@ -194,6 +196,7 @@ impl AppState {
         let connections = Arc::clone(&self.connections);
         let configs = Arc::clone(&self.auto_refresh_configs);
         let cache = Arc::clone(&self.last_status_cache);
+        let inputs_cache = Arc::clone(&self.inputs_cache);
 
         tokio::spawn(async move {
             let mut interval = interval(Duration::from_secs(1));
@@ -275,19 +278,50 @@ impl AppState {
                                 preview_input,
                             };
 
-                            // Check if status changed
+                            // Get current inputs for comparison
+                            let current_inputs = if connection_successful {
+                                match vmix.get_vmix_data().await {
+                                    Ok(data) => {
+                                        data.inputs.input.into_iter().map(|input| VmixInput {
+                                            key: input.key,
+                                            number: input.number.parse().unwrap_or(0),
+                                            title: input.title,
+                                            input_type: input.input_type.unwrap_or_default(),
+                                            state: input.state.unwrap_or_default(),
+                                        }).collect::<Vec<_>>()
+                                    }
+                                    Err(_) => Vec::new(),
+                                }
+                            } else {
+                                Vec::new()
+                            };
+
+                            // Check if status changed (including inputs comparison)
                             let status_changed = {
                                 let mut cache_guard = cache.lock().unwrap();
-                                let changed = cache_guard.get(&host)
+                                let mut inputs_cache_guard = inputs_cache.lock().unwrap();
+                                
+                                let connection_changed = cache_guard.get(&host)
                                     .map(|cached| {
                                         cached.status != new_connection.status ||
                                         cached.active_input != new_connection.active_input ||
                                         cached.preview_input != new_connection.preview_input
                                     })
                                     .unwrap_or(true);
+
+                                let inputs_changed = inputs_cache_guard.get(&host)
+                                    .map(|cached_inputs| {
+                                        // Compare inputs by converting both to strings for simple comparison
+                                        let cached_summary = format!("{:?}", cached_inputs);
+                                        let current_summary = format!("{:?}", current_inputs);
+                                        cached_summary != current_summary
+                                    })
+                                    .unwrap_or(true);
                                 
                                 cache_guard.insert(host.clone(), new_connection.clone());
-                                changed
+                                inputs_cache_guard.insert(host.clone(), current_inputs);
+                                
+                                connection_changed || inputs_changed
                             };
 
                             // Always emit event for connection updates
