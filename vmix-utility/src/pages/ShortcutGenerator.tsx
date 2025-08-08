@@ -129,12 +129,12 @@ const VirtualizedInputItem = memo(({ index, style, data }: {
 
   const handleCopyUrl = useCallback(() => {
     navigator.clipboard.writeText(generateUrl(input));
-    showToast('Script API command copied to clipboard!');
+    showToast('Function URL copied to clipboard!');
   }, [input, generateUrl, showToast]);
 
   const handleCopyScript = useCallback(() => {
     navigator.clipboard.writeText(generateScript(input));
-    showToast('Function script copied to clipboard!');
+    showToast('Script API command copied to clipboard!');
   }, [input, generateScript, showToast]);
 
   const handleTryCommand = useCallback(() => {
