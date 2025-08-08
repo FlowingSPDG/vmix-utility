@@ -1065,6 +1065,7 @@ pub fn run() {
             let app_handle = app.handle().clone();
             let app_handle_clone = app_handle.clone();
             let app_handle_refresh = app_handle.clone();
+            let app_handle_update = app_handle.clone();
 
             // system tray icon
             let show_i = MenuItem::with_id(app, "show", "Show", true, None::<&str>)?;
@@ -1166,7 +1167,6 @@ pub fn run() {
             });
             
             // Check for updates on startup
-            let app_handle_update = app_handle.clone();
             tauri::async_runtime::spawn(async move {
                 tokio::time::sleep(tokio::time::Duration::from_secs(3)).await; // Wait 3 seconds after startup
                 
