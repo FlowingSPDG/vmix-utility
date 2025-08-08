@@ -27,24 +27,8 @@ import EditIcon from '@mui/icons-material/Edit';
 import SaveIcon from '@mui/icons-material/Save';
 import CancelIcon from '@mui/icons-material/Cancel';
 
-interface VmixConnection {
-  host: string;
-  label: string;
-  status: 'Connected' | 'Disconnected';
-  active_input: number;
-  preview_input: number;
-}
-
-interface VmixInput {
-  key: string;
-  number: number;
-  title: string;
-  input_type: string;
-  state: string;
-}
-
 interface Input {
-  id: number;
+  id: number; // これいらなくね？
   number: number;
   title: string;
   type: string;
@@ -56,10 +40,9 @@ type Order = 'asc' | 'desc';
 type OrderBy = 'number' | 'title' | 'type';
 
 const InputManager = () => {
-  const { connections, inputs: globalInputs, sendVMixFunction } = useVMixStatus();
+  const { connections, inputs: globalInputs, sendVMixFunction, loading: globalLoading } = useVMixStatus();
   const [inputs, setInputs] = useState<Input[]>([]);
   const [selectedConnection, setSelectedConnection] = useState<string>('');
-  const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   
   // Track editing state for each input
@@ -242,7 +225,7 @@ const InputManager = () => {
             </TableRow>
           </TableHead>
           <TableBody>
-            {loading ? (
+            {globalLoading ? (
               <TableRow>
                 <TableCell colSpan={6} align="center">
                   <CircularProgress />

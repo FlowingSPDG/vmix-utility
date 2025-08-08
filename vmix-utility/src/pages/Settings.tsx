@@ -13,7 +13,6 @@ import {
   MenuItem,
   InputLabel,
   FormControl,
-  Slider,
   FormGroup,
   Alert,
 } from '@mui/material';
@@ -47,16 +46,8 @@ const Settings = () => {
     handleChange(event.target.name, event.target.checked);
   };
 
-  const handleTextChange = (event: React.ChangeEvent<HTMLInputElement>) => {
-    handleChange(event.target.name, event.target.value);
-  };
-
   const handleSelectChange = (event: SelectChangeEvent) => {
     handleChange(event.target.name, event.target.value);
-  };
-
-  const handleSliderChange = (name: string) => (_event: Event, newValue: number | number[]) => {
-    handleChange(name, newValue);
   };
 
   const handleApply = () => {

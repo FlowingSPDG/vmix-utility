@@ -23,14 +23,6 @@ import {
   CircularProgress,
 } from '@mui/material';
 
-interface VmixConnection {
-  host: string;
-  label: string;
-  status: 'Connected' | 'Disconnected';
-  active_input: number;
-  preview_input: number;
-}
-
 interface Connection {
   id: number;
   host: string;

@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect } from 'react';
 import { useVMixStatus } from '../hooks/useVMixStatus';
 import { invoke } from '@tauri-apps/api/core';
 import { 
@@ -24,10 +24,8 @@ import {
   Menu,
   MenuItem,
   Switch,
-  FormControlLabel,
   Select,
   FormControl,
-  InputLabel,
   Backdrop,
   Card,
   CardContent
@@ -52,7 +50,6 @@ interface Connection {
 const Connections: React.FC = () => {
   const { connections: vmixConnections, loading: globalLoading, connectVMix, disconnectVMix, sendVMixFunction, autoRefreshConfigs, setAutoRefreshConfig, refreshConnections } = useVMixStatus();
   const [connections, setConnections] = useState<Connection[]>([]);
-  const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [open, setOpen] = useState(false);
   const [newHost, setNewHost] = useState('');
@@ -279,7 +276,7 @@ const Connections: React.FC = () => {
             </TableRow>
           </TableHead>
           <TableBody>
-            {(loading || globalLoading) && connections.length === 0 ? (
+            {(globalLoading) && connections.length === 0 ? (
               <TableRow>
                 <TableCell colSpan={6} align="center" sx={{ py: 4 }}>
                   <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>

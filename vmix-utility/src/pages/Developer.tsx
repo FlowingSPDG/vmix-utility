@@ -20,7 +20,6 @@ import {
   Code,
   FavoriteOutlined,
   CoffeeOutlined,
-  AccountBalance,
   Description,
   Star,
 } from '@mui/icons-material';

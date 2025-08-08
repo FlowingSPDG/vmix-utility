@@ -29,27 +29,12 @@ import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 import OpenInBrowserIcon from '@mui/icons-material/OpenInBrowser';
 import shortcuts from '../assets/shortcuts.json';
 
-interface VmixConnection {
-  host: string;
-  label: string;
-  status: 'Connected' | 'Disconnected';
-  active_input: number;
-  preview_input: number;
-}
-
 interface VmixInput {
   key: string;
   number: number;
   title: string;
   input_type: string;
   state: string;
-}
-
-interface VMixConnection {
-  id: number;
-  name: string;
-  ip: string;
-  port: number;
 }
 
 interface QueryParam {
@@ -246,11 +231,9 @@ const ShortcutGenerator = () => {
       shortcut.Description.toLowerCase().includes(searchTerm.toLowerCase())
     );
   };
-  const { connections, inputs: vmixStatusInputs } = useVMixStatus();
+  const { connections, inputs: vmixStatusInputs, loading: globalLoading } = useVMixStatus();
   const [selectedConnection, setSelectedConnection] = useState<string>('');
   const [vmixInputs, setVmixInputs] = useState<VmixInput[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const [toast, setToast] = useState<{open: boolean, message: string, severity: 'success' | 'error' | 'info'}>(
     {open: false, message: '', severity: 'info'}
   );
@@ -373,18 +356,6 @@ const ShortcutGenerator = () => {
     });
   }, [inputs, inputTypeFilter, vmixInputs]);
 
-  const handleDeleteParam = (inputId: number, paramId: number) => {
-    setInputs(inputs.map(input => {
-      if (input.id === inputId) {
-        return {
-          ...input,
-          queryParams: input.queryParams.filter(param => param.id !== paramId)
-        };
-      }
-      return input;
-    }));
-  };
-
   const generateParamsObject = useCallback((input: Input) => {
     const params: { [key: string]: string } = {};
     input.queryParams.forEach(param => {
@@ -439,15 +410,7 @@ const ShortcutGenerator = () => {
           </Select>
         </FormControl>
 
-        {error && (
-          <Box sx={{ mb: 2 }}>
-            <Typography color="error" variant="body2">
-              {error}
-            </Typography>
-          </Box>
-        )}
-
-        {loading && (
+        {globalLoading && (
           <Box sx={{ mb: 2, display: 'flex', alignItems: 'center' }}>
             <Typography variant="body2" sx={{ mr: 1 }}>
               Loading inputs...
@@ -500,10 +463,10 @@ const ShortcutGenerator = () => {
               return option.Name;
             }}
             inputValue={sharedFunctionName}
-            onInputChange={(event, newInputValue) => {
+            onInputChange={(_event, newInputValue) => {
               setSharedFunctionName(newInputValue);
             }}
-            onChange={(event, newValue) => {
+            onChange={(_event, newValue) => {
               if (newValue && typeof newValue !== 'string') {
                 setSharedFunctionName(newValue.Name);
               }
@@ -534,7 +497,7 @@ const ShortcutGenerator = () => {
                 </Box>
               </Box>
             )}
-            filterOptions={(options, { inputValue }) => {
+            filterOptions={(_options, { inputValue }) => {
               const filtered = getFilteredShortcuts(inputValue);
               return filtered.slice(0, 10); // Limit to 10 suggestions
             }}
