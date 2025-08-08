@@ -1,0 +1,28 @@
+{
+  "permissions": {
+    "allow": [
+      "mcp__serena__check_onboarding_performed",
+      "mcp__serena__onboarding",
+      "mcp__serena__find_file",
+      "mcp__serena__list_dir",
+      "mcp__serena__write_memory",
+      "WebFetch(domain:github.com)",
+      "Bash(bun run:*)",
+      "Bash(bun install:*)",
+      "Bash(bun add:*)",
+      "Bash(cargo check:*)",
+      "Bash(rm:*)",
+      "WebFetch(domain:localhost)",
+      "Bash(curl:*)",
+      "mcp__serena__search_for_pattern",
+      "mcp__serena__get_symbols_overview",
+      "mcp__serena__replace_symbol_body",
+      "mcp__serena__find_symbol",
+      "mcp__serena__replace_regex"
+    ]
+  },
+  "enableAllProjectMcpServers": true,
+  "enabledMcpjsonServers": [
+    "serena"
+  ]
+}

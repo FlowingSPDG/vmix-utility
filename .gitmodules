@@ -1,4 +1,0 @@
-[submodule "vMixMultiview"]
-	path = vMixMultiview
-	url = https://github.com/FlowingSPDG/vMixMultiview
-	branch = feat/refactor-utility
