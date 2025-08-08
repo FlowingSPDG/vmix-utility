@@ -148,6 +148,8 @@ const Connections: React.FC = () => {
   const handleDeleteConfirm = async () => {
     if (connectionToDelete) {
       try {
+        // Always call disconnectVMix to remove from backend config
+        // It should handle both active disconnection and config removal
         await disconnectVMix(connectionToDelete.host);
       } catch (error) {
         console.error('Failed to disconnect:', error);
@@ -189,8 +191,10 @@ const Connections: React.FC = () => {
         label: newLabel.trim()
       });
       
-      // Force refresh the connection to show updated label immediately
-      await connectVMix(editingConnection.host);
+      // Only try to reconnect if the connection is connected or reconnecting
+      if (editingConnection.status === 'Connected' || editingConnection.status === 'Reconnecting') {
+        await connectVMix(editingConnection.host);
+      }
       
       setLabelDialogOpen(false);
       setEditingConnection(null);
@@ -198,6 +202,12 @@ const Connections: React.FC = () => {
     } catch (error) {
       console.error('Failed to update label:', error);
       setError(`Failed to update label: ${error}`);
+      // Even if there's an error, close the modal for disconnected connections
+      if (editingConnection.status === 'Disconnected') {
+        setLabelDialogOpen(false);
+        setEditingConnection(null);
+        setNewLabel('');
+      }
     }
   };
 
