@@ -40,7 +40,7 @@ struct Input {
     state: Option<String>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 struct VmixInput {
     key: String,
     number: i32,
@@ -65,7 +65,7 @@ impl Default for AutoRefreshConfig {
     fn default() -> Self {
         Self {
             enabled: true,
-            duration: 5,
+            duration: 3,
         }
     }
 }
@@ -311,10 +311,8 @@ impl AppState {
 
                                 let inputs_changed = inputs_cache_guard.get(&host)
                                     .map(|cached_inputs| {
-                                        // Compare inputs by converting both to strings for simple comparison
-                                        let cached_summary = format!("{:?}", cached_inputs);
-                                        let current_summary = format!("{:?}", current_inputs);
-                                        cached_summary != current_summary
+                                        // Compare inputs directly using PartialEq
+                                        cached_inputs != &current_inputs
                                     })
                                     .unwrap_or(true);
                                 

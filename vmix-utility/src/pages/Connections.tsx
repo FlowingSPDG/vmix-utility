@@ -198,7 +198,7 @@ const Connections: React.FC = () => {
                   <TableCell>{connection.previewInput}</TableCell>
                   <TableCell>
                     {connection.status === 'Connected' && (() => {
-                      const config = autoRefreshConfigs[connection.host] || { enabled: false, duration: 3 };
+                      const config = autoRefreshConfigs[connection.host] || { enabled: true, duration: 3 };
                       return (
                         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                           <Switch
