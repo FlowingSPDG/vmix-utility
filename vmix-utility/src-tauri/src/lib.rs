@@ -353,6 +353,14 @@ struct VmixConnection {
 
 #[tauri::command]
 async fn connect_vmix(state: tauri::State<'_, AppState>, host: String) -> Result<VmixConnection, String> {
+    // Check if this IP is already connected
+    {
+        let connections = state.connections.lock().unwrap();
+        if connections.iter().any(|c| c.host() == host) {
+            return Err(format!("Host {} is already connected", host));
+        }
+    }
+    
     let vmix = VmixHttpClient::new(&host, 8088);
     let status = vmix.get_status().await.unwrap_or(false);
     

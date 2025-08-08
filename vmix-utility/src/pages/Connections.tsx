@@ -81,15 +81,25 @@ const Connections: React.FC = () => {
   const handleAdd = async () => {
     if (!newHost.trim()) return;
     
+    // Check for duplicate IP on frontend
+    const trimmedHost = newHost.trim();
+    const isDuplicate = connections.some(conn => conn.host === trimmedHost);
+    
+    if (isDuplicate) {
+      setError(`Host ${trimmedHost} is already connected`);
+      return;
+    }
+    
     setConnecting(true);
     setError(null);
     try {
-      await connectVMix(newHost.trim());
-      handleClose();
+      await connectVMix(trimmedHost);
     } catch (error) {
       console.error('Failed to connect:', error);
-      setError(`Failed to connect to ${newHost}: ${error}`);
+      setError(`Failed to connect to ${trimmedHost}: ${error}`);
+    } finally {
       setConnecting(false);
+      handleClose();
     }
   };
 
