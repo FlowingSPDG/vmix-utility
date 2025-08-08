@@ -156,7 +156,7 @@ const BlankGenerator = () => {
               label="vMix Connection"
               onChange={handleConnectionChange}
             >
-              {connections.map((connection) => (
+              {connections.filter(conn => conn.status === 'Connected').map((connection) => (
                 <MenuItem
                   key={connection.id}
                   value={connection.id}

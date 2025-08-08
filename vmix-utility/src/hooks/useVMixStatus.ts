@@ -114,10 +114,30 @@ export const VMixStatusProvider = ({ children }: { children: React.ReactNode }) 
     };
   }, [fetchInputsForHost]);
 
-  // Load initial connections and configs
+  // Load initial connections and configs with retry
   useEffect(() => {
-    loadConnections();
-    loadAutoRefreshConfigs();
+    const loadInitialData = async () => {
+      // Wait a bit for backend initialization to complete
+      await new Promise(resolve => setTimeout(resolve, 100));
+      
+      try {
+        await loadConnections();
+        await loadAutoRefreshConfigs();
+      } catch (error) {
+        console.error('Initial data load failed, retrying in 1 second...', error);
+        // Retry after 1 second if initial load fails
+        setTimeout(async () => {
+          try {
+            await loadConnections();
+            await loadAutoRefreshConfigs();
+          } catch (retryError) {
+            console.error('Retry failed:', retryError);
+          }
+        }, 1000);
+      }
+    };
+
+    loadInitialData();
   }, [loadConnections, loadAutoRefreshConfigs]);
 
   const connectVMix = async (host: string): Promise<VmixConnection> => {

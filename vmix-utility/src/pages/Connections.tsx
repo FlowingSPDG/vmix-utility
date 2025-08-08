@@ -27,7 +27,10 @@ import {
   FormControlLabel,
   Select,
   FormControl,
-  InputLabel
+  InputLabel,
+  Backdrop,
+  Card,
+  CardContent
 } from '@mui/material';
 import AddIcon from '@mui/icons-material/Add';
 import DeleteIcon from '@mui/icons-material/Delete';
@@ -47,7 +50,7 @@ interface Connection {
 }
 
 const Connections: React.FC = () => {
-  const { connections: vmixConnections, loading: globalLoading, connectVMix, disconnectVMix, sendVMixFunction, autoRefreshConfigs, setAutoRefreshConfig } = useVMixStatus();
+  const { connections: vmixConnections, loading: globalLoading, connectVMix, disconnectVMix, sendVMixFunction, autoRefreshConfigs, setAutoRefreshConfig, refreshConnections } = useVMixStatus();
   const [connections, setConnections] = useState<Connection[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -59,6 +62,7 @@ const Connections: React.FC = () => {
   const [labelDialogOpen, setLabelDialogOpen] = useState(false);
   const [editingConnection, setEditingConnection] = useState<Connection | null>(null);
   const [newLabel, setNewLabel] = useState('');
+  const [isInitialLoading, setIsInitialLoading] = useState(true);
 
   // Transform global connections to local format
   useEffect(() => {
@@ -72,7 +76,32 @@ const Connections: React.FC = () => {
     }));
     
     setConnections(newConnections);
-  }, [vmixConnections]);
+    
+    // Mark initial loading as complete when we have connections or after a timeout
+    if (isInitialLoading && (!globalLoading || newConnections.length > 0)) {
+      setIsInitialLoading(false);
+    }
+  }, [vmixConnections, globalLoading, isInitialLoading]);
+
+  // Auto-refresh connections when component mounts
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      refreshConnections();
+    }, 500); // Wait a bit for initial load
+    
+    return () => clearTimeout(timer);
+  }, [refreshConnections]);
+
+  // Set a timeout for initial loading
+  useEffect(() => {
+    const timeout = setTimeout(() => {
+      if (isInitialLoading) {
+        setIsInitialLoading(false);
+      }
+    }, 3000); // Max 3 seconds for initial loading
+
+    return () => clearTimeout(timeout);
+  }, [isInitialLoading]);
 
   const handleClickOpen = () => {
     setOpen(true);
@@ -187,19 +216,48 @@ const Connections: React.FC = () => {
     }
   };
 
+  // Loading screen component
+  const LoadingScreen = () => (
+    <Backdrop open={isInitialLoading} sx={{ zIndex: 1000 }}>
+      <Card sx={{ p: 3, textAlign: 'center', minWidth: 300 }}>
+        <CardContent>
+          <CircularProgress size={60} sx={{ mb: 2 }} />
+          <Typography variant="h6" sx={{ mb: 1 }}>
+            Loading vMix Connections
+          </Typography>
+          <Typography variant="body2" color="textSecondary">
+            Checking connection status and loading saved configurations...
+          </Typography>
+        </CardContent>
+      </Card>
+    </Backdrop>
+  );
+
   return (
     <Box sx={{ p: 3 }}>
+      <LoadingScreen />
+      
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
         <Typography variant="h4" component="h1">
           vMix Connections
         </Typography>
-        <Button 
-          variant="contained" 
-          startIcon={<AddIcon />}
-          onClick={handleClickOpen}
-        >
-          Add Connection
-        </Button>
+        <Box sx={{ display: 'flex', gap: 1 }}>
+          <Button 
+            variant="outlined" 
+            startIcon={<RefreshIcon />}
+            onClick={refreshConnections}
+            disabled={globalLoading}
+          >
+            Refresh
+          </Button>
+          <Button 
+            variant="contained" 
+            startIcon={<AddIcon />}
+            onClick={handleClickOpen}
+          >
+            Add Connection
+          </Button>
+        </Box>
       </Box>
 
       {error && (
@@ -221,10 +279,15 @@ const Connections: React.FC = () => {
             </TableRow>
           </TableHead>
           <TableBody>
-            {loading ? (
+            {(loading || globalLoading) && connections.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={6} align="center">
-                  <CircularProgress />
+                <TableCell colSpan={6} align="center" sx={{ py: 4 }}>
+                  <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
+                    <CircularProgress />
+                    <Typography variant="body2" color="textSecondary">
+                      Loading connections and checking vMix status...
+                    </Typography>
+                  </Box>
                 </TableCell>
               </TableRow>
             ) : connections.length === 0 ? (
@@ -258,12 +321,17 @@ const Connections: React.FC = () => {
                     </Box>
                   </TableCell>
                   <TableCell>
-                    <Chip 
-                      label={connection.status}
-                      color={connection.status === 'Connected' ? 'success' : connection.status === 'Reconnecting' ? 'warning' : 'error'}
-                      variant="outlined"
-                      size="small"
-                    />
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                      <Chip 
+                        label={connection.status}
+                        color={connection.status === 'Connected' ? 'success' : connection.status === 'Reconnecting' ? 'warning' : 'error'}
+                        variant="outlined"
+                        size="small"
+                      />
+                      {connection.status === 'Reconnecting' && (
+                        <CircularProgress size={16} />
+                      )}
+                    </Box>
                   </TableCell>
                   <TableCell>{connection.activeInput}</TableCell>
                   <TableCell>{connection.previewInput}</TableCell>

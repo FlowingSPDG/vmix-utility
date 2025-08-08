@@ -311,7 +311,7 @@ const ShortcutGenerator = () => {
             <MenuItem value="">
               <em>Select a vMix connection</em>
             </MenuItem>
-            {connections.map((conn) => (
+            {connections.filter(conn => conn.status === 'Connected').map((conn) => (
               <MenuItem key={conn.host} value={conn.host}>
                 {conn.label} ({conn.host})
               </MenuItem>

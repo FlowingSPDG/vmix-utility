@@ -210,14 +210,21 @@ impl AppState {
         state
     }
     
-    async fn initialize(&self, app_handle: &tauri::AppHandle) {
+    async fn initialize(&self, app_handle: &tauri::AppHandle) -> Result<(), String> {
         // Try to load config first
-        if let Err(_) = self.load_config(app_handle).await {
+        if let Err(e) = self.load_config(app_handle).await {
+            println!("Config load failed: {}, initializing with default localhost", e);
             // If loading fails, add default localhost connection
             self.add_localhost_connection();
             // Save the default configuration
-            let _ = self.save_config(app_handle).await;
+            if let Err(e) = self.save_config(app_handle).await {
+                println!("Failed to save default config: {}", e);
+                return Err(e);
+            }
+        } else {
+            println!("Config loaded successfully");
         }
+        Ok(())
     }
     
     fn add_localhost_connection(&self) {
@@ -243,26 +250,36 @@ impl AppState {
     
     async fn save_config(&self, app_handle: &tauri::AppHandle) -> Result<(), String> {
         let config_path = Self::get_config_path(app_handle).await?;
+        println!("Saving config to: {:?}", config_path);
         
         let config = {
             let connections = self.connections.lock().unwrap();
             let labels = self.connection_labels.lock().unwrap();
             let auto_configs = self.auto_refresh_configs.lock().unwrap();
             
+            println!("Current connections count: {}", connections.len());
+            
             AppConfig {
                 connections: connections.iter().map(|conn| {
                     let host = conn.host().to_string();
+                    let label = labels.get(&host).cloned().unwrap_or_else(|| host.clone());
+                    let auto_refresh = auto_configs.get(&host).cloned().unwrap_or_default();
+                    println!("Saving connection: {} -> {}", host, label);
+                    
                     ConnectionConfig {
                         host: host.clone(),
-                        label: labels.get(&host).cloned().unwrap_or_else(|| host.clone()),
-                        auto_refresh: auto_configs.get(&host).cloned().unwrap_or_default(),
+                        label,
+                        auto_refresh,
                     }
                 }).collect(),
             }
         };
         
         let json_data = serde_json::to_string_pretty(&config).map_err(|e| e.to_string())?;
+        println!("Config JSON: {}", json_data);
+        
         fs::write(&config_path, json_data).await.map_err(|e| e.to_string())?;
+        println!("Config saved successfully");
         
         Ok(())
     }
@@ -270,12 +287,16 @@ impl AppState {
     async fn load_config(&self, app_handle: &tauri::AppHandle) -> Result<(), String> {
         let config_path = Self::get_config_path(app_handle).await?;
         
-        if !config_path.exists() {
+        // Check if config file exists using tokio::fs
+        if !fs::try_exists(&config_path).await.unwrap_or(false) {
             return Err("Config file does not exist".to_string());
         }
         
         let json_data = fs::read_to_string(&config_path).await.map_err(|e| e.to_string())?;
+        println!("Config file content: {}", json_data);
+        
         let config: AppConfig = serde_json::from_str(&json_data).map_err(|e| e.to_string())?;
+        println!("Parsed config with {} connections", config.connections.len());
         
         // Clear existing connections
         {
@@ -292,7 +313,8 @@ impl AppState {
         }
         
         // Load connections from config
-        for conn_config in config.connections {
+        for (i, conn_config) in config.connections.iter().enumerate() {
+            println!("Loading connection {}: {} ({})", i, conn_config.host, conn_config.label);
             let vmix_client = VmixHttpClient::new(&conn_config.host, 8088);
             
             {
@@ -301,13 +323,15 @@ impl AppState {
             }
             {
                 let mut labels = self.connection_labels.lock().unwrap();
-                labels.insert(conn_config.host.clone(), conn_config.label);
+                labels.insert(conn_config.host.clone(), conn_config.label.clone());
             }
             {
                 let mut auto_configs = self.auto_refresh_configs.lock().unwrap();
-                auto_configs.insert(conn_config.host, conn_config.auto_refresh);
+                auto_configs.insert(conn_config.host.clone(), conn_config.auto_refresh.clone());
             }
         }
+        
+        println!("Config loading completed");
         
         Ok(())
     }
@@ -662,16 +686,22 @@ pub fn run() {
         .setup(|app| {
             let app_handle = app.handle().clone();
             let app_handle_clone = app_handle.clone();
+            let app_handle_refresh = app_handle.clone();
             
-            // Initialize app state and load config
-            tauri::async_runtime::spawn(async move {
+            // Initialize app state and load config synchronously
+            tauri::async_runtime::block_on(async move {
                 let app_state = app_handle.state::<AppState>();
                 
-                // Initialize configuration
-                app_state.initialize(&app_handle).await;
-                
-                // Start auto-refresh background task
-                app_state.start_auto_refresh_task(app_handle_clone);
+                // Initialize configuration and wait for completion
+                if let Err(e) = app_state.initialize(&app_handle).await {
+                    println!("Failed to initialize app state: {}", e);
+                }
+            });
+            
+            // Start auto-refresh background task after initialization
+            tauri::async_runtime::spawn(async move {
+                let app_state = app_handle_clone.state::<AppState>();
+                app_state.start_auto_refresh_task(app_handle_refresh);
             });
             
             Ok(())
