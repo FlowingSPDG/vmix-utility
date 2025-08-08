@@ -73,6 +73,7 @@ const VirtualizedInputItem = memo(({ index, style, data }: {
   const input = filteredInputs[index];
   const vmixInput = vmixInputs.find(vi => vi.number === input.number);
   const isLastItem = index === filteredInputs.length - 1;
+  const isSpecialInput = input.id < 0;
   const generateUrl = useCallback((input: Input) => {
     if (!selectedConnection) return '';
     
@@ -139,9 +140,9 @@ const VirtualizedInputItem = memo(({ index, style, data }: {
               textOverflow: 'ellipsis',
               whiteSpace: 'nowrap'
             }}
-            title={`Input ${input.number}: ${vmixInput?.title || 'Unknown'}`}
+            title={isSpecialInput ? input.title.replace(`${input.functionName} to `, '') : `Input ${input.number}: ${vmixInput?.title || 'Unknown'}`}
           >
-            Input {input.number}: {vmixInput?.title || 'Unknown'}
+            {isSpecialInput ? input.title.replace(`${input.functionName} to `, '') : `Input ${input.number}: ${vmixInput?.title || 'Unknown'}`}
           </Typography>
           <Typography 
             variant="caption" 
@@ -270,20 +271,63 @@ const ShortcutGenerator = () => {
     }
   }, [selectedConnection, vmixStatusInputs]);
 
+  // Input type state for special input types
+  const [inputType, setInputType] = useState<string>('Input');
+
   // Generate shortcuts separately using useMemo for performance
   const generatedInputs = useMemo(() => {
-    if (vmixInputs.length === 0) return [];
+    const specialInputs: Input[] = [];
     
-    return vmixInputs.map((input, index) => ({
-      id: index + 1,
-      number: input.number,
-      title: `${sharedFunctionName} to ${input.title}`,
-      functionName: sharedFunctionName,
-      queryParams: [
+    // Add special input types at the beginning
+    const specialTypes = [
+      { type: 'None', value: '', title: 'None' },
+      { type: 'Preview', value: '0', title: 'Preview' },
+      { type: 'Program', value: '-1', title: 'Program' },
+      { type: 'Dynamic1', value: 'Dynamic1', title: 'Dynamic 1' },
+      { type: 'Dynamic2', value: 'Dynamic2', title: 'Dynamic 2' },
+      { type: 'Dynamic3', value: 'Dynamic3', title: 'Dynamic 3' },
+      { type: 'Dynamic4', value: 'Dynamic4', title: 'Dynamic 4' }
+    ];
+    
+    specialTypes.forEach((special, index) => {
+      const queryParams: QueryParam[] = [];
+      
+      // Add Input param only if not 'None'
+      if (special.type !== 'None') {
+        queryParams.push({ id: 1, key: 'Input', value: special.value });
+      }
+      
+      // Add shared query params
+      queryParams.push(...sharedQueryParams.map(param => ({ ...param, id: param.id + 1000 })));
+
+      specialInputs.push({
+        id: -(index + 1), // Use negative IDs for special inputs
+        number: -1,
+        title: `${sharedFunctionName} to ${special.title}`,
+        functionName: sharedFunctionName,
+        queryParams
+      });
+    });
+    
+    if (vmixInputs.length === 0) return specialInputs;
+    
+    // Add regular inputs
+    const regularInputs = vmixInputs.map((input, index) => {
+      const queryParams: QueryParam[] = [
         { id: 1, key: 'Input', value: input.key },
         ...sharedQueryParams.map(param => ({ ...param, id: param.id + 1000 }))
-      ]
-    }));
+      ];
+
+      return {
+        id: index + 1,
+        number: input.number,
+        title: `${sharedFunctionName} to ${input.title}`,
+        functionName: sharedFunctionName,
+        queryParams
+      };
+    });
+    
+    return [...specialInputs, ...regularInputs];
   }, [vmixInputs, sharedFunctionName, sharedQueryParams]);
 
   // Update inputs when generated inputs change
@@ -420,7 +464,7 @@ const ShortcutGenerator = () => {
 
         {/* Controls Row */}
         {vmixInputs.length > 0 && (
-          <Box sx={{ display: 'flex', gap: 2, alignItems: 'center' }}>
+          <Box sx={{ display: 'flex', gap: 2, alignItems: 'center', flexWrap: 'wrap' }}>
             {/* Input Type Filter */}
             <FormControl sx={{ minWidth: 200 }}>
               <InputLabel id="input-type-filter-label">Filter by Input Type</InputLabel>
@@ -441,7 +485,6 @@ const ShortcutGenerator = () => {
                 ))}
               </Select>
             </FormControl>
-            
             
           </Box>
         )}
@@ -524,6 +567,7 @@ const ShortcutGenerator = () => {
           })()}
         </Box>
         
+
         {/* Quick Function Selection */}
         <Box sx={{ mb: 2 }}>
           <Typography variant="subtitle2" gutterBottom>
