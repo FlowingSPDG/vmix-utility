@@ -20,6 +20,7 @@ use chrono::{DateTime, Local};
 use once_cell::sync::Lazy;
 use std::io::Write;
 use std::fs::OpenOptions;
+use tauri_plugin_shell::ShellExt;
 
 #[derive(Debug, Deserialize)]
 struct VmixXml {
@@ -902,6 +903,48 @@ async fn get_app_settings(state: tauri::State<'_, AppState>) -> Result<AppSettin
     Ok(settings.clone())
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct AppInfo {
+    version: String,
+    git_commit_hash: String,
+    git_branch: String,
+    build_timestamp: String,
+}
+
+#[tauri::command]
+async fn get_app_info(app_handle: tauri::AppHandle) -> Result<AppInfo, String> {
+    let version = app_handle.package_info().version.to_string();
+    let git_commit_hash = env!("GIT_COMMIT_HASH").to_string();
+    let git_branch = env!("GIT_BRANCH").to_string();
+    let build_timestamp = env!("BUILD_TIMESTAMP").to_string();
+    
+    Ok(AppInfo {
+        version,
+        git_commit_hash,
+        git_branch,
+        build_timestamp,
+    })
+}
+
+#[tauri::command]
+async fn open_logs_directory(app_handle: tauri::AppHandle) -> Result<(), String> {
+    let app_data_dir = app_handle.path().app_data_dir().map_err(|e| e.to_string())?;
+    let logs_dir = app_data_dir.join("logs");
+    
+    // Create logs directory if it doesn't exist
+    if !logs_dir.exists() {
+        std::fs::create_dir_all(&logs_dir).map_err(|e| e.to_string())?;
+    }
+    
+    // Use tauri-plugin-shell to open the directory
+    let shell = app_handle.shell();
+    shell.open(logs_dir.to_string_lossy().to_string(), None).map_err(|e| e.to_string())?;
+    
+    println!("Opened logs directory: {:?}", logs_dir);
+    
+    Ok(())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     // Initialize env_logger for console output
@@ -911,6 +954,7 @@ pub fn run() {
 
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_shell::init())
         .on_window_event(|window, event| {
             match event {
                 tauri::WindowEvent::CloseRequested { api, .. } => {
@@ -1006,7 +1050,9 @@ pub fn run() {
             set_logging_config,
             get_logging_config,
             save_app_settings,
-            get_app_settings
+            get_app_settings,
+            get_app_info,
+            open_logs_directory
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

@@ -17,7 +17,9 @@ import {
   FormGroup,
   Alert,
   Snackbar,
+  IconButton,
 } from '@mui/material';
+import FolderOpenIcon from '@mui/icons-material/FolderOpen';
 
 const Settings = () => {
   const [settings, setSettings] = useState({
@@ -30,6 +32,13 @@ const Settings = () => {
     logFilePath: '',
     maxLogFileSize: 10,
   });
+
+  const [appInfo, setAppInfo] = useState<{
+    version: string;
+    git_commit_hash: string;
+    git_branch: string;
+    build_timestamp: string;
+  } | null>(null);
 
   const [toast, setToast] = useState<{
     open: boolean;
@@ -54,6 +63,16 @@ const Settings = () => {
 
   const handleCloseToast = () => {
     setToast(prev => ({ ...prev, open: false }));
+  };
+
+  const handleOpenLogsDirectory = async () => {
+    try {
+      await invoke('open_logs_directory');
+      showToast('Logs directory opened', 'info');
+    } catch (error) {
+      console.error('Failed to open logs directory:', error);
+      showToast(`Failed to open logs directory: ${error}`, 'error');
+    }
   };
 
   const handleSwitchChange = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -119,6 +138,12 @@ const Settings = () => {
             logLevel: (loggingConfig as any).level || 'info',
             saveLogsToFile: (loggingConfig as any).save_to_file || false
           }));
+        }
+
+        // Load application information
+        const appInfo = await invoke('get_app_info');
+        if (appInfo) {
+          setAppInfo(appInfo as any);
         }
       } catch (error) {
         console.error('Failed to load configurations:', error);
@@ -201,6 +226,22 @@ const Settings = () => {
                 label="Save logs to file"
               />
             </FormGroup>
+
+            {settings.saveLogsToFile && (
+              <Box sx={{ mt: 2, display: 'flex', alignItems: 'center', gap: 1 }}>
+                <Typography variant="body2" color="textSecondary">
+                  Open logs directory:
+                </Typography>
+                <IconButton 
+                  onClick={handleOpenLogsDirectory}
+                  size="small"
+                  color="primary"
+                  title="Open logs directory in file explorer"
+                >
+                  <FolderOpenIcon />
+                </IconButton>
+              </Box>
+            )}
           </Grid>
 
           <Grid item xs={12}>
@@ -216,6 +257,57 @@ const Settings = () => {
             </Box>
           </Grid>
         </Grid>
+      </Paper>
+
+      {/* Application Information Section */}
+      <Paper sx={{ p: 3, mt: 3 }}>
+        <Typography variant="h5" component="h2" gutterBottom>
+          Application Information
+        </Typography>
+        
+        {appInfo ? (
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <Typography variant="body1" color="textSecondary">
+                Version:
+              </Typography>
+              <Typography variant="body1" fontFamily="monospace" fontWeight="medium">
+                {appInfo.version}
+              </Typography>
+            </Box>
+            <Divider />
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <Typography variant="body1" color="textSecondary">
+                Git Commit:
+              </Typography>
+              <Typography variant="body1" fontFamily="monospace" fontWeight="medium">
+                {appInfo.git_commit_hash}
+              </Typography>
+            </Box>
+            <Divider />
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <Typography variant="body1" color="textSecondary">
+                Git Branch:
+              </Typography>
+              <Typography variant="body1" fontFamily="monospace" fontWeight="medium">
+                {appInfo.git_branch}
+              </Typography>
+            </Box>
+            <Divider />
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <Typography variant="body1" color="textSecondary">
+                Build Time:
+              </Typography>
+              <Typography variant="body1" fontFamily="monospace" fontWeight="medium">
+                {appInfo.build_timestamp}
+              </Typography>
+            </Box>
+          </Box>
+        ) : (
+          <Typography variant="body1" color="textSecondary">
+            Loading application information...
+          </Typography>
+        )}
       </Paper>
 
       {/* Toast Notification */}
