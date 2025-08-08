@@ -28,7 +28,6 @@ import SaveIcon from '@mui/icons-material/Save';
 import CancelIcon from '@mui/icons-material/Cancel';
 
 interface Input {
-  id: number; // これいらなくね？
   number: number;
   title: string;
   type: string;
@@ -46,7 +45,7 @@ const InputManager = () => {
   const [error, setError] = useState<string | null>(null);
   
   // Track editing state for each input
-  const [editingStates, setEditingStates] = useState<Record<number, string>>({});
+  const [editingStates, setEditingStates] = useState<string[]>([]);
   const [order, setOrder] = useState<Order>('asc');
   const [orderBy, setOrderBy] = useState<OrderBy>('number');
 
@@ -64,7 +63,6 @@ const InputManager = () => {
     if (selectedConnection && globalInputs[selectedConnection]) {
       const vmixInputs = globalInputs[selectedConnection];
       setInputs(vmixInputs.map((input, index) => ({
-        id: index + 1,
         number: input.number,
         title: input.title,
         type: input.input_type,
@@ -81,41 +79,35 @@ const InputManager = () => {
   };
 
   const handleEditClick = (input: Input) => {
-    setEditingStates({
-      ...editingStates,
-      [input.id]: input.title
-    });
+    setEditingStates([...editingStates, input.key]);
   };
 
-  const handleTitleChange = (id: number, value: string) => {
-    setEditingStates({
-      ...editingStates,
-      [id]: value
-    });
+  const handleTitleChange = (key: string, value: string) => {
+    // 配列の場合は直接タイトルを更新できないので、
+    // 一時的な状態として別の方法で管理する必要がある
+    // ここでは編集状態の確認のみを行う
   };
 
-  const handleSaveClick = async (id: number) => {
-    const newTitle = editingStates[id];
-    const input = inputs.find(inp => inp.id === id);
+  const handleSaveClick = async (key: string) => {
+    const input = inputs.find(inp => inp.key === key);
     
-    if (newTitle !== undefined && input && selectedConnection) {
+    if (input && selectedConnection) {
       try {
         // Send SetInputName function to update input title in vMix
         await sendVMixFunction(selectedConnection, 'SetInputName', {
           Input: input.number.toString(),
-          Value: newTitle
+          Value: input.title
         });
 
         // Update local state
         setInputs(inputs.map(inp =>
-          inp.id === id
-            ? { ...inp, title: newTitle }
+          inp.key === key
+            ? { ...inp, title: input.title }
             : inp
         ));
         
         // Remove this input from editing state
-        const newEditingStates = { ...editingStates };
-        delete newEditingStates[id];
+        const newEditingStates = editingStates.filter(k => k !== key);
         setEditingStates(newEditingStates);
       } catch (error) {
         console.error('Failed to update input title:', error);
@@ -124,15 +116,14 @@ const InputManager = () => {
     }
   };
 
-  const handleCancelClick = (id: number) => {
+  const handleCancelClick = (key: string) => {
     // Remove this input from editing state
-    const newEditingStates = { ...editingStates };
-    delete newEditingStates[id];
+    const newEditingStates = editingStates.filter(k => k !== key);
     setEditingStates(newEditingStates);
   };
 
-  const handleDeleteClick = (id: number) => {
-    setInputs(inputs.filter(input => input.id !== id));
+  const handleDeleteClick = (key: string) => {
+    setInputs(inputs.filter(input => input.key !== key));
   };
 
   const handleRequestSort = (property: OrderBy) => {
@@ -244,16 +235,23 @@ const InputManager = () => {
               </TableRow>
             ) : (
               sortedInputs.map((input) => {
-                const isEditing = editingStates[input.id] !== undefined;
+                const isEditing = editingStates.includes(input.key);
                 
                 return (
-                  <TableRow key={input.id}>
+                  <TableRow key={input.key}>
                     <TableCell>{input.number}</TableCell>
                     <TableCell>
                     <Box sx={{ display: 'flex', alignItems: 'center' }}>
                       <TextField
-                        value={isEditing ? editingStates[input.id] : input.title}
-                        onChange={(e) => handleTitleChange(input.id, e.target.value)}
+                        value={input.title}
+                        onChange={(e) => {
+                          // 直接inputのtitleを更新
+                          setInputs(inputs.map(inp =>
+                            inp.key === input.key
+                              ? { ...inp, title: e.target.value }
+                              : inp
+                          ));
+                        }}
                         size="small"
                         disabled={!isEditing}
                         variant={isEditing ? "outlined" : "standard"}
@@ -269,13 +267,13 @@ const InputManager = () => {
                           <IconButton
                             size="small"
                             color="primary"
-                            onClick={() => handleSaveClick(input.id)}
+                            onClick={() => handleSaveClick(input.key)}
                           >
                             <SaveIcon fontSize="small" />
                           </IconButton>
                           <IconButton
                             size="small"
-                            onClick={() => handleCancelClick(input.id)}
+                            onClick={() => handleCancelClick(input.key)}
                           >
                             <CancelIcon fontSize="small" />
                           </IconButton>
@@ -308,7 +306,7 @@ const InputManager = () => {
                     <IconButton
                       color="error"
                       size="small"
-                      onClick={() => handleDeleteClick(input.id)}
+                      onClick={() => handleDeleteClick(input.key)}
                     >
                       <DeleteIcon />
                     </IconButton>
@@ -325,20 +323,15 @@ const InputManager = () => {
         <Button
           variant="contained"
           color="primary"
-          onClick={() => {
-            // Apply all pending changes
-            for (const [idStr, title] of Object.entries(editingStates)) {
-              const id = Number.parseInt(idStr, 10);
-              setInputs(inputs.map(input =>
-                input.id === id
-                  ? { ...input, title }
-                  : input
-              ));
+          onClick={async () => {
+            // editingStatesに含まれる全てのkeyに対して順番に保存処理をawaitで実行
+            for (const key of editingStates) {
+              await handleSaveClick(key);
             }
-            // Clear all editing states
-            setEditingStates({});
+            // 全ての保存処理が終わった後に編集状態をクリア
+            setEditingStates([]);
           }}
-          disabled={Object.keys(editingStates).length === 0}
+          disabled={editingStates.length === 0}
         >
           Apply All Changes
         </Button>
