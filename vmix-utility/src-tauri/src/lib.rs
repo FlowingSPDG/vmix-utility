@@ -1,5 +1,6 @@
 use serde::{Deserialize, Serialize};
 use anyhow::Result;
+use tauri::tray::TrayIconBuilder;
 use std::sync::{Arc, Mutex};
 use std::collections::HashMap;
 use std::time::{Duration, Instant};
@@ -10,6 +11,10 @@ use tokio::time::{interval, sleep};
 use tokio::fs;
 use tauri::{Emitter, Manager};
 use url::Url;
+use tauri::{
+    menu::{Menu, MenuItem},
+    WindowEvent
+};
 
 #[derive(Debug, Deserialize)]
 struct VmixXml {
@@ -681,12 +686,62 @@ async fn save_settings(
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
+        .on_window_event(|window, event| {
+            match event {
+                tauri::WindowEvent::CloseRequested { api, .. } => {
+                    // ウィンドウを閉じる代わりに非表示にする
+                    window.hide().unwrap();
+                    api.prevent_close();
+                }
+                _ => {}
+            }
+        })
         .setup(|app| {
+
             let app_handle = app.handle().clone();
             let app_handle_clone = app_handle.clone();
             let app_handle_refresh = app_handle.clone();
+
+            // system tray icon
+            let show_i = MenuItem::with_id(app, "show", "Show", true, None::<&str>)?;
+            let quit_i = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
+            let menu = Menu::with_items(app, &[&show_i, &quit_i])?;
+
+            let tray = TrayIconBuilder::new()
+                .menu(&menu)
+                .show_menu_on_left_click(false)
+                .on_tray_icon_event(|tray, event| {
+                    match event {
+                        tauri::tray::TrayIconEvent::Click {
+                            button: tauri::tray::MouseButton::Left,
+                            button_state: tauri::tray::MouseButtonState::Up,
+                            ..
+                        } => {
+                            let app = tray.app_handle();
+                            if let Some(window) = app.get_webview_window("main") {
+                                let _ = window.show();
+                                let _ = window.set_focus();
+                            }
+                        }
+                        _ => {}
+                    }
+                })
+                .on_menu_event(|app, event| match event.id.as_ref() {
+                    "show" => {
+                        if let Some(window) = app.get_webview_window("main") {
+                            let _ = window.show();
+                            let _ = window.set_focus();
+                        }
+                    }
+                    "quit" => {
+                        std::process::exit(0);
+                    }
+                    _ => {}
+                })
+                .build(app)?;
             
             // Initialize app state and load config synchronously
             tauri::async_runtime::block_on(async move {

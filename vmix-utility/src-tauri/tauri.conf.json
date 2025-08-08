@@ -14,7 +14,14 @@
       {
         "title": "vmix-utility",
         "width": 1280,
-        "height": 720
+        "height": 720,
+        "closable": true,
+        "decorations": true,
+        "resizable": true,
+        "minimizable": true,
+        "maximizable": true,
+        "visible": true,
+        "center": true
       }
     ],
     "security": {
