@@ -20,7 +20,7 @@ func main() {
 	}
 
 	// create new file
-	dumpPath := path.Join(".", "vmix-utility", "src", "assets", "shortcuts.json")
+	dumpPath := path.Join(".", "app", "src", "assets", "shortcuts.json")
 	dumpFile, err := os.Create(dumpPath)
 	if err != nil {
 		panic(err)

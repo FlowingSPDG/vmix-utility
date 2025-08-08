@@ -1,6 +1,6 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "vmix-utility",
+  "productName": "app",
   "version": "2.0.0",
   "identifier": "com.vmix-utility.app",
   "build": {

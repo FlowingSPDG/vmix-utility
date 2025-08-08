@@ -3,7 +3,7 @@
 ## Repository Layout
 
 ```
-vmix-utility/                 # Main Tauri application directory
+app/                 # Main Tauri application directory
 ├── src/                      # React frontend source
 │   ├── components/           # Reusable React components
 │   ├── pages/               # Application pages/views

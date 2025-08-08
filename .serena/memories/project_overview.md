@@ -6,9 +6,7 @@ The vMix Utility is a desktop application designed for managing vMix streaming s
 ## Project Structure
 This is a **multi-architecture project** with several components:
 
-1. **Primary Tauri Application** (`vmix-utility/`) - Modern React-based desktop app
-2. **Legacy Go Backend** (parent directory) - HTTP server with embedded web interface  
-3. **Legacy Vue.js Frontend** (`../web/`) - Older web-based interface
+1. **Primary Tauri Application** (`app/`) - Modern React-based desktop app
 
 The project appears to be transitioning from a Go/Vue.js web application to a modern Tauri/React desktop application.
 
@@ -25,4 +23,4 @@ The project appears to be transitioning from a Go/Vue.js web application to a mo
 - Secondary: Web interface via Go server
 
 ## Current Focus
-The active development is on the Tauri/React application in the `vmix-utility/` directory, which provides native desktop integration and modern UI components using Material-UI.
+The active development is on the Tauri/React application in the `app/` directory, which provides native desktop integration and modern UI components using Material-UI.

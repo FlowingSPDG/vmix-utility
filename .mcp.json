@@ -11,7 +11,7 @@
         "--context",
         "ide-assistant",
         "--project",
-        "/mnt/c/Users/Flowing/vmix-utility/vmix-utility"
+        "/mnt/c/Users/Flowing/vmix-utility/app"
       ],
       "env": {}
     }

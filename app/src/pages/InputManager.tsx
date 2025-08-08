@@ -20,7 +20,12 @@ import {
   MenuItem,
   CircularProgress,
   Alert,
-  Chip
+  Chip,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogContentText,
+  DialogActions
 } from '@mui/material';
 import DeleteIcon from '@mui/icons-material/Delete';
 import EditIcon from '@mui/icons-material/Edit';
@@ -48,6 +53,10 @@ const InputManager = () => {
   const [editingStates, setEditingStates] = useState<string[]>([]);
   const [order, setOrder] = useState<Order>('asc');
   const [orderBy, setOrderBy] = useState<OrderBy>('number');
+  
+  // Dialog state for deletion confirmation
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [inputToDelete, setInputToDelete] = useState<Input | null>(null);
 
   useEffect(() => {
     // Auto-select first available connected connection
@@ -123,7 +132,35 @@ const InputManager = () => {
   };
 
   const handleDeleteClick = (key: string) => {
-    setInputs(inputs.filter(input => input.key !== key));
+    const input = inputs.find(inp => inp.key === key);
+    if (input) {
+      setInputToDelete(input);
+      setDeleteDialogOpen(true);
+    }
+  };
+
+  const handleDeleteConfirm = async () => {
+    if (inputToDelete && selectedConnection) {
+      try {
+        // delete input from vMix using RemoveInput function
+        await sendVMixFunction(selectedConnection, 'RemoveInput', {
+          Input: inputToDelete.key
+        });
+
+        // update local state
+        setInputs(inputs.filter(input => input.key !== inputToDelete.key));
+      } catch (error) {
+        console.error('Failed to delete input:', error);
+        setError(`Failed to delete input: ${error}`);
+      }
+    }
+    setDeleteDialogOpen(false);
+    setInputToDelete(null);
+  };
+
+  const handleDeleteCancel = () => {
+    setDeleteDialogOpen(false);
+    setInputToDelete(null);
   };
 
   const handleRequestSort = (property: OrderBy) => {
@@ -336,6 +373,31 @@ const InputManager = () => {
           Apply All Changes
         </Button>
       </Box>
+      
+      <Dialog
+        open={deleteDialogOpen}
+        onClose={handleDeleteCancel}
+        aria-labelledby="delete-dialog-title"
+        aria-describedby="delete-dialog-description"
+      >
+        <DialogTitle id="delete-dialog-title">
+          Delete Input
+        </DialogTitle>
+        <DialogContent>
+          <DialogContentText id="delete-dialog-description">
+            Are you sure you want to delete the input "{inputToDelete?.title}" (#{inputToDelete?.number})?
+            This action cannot be undone.
+          </DialogContentText>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={handleDeleteCancel} color="primary">
+            Cancel
+          </Button>
+          <Button onClick={handleDeleteConfirm} color="error" variant="contained">
+            Delete
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   );
 };

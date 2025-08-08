@@ -4,7 +4,7 @@
 
 ### Setup and Dependencies
 ```bash
-cd vmix-utility/
+cd app/
 bun install                    # Install all dependencies
 ```
 
@@ -89,7 +89,7 @@ lsof -i :8080               # Check if development server port is in use
 ## Development Workflow
 
 ### Starting Development
-1. `cd vmix-utility/`
+1. `cd app/`
 2. `bun install` (if first time)
 3. `bun run tauri dev`
 
