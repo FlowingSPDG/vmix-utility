@@ -88,19 +88,15 @@ const BlankGenerator = () => {
     try {
       // Generate blanks using vMix API
       for (let i = 0; i < count; i++) {
-        const blankTitle = `Blank ${i + 1}${transparent ? ' (Transparent)' : ''}`;
         const params = transparent 
-          ? { Value: 'Colour|Transparent', Title: blankTitle }
-          : { Value: 'Colour|Black', Title: blankTitle };
+          ? { Value: 'Colour|Transparent'}
+          : { Value: 'Colour|Black'};
         
         await invoke('send_vmix_function', {
           host: connection.host,
-          function_name: 'AddInput',
+          functionName: 'AddInput',
           params: params
         });
-        
-        // Small delay between requests to avoid overwhelming vMix
-        await new Promise(resolve => setTimeout(resolve, 100));
       }
 
       console.log(`Generated ${count} blank${count !== 1 ? 's' : ''} with transparent=${transparent} on ${connection.host}`);
@@ -111,7 +107,7 @@ const BlankGenerator = () => {
       }, 3000);
     } catch (error) {
       console.error('Failed to generate blanks:', error);
-      // Could add error state here
+      // TODO: toast message
     } finally {
       setGenerating(false);
     }
