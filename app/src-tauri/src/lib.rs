@@ -15,6 +15,11 @@ use tauri::{
     menu::{Menu, MenuItem},
     WindowEvent
 };
+use log::{info, warn, error, debug, trace};
+use chrono::{DateTime, Local};
+use once_cell::sync::Lazy;
+use std::io::Write;
+use std::fs::OpenOptions;
 
 #[derive(Debug, Deserialize)]
 struct VmixXml {
@@ -78,6 +83,130 @@ struct ConnectionConfig {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct AppConfig {
     connections: Vec<ConnectionConfig>,
+    app_settings: Option<AppSettings>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct AppSettings {
+    startup_auto_launch: bool,
+    default_vmix_ip: String,
+    default_vmix_port: u16,
+    refresh_interval: u32,
+    theme: String,
+    auto_reconnect: bool,
+    auto_reconnect_interval: u32,
+    max_log_file_size: u32,
+}
+
+impl Default for AppSettings {
+    fn default() -> Self {
+        Self {
+            startup_auto_launch: true,
+            default_vmix_ip: "127.0.0.1".to_string(),
+            default_vmix_port: 8088,
+            refresh_interval: 1000,
+            theme: "light".to_string(),
+            auto_reconnect: true,
+            auto_reconnect_interval: 5000,
+            max_log_file_size: 10,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct LoggingConfig {
+    enabled: bool,
+    level: String,
+    save_to_file: bool,
+    file_path: Option<PathBuf>,
+}
+
+impl Default for LoggingConfig {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            level: "info".to_string(),
+            save_to_file: false,
+            file_path: None,
+        }
+    }
+}
+
+// Global logging configuration
+static LOGGING_CONFIG: Lazy<Arc<Mutex<LoggingConfig>>> = Lazy::new(|| {
+    Arc::new(Mutex::new(LoggingConfig::default()))
+});
+
+// Custom logger that writes to file
+struct FileLogger {
+    file_path: PathBuf,
+}
+
+impl FileLogger {
+    fn new(file_path: PathBuf) -> Self {
+        Self { file_path }
+    }
+
+    fn log(&self, level: &str, message: &str) {
+        let timestamp = Local::now().format("%Y-%m-%d %H:%M:%S%.3f");
+        let log_line = format!("[{}] {} - {}\n", timestamp, level, message);
+        
+        if let Ok(mut file) = OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(&self.file_path)
+        {
+            let _ = file.write_all(log_line.as_bytes());
+        }
+    }
+}
+
+// Initialize logging with file output
+fn init_logging(app_handle: &tauri::AppHandle) -> Result<(), String> {
+    let app_data_dir = app_handle.path().app_data_dir().map_err(|e| e.to_string())?;
+    let logs_dir = app_data_dir.join("logs");
+    
+    // Create logs directory if it doesn't exist
+    std::fs::create_dir_all(&logs_dir).map_err(|e| e.to_string())?;
+    
+    // Generate log filename with timestamp
+    let timestamp = Local::now().format("%Y%m%d-%H%M%S");
+    let log_filename = format!("{}.log", timestamp);
+    let log_path = logs_dir.join(log_filename);
+    
+    // Update global logging config with file path
+    {
+        let mut config = LOGGING_CONFIG.lock().unwrap();
+        config.file_path = Some(log_path.clone());
+        config.save_to_file = true;
+    }
+    
+    info!("Logging initialized with file: {:?}", log_path);
+    
+    Ok(())
+}
+
+// Custom logging macro that respects configuration
+macro_rules! app_log {
+    ($level:ident, $($arg:tt)*) => {
+        {
+            let config = LOGGING_CONFIG.lock().unwrap();
+            if config.enabled {
+                let message = format!($($arg)*);
+                
+                // Log to console
+                log::$level!("{}", message);
+                
+                // Log to file if enabled
+                if config.save_to_file {
+                    if let Some(ref file_path) = config.file_path {
+                        let logger = FileLogger::new(file_path.clone());
+                        logger.log(stringify!($level), &message);
+                    }
+                }
+            }
+        }
+    };
 }
 
 impl Default for AutoRefreshConfig {
@@ -127,6 +256,8 @@ impl VmixHttpClient {
             url.query_pairs_mut().append_pair(key, value);
         }
         
+        app_log!(debug, "Sending vMix function: {} to {} with params: {:?}", function_name, self.host(), params);
+        
         let response = self.client
             .get(url.as_str())
             .send()
@@ -134,8 +265,10 @@ impl VmixHttpClient {
         
         // HTTP API only returns success/failure, not data
         if response.status().is_success() {
+            app_log!(info, "Successfully sent vMix function: {} to {}", function_name, self.host());
             Ok(())
         } else {
+            app_log!(error, "Failed to send vMix function: {} to {}, status: {}", function_name, self.host(), response.status());
             Err(anyhow::anyhow!("Function failed"))
         }
     }
@@ -171,8 +304,19 @@ impl VmixHttpClient {
 async fn send_vmix_function(host: String, function_name: String, params: Option<HashMap<String, String>>) -> Result<String, String> {
     let vmix = VmixHttpClient::new(&host, 8088);
     let params_map = params.unwrap_or_default();
-    vmix.send_function(&function_name, &params_map).await.map_err(|e| e.to_string())?;
-    Ok("Function sent successfully".to_string())
+    
+    app_log!(info, "Sending vMix function command: {} to host: {}", function_name, host);
+    
+    match vmix.send_function(&function_name, &params_map).await {
+        Ok(_) => {
+            app_log!(info, "vMix function command sent successfully: {}", function_name);
+            Ok("Function sent successfully".to_string())
+        }
+        Err(e) => {
+            app_log!(error, "Failed to send vMix function command: {} - {}", function_name, e);
+            Err(e.to_string())
+        }
+    }
 }
 
 // Command to get vMix inputs
@@ -200,6 +344,7 @@ struct AppState {
     last_status_cache: Arc<Mutex<HashMap<String, VmixConnection>>>,
     inputs_cache: Arc<Mutex<HashMap<String, Vec<VmixInput>>>>,
     connection_labels: Arc<Mutex<HashMap<String, String>>>,
+    app_settings: Arc<Mutex<AppSettings>>,
 }
 
 impl AppState {
@@ -210,6 +355,7 @@ impl AppState {
             last_status_cache: Arc::new(Mutex::new(HashMap::new())),
             inputs_cache: Arc::new(Mutex::new(HashMap::new())),
             connection_labels: Arc::new(Mutex::new(HashMap::new())),
+            app_settings: Arc::new(Mutex::new(AppSettings::default())),
         };
         
         state
@@ -277,6 +423,7 @@ impl AppState {
                         auto_refresh,
                     }
                 }).collect(),
+                app_settings: Some(self.app_settings.lock().unwrap().clone()),
             }
         };
         
@@ -334,6 +481,13 @@ impl AppState {
                 let mut auto_configs = self.auto_refresh_configs.lock().unwrap();
                 auto_configs.insert(conn_config.host.clone(), conn_config.auto_refresh.clone());
             }
+        }
+        
+        // Load app settings
+        if let Some(app_settings) = config.app_settings {
+            let mut settings = self.app_settings.lock().unwrap();
+            *settings = app_settings;
+            println!("Loaded app settings");
         }
         
         println!("Config loading completed");
@@ -508,8 +662,16 @@ struct VmixConnection {
 
 #[tauri::command]
 async fn connect_vmix(state: tauri::State<'_, AppState>, app_handle: tauri::AppHandle, host: String) -> Result<VmixConnection, String> {
+    app_log!(info, "Attempting to connect to vMix at {}", host);
+    
     let vmix = VmixHttpClient::new(&host, 8088);
     let status = vmix.get_status().await.unwrap_or(false);
+    
+    if status {
+        app_log!(info, "Successfully connected to vMix at {}", host);
+    } else {
+        app_log!(warn, "Failed to connect to vMix at {}", host);
+    }
     
     // Check if this IP is already connected
     {
@@ -517,9 +679,11 @@ async fn connect_vmix(state: tauri::State<'_, AppState>, app_handle: tauri::AppH
         if let Some(existing_index) = connections.iter().position(|c| c.host() == host) {
             // Replace existing connection (for reconnection)
             connections[existing_index] = vmix.clone();
+            app_log!(debug, "Replaced existing connection for {}", host);
         } else {
             // Add new connection
             connections.push(vmix.clone());
+            app_log!(debug, "Added new connection for {}", host);
         }
     }
     
@@ -684,8 +848,66 @@ async fn save_settings(
     state.save_config(&app_handle).await
 }
 
+#[tauri::command]
+async fn set_logging_config(level: String, saveToFile: bool) -> Result<(), String> {
+    println!("Setting logging configuration - level: {}, saveToFile: {}", level, saveToFile);
+    
+    {
+        let mut config = LOGGING_CONFIG.lock().unwrap();
+        config.level = level.clone();
+        config.save_to_file = saveToFile;
+    } // ここでlockを解放
+    
+    println!("Logging configuration updated successfully");
+    
+    Ok(())
+}
+
+#[tauri::command]
+async fn get_logging_config() -> Result<LoggingConfig, String> {
+    let config = LOGGING_CONFIG.lock().unwrap();
+    Ok(config.clone())
+}
+
+#[tauri::command]
+async fn save_app_settings(
+    state: tauri::State<'_, AppState>,
+    app_handle: tauri::AppHandle,
+    settings: AppSettings
+) -> Result<(), String> {
+    app_log!(info, "Saving app settings: {:?}", settings);
+    
+    // Update app settings in state
+    {
+        let mut app_settings = state.app_settings.lock().unwrap();
+        *app_settings = settings;
+    }
+    
+    // Save to config file
+    match state.save_config(&app_handle).await {
+        Ok(_) => {
+            app_log!(info, "App settings saved successfully");
+            Ok(())
+        }
+        Err(e) => {
+            app_log!(error, "Failed to save app settings: {}", e);
+            Err(e)
+        }
+    }
+}
+
+#[tauri::command]
+async fn get_app_settings(state: tauri::State<'_, AppState>) -> Result<AppSettings, String> {
+    let settings = state.app_settings.lock().unwrap();
+    Ok(settings.clone())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    // Initialize env_logger for console output
+    env_logger::Builder::from_default_env()
+        .filter_level(log::LevelFilter::Info)
+        .init();
 
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
@@ -700,6 +922,12 @@ pub fn run() {
             }
         })
         .setup(|app| {
+            // Initialize logging system
+            if let Err(e) = init_logging(&app.handle()) {
+                eprintln!("Failed to initialize logging: {}", e);
+            }
+            
+            app_log!(info, "Application starting up");
 
             let app_handle = app.handle().clone();
             let app_handle_clone = app_handle.clone();
@@ -774,7 +1002,11 @@ pub fn run() {
             get_all_auto_refresh_configs,
             update_connection_label,
             get_connection_labels,
-            save_settings
+            save_settings,
+            set_logging_config,
+            get_logging_config,
+            save_app_settings,
+            get_app_settings
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
