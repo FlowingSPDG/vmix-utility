@@ -1,5 +1,6 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import type { SelectChangeEvent } from '@mui/material';
+import { useVMixStatus } from '../hooks/useVMixStatus';
 import {
   Box,
   Typography,
@@ -16,10 +17,21 @@ import {
   FormControl,
   Slider,
   FormGroup,
-  Alert
+  Alert,
+  Card,
+  CardContent,
+  List,
+  ListItem,
+  ListItemText,
+  ListItemSecondaryAction,
+  Accordion,
+  AccordionSummary,
+  AccordionDetails
 } from '@mui/material';
+import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 
 const Settings = () => {
+  const { connections, autoRefreshConfigs, setAutoRefreshConfig } = useVMixStatus();
   const [settings, setSettings] = useState({
     startupAutoLaunch: true,
     defaultVMixIP: '127.0.0.1',
@@ -245,6 +257,80 @@ const Settings = () => {
                 </Box>
               </>
             )}
+          </Grid>
+
+          {/* vMix Auto-Refresh Settings */}
+          <Grid item xs={12}>
+            <Accordion>
+              <AccordionSummary
+                expandIcon={<ExpandMoreIcon />}
+                aria-controls="vmix-auto-refresh-content"
+                id="vmix-auto-refresh-header"
+              >
+                <Typography variant="h6">vMix Auto-Refresh Settings</Typography>
+              </AccordionSummary>
+              <AccordionDetails>
+                <Typography variant="body2" color="text.secondary" paragraph>
+                  Configure automatic refresh settings for each vMix connection. Changes are saved automatically.
+                </Typography>
+                
+                {connections.length === 0 ? (
+                  <Alert severity="info">
+                    No vMix connections found. Add connections in the Connections tab to configure auto-refresh settings.
+                  </Alert>
+                ) : (
+                  <List>
+                    {connections.map((connection) => (
+                      <ListItem key={connection.host} divider>
+                        <ListItemText
+                          primary={`${connection.label} (${connection.host})`}
+                          secondary={`Status: ${connection.status}`}
+                        />
+                        <ListItemSecondaryAction>
+                          <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 1, minWidth: 200 }}>
+                            <FormControlLabel
+                              control={
+                                <Switch
+                                  checked={autoRefreshConfigs[connection.host]?.enabled || false}
+                                  onChange={async (e) => {
+                                    const currentConfig = autoRefreshConfigs[connection.host] || { enabled: false, duration: 5 };
+                                    const newConfig = { ...currentConfig, enabled: e.target.checked };
+                                    await setAutoRefreshConfig(connection.host, newConfig);
+                                  }}
+                                  size="small"
+                                />
+                              }
+                              label={autoRefreshConfigs[connection.host]?.enabled ? 'Enabled' : 'Disabled'}
+                            />
+                            {autoRefreshConfigs[connection.host]?.enabled && (
+                              <Box sx={{ width: 150 }}>
+                                <Typography variant="caption" gutterBottom>
+                                  Refresh Interval: {autoRefreshConfigs[connection.host]?.duration}s
+                                </Typography>
+                                <Slider
+                                  value={autoRefreshConfigs[connection.host]?.duration || 5}
+                                  onChange={async (_, value) => {
+                                    const currentConfig = autoRefreshConfigs[connection.host] || { enabled: true, duration: 5 };
+                                    const newConfig = { ...currentConfig, duration: value as number };
+                                    await setAutoRefreshConfig(connection.host, newConfig);
+                                  }}
+                                  min={1}
+                                  max={30}
+                                  step={1}
+                                  valueLabelDisplay="auto"
+                                  valueLabelFormat={(value) => `${value}s`}
+                                  size="small"
+                                />
+                              </Box>
+                            )}
+                          </Box>
+                        </ListItemSecondaryAction>
+                      </ListItem>
+                    ))}
+                  </List>
+                )}
+              </AccordionDetails>
+            </Accordion>
           </Grid>
           
           <Grid item xs={12}>

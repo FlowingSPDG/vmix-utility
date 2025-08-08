@@ -198,6 +198,7 @@ impl AppState {
         tokio::spawn(async move {
             let mut interval = interval(Duration::from_secs(1));
             let mut next_refresh_times: HashMap<String, Instant> = HashMap::new();
+            let mut consecutive_failures: HashMap<String, u32> = HashMap::new();
 
             loop {
                 interval.tick().await;
@@ -224,46 +225,83 @@ impl AppState {
 
                         let should_refresh = match next_refresh_times.get(&host) {
                             Some(next_time) => now >= *next_time,
-                            None => true, // First time, refresh immediately
+                            None => true,
                         };
 
                         if should_refresh {
-                            // Get current status
-                            if let Ok(status) = vmix.get_status().await {
-                                let active_input = vmix.get_active_input().await.unwrap_or(0);
-                                let preview_input = vmix.get_preview_input().await.unwrap_or(0);
+                            // Try to get current status with retry logic
+                            let mut retry_attempts = 0;
+                            let max_retries = 3;
+                            let mut connection_successful = false;
+                            let mut active_input = 0;
+                            let mut preview_input = 0;
 
-                                let new_connection = VmixConnection {
-                                    host: host.clone(),
-                                    label: host.clone(),
-                                    status: if status { "Connected".to_string() } else { "Disconnected".to_string() },
-                                    active_input,
-                                    preview_input,
-                                };
+                            while retry_attempts < max_retries && !connection_successful {
+                                if retry_attempts > 0 {
+                                    sleep(Duration::from_millis(500 * retry_attempts as u64)).await;
+                                }
 
-                                // Check if status changed
-                                let status_changed = {
-                                    let mut cache_guard = cache.lock().unwrap();
-                                    let changed = cache_guard.get(&host)
-                                        .map(|cached| {
-                                            cached.status != new_connection.status ||
-                                            cached.active_input != new_connection.active_input ||
-                                            cached.preview_input != new_connection.preview_input
-                                        })
-                                        .unwrap_or(true);
-                                    
-                                    cache_guard.insert(host.clone(), new_connection.clone());
-                                    changed
-                                };
-
-                                // Emit event only if status changed
-                                if status_changed {
-                                    let _ = app_handle.emit("vmix-status-updated", &new_connection);
+                                match vmix.get_status().await {
+                                    Ok(status) if status => {
+                                        active_input = vmix.get_active_input().await.unwrap_or(0);
+                                        preview_input = vmix.get_preview_input().await.unwrap_or(0);
+                                        connection_successful = true;
+                                        consecutive_failures.remove(&host);
+                                    }
+                                    _ => {
+                                        retry_attempts += 1;
+                                    }
                                 }
                             }
 
-                            // Schedule next refresh
-                            next_refresh_times.insert(host, now + Duration::from_secs(config.duration));
+                            let connection_status = if connection_successful { 
+                                "Connected".to_string() 
+                            } else { 
+                                let failures = consecutive_failures.entry(host.clone()).or_insert(0);
+                                *failures += 1;
+                                
+                                if *failures >= 3 {
+                                    "Disconnected".to_string()
+                                } else {
+                                    "Reconnecting".to_string()
+                                }
+                            };
+
+                            let new_connection = VmixConnection {
+                                host: host.clone(),
+                                label: host.clone(),
+                                status: connection_status,
+                                active_input,
+                                preview_input,
+                            };
+
+                            // Check if status changed
+                            let status_changed = {
+                                let mut cache_guard = cache.lock().unwrap();
+                                let changed = cache_guard.get(&host)
+                                    .map(|cached| {
+                                        cached.status != new_connection.status ||
+                                        cached.active_input != new_connection.active_input ||
+                                        cached.preview_input != new_connection.preview_input
+                                    })
+                                    .unwrap_or(true);
+                                
+                                cache_guard.insert(host.clone(), new_connection.clone());
+                                changed
+                            };
+
+                            // Always emit event for connection updates
+                            if status_changed {
+                                let _ = app_handle.emit("vmix-status-updated", &new_connection);
+                            }
+
+                            // Schedule next refresh (shorter interval if reconnecting)
+                            let refresh_interval = if new_connection.status == "Reconnecting" {
+                                Duration::from_secs(config.duration.min(2))
+                            } else {
+                                Duration::from_secs(config.duration)
+                            };
+                            next_refresh_times.insert(host, now + refresh_interval);
                         }
                     }
                 }
@@ -395,11 +433,14 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .setup(|app| {
-            let app_state = app.state::<AppState>();
-            let app_handle = app.handle();
+            let app_handle = app.handle().clone();
+            let app_handle_clone = app_handle.clone();
             
-            // Start auto-refresh background task
-            // app_state.start_auto_refresh_task(app_handle.clone());
+            // Start auto-refresh background task in the tokio runtime
+            tauri::async_runtime::spawn(async move {
+                let app_state = app_handle.state::<AppState>();
+                app_state.start_auto_refresh_task(app_handle_clone);
+            });
             
             Ok(())
         })

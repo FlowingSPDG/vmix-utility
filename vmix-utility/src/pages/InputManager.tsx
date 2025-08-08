@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { invoke } from '@tauri-apps/api/core';
+import { useVMixStatus } from '../hooks/useVMixStatus';
 import {
   Box,
   Typography,
@@ -56,8 +56,8 @@ type Order = 'asc' | 'desc';
 type OrderBy = 'number' | 'title' | 'type';
 
 const InputManager = () => {
+  const { connections, inputs: globalInputs, getVMixInputs, sendVMixFunction } = useVMixStatus();
   const [inputs, setInputs] = useState<Input[]>([]);
-  const [connections, setConnections] = useState<VmixConnection[]>([]);
   const [selectedConnection, setSelectedConnection] = useState<string>('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -66,66 +66,39 @@ const InputManager = () => {
   const [editingStates, setEditingStates] = useState<Record<number, string>>({});
   const [order, setOrder] = useState<Order>('asc');
   const [orderBy, setOrderBy] = useState<OrderBy>('number');
-  
-  // Get auto-refresh config from localStorage
-  const getAutoRefreshConfig = (host: string) => {
-    const stored = localStorage.getItem('vmix-auto-refresh-config');
-    if (stored) {
-      const config = JSON.parse(stored);
-      return config[host] || { enabled: true, duration: 3 };
+
+  useEffect(() => {
+    // Auto-select first available connected connection
+    const connectedConnections = connections.filter(conn => conn.status === 'Connected');
+    if (connectedConnections.length > 0 && selectedConnection === '') {
+      const firstConnection = connectedConnections[0].host;
+      setSelectedConnection(firstConnection);
     }
-    return { enabled: true, duration: 3 };
-  };
-  
-  const setAutoRefreshConfig = (host: string, config: {enabled: boolean, duration: number}) => {
-    const stored = localStorage.getItem('vmix-auto-refresh-config');
-    const allConfig = stored ? JSON.parse(stored) : {};
-    allConfig[host] = config;
-    localStorage.setItem('vmix-auto-refresh-config', JSON.stringify(allConfig));
-  };
+  }, [connections, selectedConnection]);
 
+  // Update inputs when global inputs change or selected connection changes
   useEffect(() => {
-    const fetchConnections = async () => {
-      try {
-        const vmixConnections = await invoke<VmixConnection[]>('get_vmix_statuses');
-        const connectedConnections = vmixConnections.filter(conn => conn.status === 'Connected');
-        setConnections(connectedConnections);
-        
-        // Auto-select first available connection and fetch inputs
-        if (connectedConnections.length > 0 && selectedConnection === '') {
-          const firstConnection = connectedConnections[0].host;
-          setSelectedConnection(firstConnection);
-          fetchInputs(firstConnection);
-        }
-      } catch (error) {
-        console.error('Failed to fetch vMix connections:', error);
-        setConnections([]);
-      }
-    };
-
-    fetchConnections();
-  }, []);
-
-  // Auto-refresh inputs based on connection-specific settings
-  useEffect(() => {
-    if (!selectedConnection) return;
-    
-    const config = getAutoRefreshConfig(selectedConnection);
-    if (!config.enabled) return;
-    
-    const interval = setInterval(() => {
-      fetchInputs(selectedConnection);
-    }, config.duration * 1000);
-    
-    return () => clearInterval(interval);
-  }, [selectedConnection]);
+    if (selectedConnection && globalInputs[selectedConnection]) {
+      const vmixInputs = globalInputs[selectedConnection];
+      setInputs(vmixInputs.map((input, index) => ({
+        id: index + 1,
+        number: input.number,
+        title: input.title,
+        type: input.input_type,
+        key: input.key,
+        state: input.state,
+      })));
+    } else {
+      setInputs([]);
+    }
+  }, [selectedConnection, globalInputs]);
 
   const fetchInputs = async (host: string) => {
     setLoading(true);
     setError(null);
     try {
-      const vmixInputs = await invoke<VmixInput[]>('get_vmix_inputs', { host });
-      setInputs(vmixInputs.map((input, index) => ({
+      const vmixInputs = await getVMixInputs(host);
+      setInputs(vmixInputs.map((input: VmixInput, index: number) => ({
         id: index + 1,
         number: input.number,
         title: input.title,
@@ -172,13 +145,9 @@ const InputManager = () => {
     if (newTitle !== undefined && input && selectedConnection) {
       try {
         // Send SetInputName function to update input title in vMix
-        await invoke('send_vmix_function', {
-          host: selectedConnection,
-          function_name: 'SetInputName',
-          params: {
-            Input: input.number.toString(),
-            Value: newTitle
-          }
+        await sendVMixFunction(selectedConnection, 'SetInputName', {
+          Input: input.number.toString(),
+          Value: newTitle
         });
 
         // Update local state
@@ -245,11 +214,13 @@ const InputManager = () => {
             <MenuItem value="">
               <em>Select a vMix connection</em>
             </MenuItem>
-            {connections.map((conn) => (
-              <MenuItem key={conn.host} value={conn.host}>
-                {conn.label} ({conn.host})
-              </MenuItem>
-            ))}
+            {connections
+              .filter(conn => conn.status === 'Connected')
+              .map((conn) => (
+                <MenuItem key={conn.host} value={conn.host}>
+                  {conn.label} ({conn.host})
+                </MenuItem>
+              ))}
           </Select>
         </FormControl>
 
@@ -259,34 +230,16 @@ const InputManager = () => {
           </Alert>
         )}
 
-        {selectedConnection && (() => {
-          const config = getAutoRefreshConfig(selectedConnection);
-          return (
-            <Box sx={{ display: 'flex', gap: 1 }}>
-              <Button 
-                variant={config.enabled ? "contained" : "outlined"}
-                color={config.enabled ? "success" : "primary"}
-                onClick={() => {
-                  const newConfig = { ...config, enabled: !config.enabled };
-                  setAutoRefreshConfig(selectedConnection, newConfig);
-                  // Force re-render by updating a dummy state
-                  setError(prev => prev);
-                }}
-                size="small"
-              >
-                {config.enabled ? `Auto-Refresh ON (${config.duration}s)` : "Auto-Refresh OFF"}
-              </Button>
-              <Button 
-                variant="outlined" 
-                onClick={() => fetchInputs(selectedConnection)}
-                disabled={loading}
-              >
-                {loading ? <CircularProgress size={20} sx={{ mr: 1 }} /> : null}
-                Refresh Inputs
-              </Button>
-            </Box>
-          );
-        })()}
+        {selectedConnection && (
+          <Button 
+            variant="outlined" 
+            onClick={() => fetchInputs(selectedConnection)}
+            disabled={loading}
+          >
+            {loading ? <CircularProgress size={20} sx={{ mr: 1 }} /> : null}
+            Refresh Inputs
+          </Button>
+        )}
       </Paper>
       
       <TableContainer component={Paper}>

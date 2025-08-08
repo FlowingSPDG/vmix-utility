@@ -1,6 +1,7 @@
 import { ThemeProvider, createTheme } from '@mui/material/styles';
 import CssBaseline from '@mui/material/CssBaseline';
 import Layout from './components/Layout';
+import { VMixStatusProvider } from './hooks/useVMixStatus';
 import "./App.css";
 
 const theme = createTheme({
@@ -19,7 +20,9 @@ function App() {
   return (
     <ThemeProvider theme={theme}>
       <CssBaseline />
-      <Layout />
+      <VMixStatusProvider>
+        <Layout />
+      </VMixStatusProvider>
     </ThemeProvider>
   );
 }

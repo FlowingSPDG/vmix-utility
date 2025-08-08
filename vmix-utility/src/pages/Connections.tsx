@@ -1,6 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { invoke } from '@tauri-apps/api/core';
-import { listen } from '@tauri-apps/api/event';
+import { useVMixStatus } from '../hooks/useVMixStatus';
 import { 
   Box, 
   Typography, 
@@ -22,11 +21,7 @@ import {
   Chip,
   IconButton,
   Menu,
-  MenuItem,
-  Switch,
-  FormControlLabel,
-  Slider,
-  Collapse
+  MenuItem
 } from '@mui/material';
 import AddIcon from '@mui/icons-material/Add';
 import DeleteIcon from '@mui/icons-material/Delete';
@@ -38,25 +33,13 @@ interface Connection {
   id: number;
   host: string;
   label: string;
-  status: 'Connected' | 'Disconnected';
+  status: 'Connected' | 'Disconnected' | 'Reconnecting';
   activeInput: number;
   previewInput: number;
 }
 
-interface AutoRefreshConfig {
-  enabled: boolean;
-  duration: number; // in seconds
-}
-
-interface VmixConnection {
-  host: string;
-  label: string;
-  status: 'Connected' | 'Disconnected';
-  active_input: number;
-  preview_input: number;
-}
-
 const Connections: React.FC = () => {
+  const { connections: vmixConnections, loading: globalLoading, connectVMix, disconnectVMix, sendVMixFunction } = useVMixStatus();
   const [connections, setConnections] = useState<Connection[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -65,83 +48,20 @@ const Connections: React.FC = () => {
   const [connecting, setConnecting] = useState(false);
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
   const [selectedConnection, setSelectedConnection] = useState<Connection | null>(null);
-  const [autoRefreshConfig, setAutoRefreshConfig] = useState<{[host: string]: AutoRefreshConfig}>({});
-  const [showAutoRefreshSettings, setShowAutoRefreshSettings] = useState<string | null>(null);
 
-  const fetchConnections = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const vmixConnections = await invoke<VmixConnection[]>('get_vmix_statuses');
-      const newConnections = vmixConnections.map((conn, index) => ({
-        id: index + 1,
-        host: conn.host,
-        label: conn.label,
-        status: conn.status,
-        activeInput: conn.active_input,
-        previewInput: conn.preview_input,
-      }));
-      
-      // Only update if connections actually changed
-      setConnections(prevConnections => {
-        if (JSON.stringify(prevConnections) === JSON.stringify(newConnections)) {
-          return prevConnections; // Keep the same reference if data is identical
-        }
-        return newConnections;
-      });
-    } catch (error) {
-      console.error('Failed to fetch connections:', error);
-      setError(error as string);
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
+  // Transform global connections to local format
   useEffect(() => {
-    fetchConnections();
+    const newConnections = vmixConnections.map((conn, index) => ({
+      id: index + 1,
+      host: conn.host,
+      label: conn.label,
+      status: conn.status as 'Connected' | 'Disconnected' | 'Reconnecting',
+      activeInput: conn.active_input,
+      previewInput: conn.preview_input,
+    }));
     
-    // Load auto-refresh configs from backend
-    const loadAutoRefreshConfigs = async () => {
-      try {
-        const configs = await invoke<{[host: string]: AutoRefreshConfig}>('get_all_auto_refresh_configs');
-        setAutoRefreshConfig(configs);
-      } catch (error) {
-        console.error('Failed to load auto-refresh configs:', error);
-      }
-    };
-    
-    loadAutoRefreshConfigs();
-  }, [fetchConnections]);
-
-  // Listen for backend status updates
-  useEffect(() => {
-    const unlisten = listen<VmixConnection>('vmix-status-updated', (event) => {
-      const updatedConnection = event.payload;
-      
-      setConnections(prevConnections => {
-        const newConnections = prevConnections.map(conn => 
-          conn.host === updatedConnection.host 
-            ? {
-                ...conn,
-                status: updatedConnection.status as 'Connected' | 'Disconnected',
-                activeInput: updatedConnection.active_input,
-                previewInput: updatedConnection.preview_input,
-              }
-            : conn
-        );
-        
-        // Only update if something actually changed
-        if (JSON.stringify(prevConnections) === JSON.stringify(newConnections)) {
-          return prevConnections;
-        }
-        return newConnections;
-      });
-    });
-
-    return () => {
-      unlisten.then(fn => fn());
-    };
-  }, []);
+    setConnections(newConnections);
+  }, [vmixConnections]);
 
   const handleClickOpen = () => {
     setOpen(true);
@@ -159,19 +79,12 @@ const Connections: React.FC = () => {
     setConnecting(true);
     setError(null);
     try {
-      const newConnection = await invoke<VmixConnection>('connect_vmix', { host: newHost.trim() });
-      // Initialize auto-refresh config for new connection
-      setAutoRefreshConfig(prev => ({
-        ...prev,
-        [newHost.trim()]: { enabled: true, duration: 5 }
-      }));
-      await fetchConnections(); // Refresh the list
+      await connectVMix(newHost.trim());
+      handleClose();
     } catch (error) {
       console.error('Failed to connect:', error);
       setError(`Failed to connect to ${newHost}: ${error}`);
-    } finally {
       setConnecting(false);
-      handleClose();
     }
   };
 
@@ -180,8 +93,7 @@ const Connections: React.FC = () => {
     if (!connection) return;
     
     try {
-      await invoke('disconnect_vmix', { host: connection.host });
-      await fetchConnections(); // Refresh the list
+      await disconnectVMix(connection.host);
     } catch (error) {
       console.error('Failed to disconnect:', error);
       setError(`Failed to disconnect from ${connection.host}: ${error}`);
@@ -202,13 +114,8 @@ const Connections: React.FC = () => {
     if (!selectedConnection) return;
     
     try {
-      await invoke('send_vmix_function', { 
-        host: selectedConnection.host, 
-        function_name: functionName,
-        params: null
-      });
+      await sendVMixFunction(selectedConnection.host, functionName);
       handleMenuClose();
-      // Optional: Show success message
     } catch (error) {
       console.error('Failed to send function:', error);
       setError(`Failed to send ${functionName} to ${selectedConnection.host}: ${error}`);
@@ -225,10 +132,9 @@ const Connections: React.FC = () => {
           <Button 
             variant="outlined" 
             startIcon={<RefreshIcon />}
-            onClick={fetchConnections}
-            disabled={loading}
+            disabled={globalLoading}
           >
-            Refresh All
+            {globalLoading ? 'Auto-Refreshing...' : 'Auto-Refresh Active'}
           </Button>
           <Button 
             variant="contained" 
@@ -254,27 +160,26 @@ const Connections: React.FC = () => {
               <TableCell>Status</TableCell>
               <TableCell>Active Input</TableCell>
               <TableCell>Preview Input</TableCell>
-              <TableCell>Auto-Refresh</TableCell>
               <TableCell align="right">Actions</TableCell>
             </TableRow>
           </TableHead>
           <TableBody>
             {loading ? (
               <TableRow>
-                <TableCell colSpan={6} align="center">
+                <TableCell colSpan={5} align="center">
                   <CircularProgress />
                 </TableCell>
               </TableRow>
             ) : connections.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={6} align="center">
+                <TableCell colSpan={5} align="center">
                   <Typography color="textSecondary">
                     No vMix connections. Add a connection to get started.
                   </Typography>
                 </TableCell>
               </TableRow>
             ) : (
-              connections.map((connection) => [
+              connections.map((connection) => (
                 <TableRow key={connection.id}>
                   <TableCell>
                     <Typography variant="body2" fontWeight="medium">
@@ -287,41 +192,13 @@ const Connections: React.FC = () => {
                   <TableCell>
                     <Chip 
                       label={connection.status}
-                      color={connection.status === 'Connected' ? 'success' : 'error'}
+                      color={connection.status === 'Connected' ? 'success' : connection.status === 'Reconnecting' ? 'warning' : 'error'}
                       variant="outlined"
                       size="small"
                     />
                   </TableCell>
                   <TableCell>{connection.activeInput}</TableCell>
                   <TableCell>{connection.previewInput}</TableCell>
-                  <TableCell>
-                    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
-                      <FormControlLabel
-                        control={
-                          <Switch
-                            checked={autoRefreshConfig[connection.host]?.enabled || false}
-                            onChange={(e) => {
-                              setAutoRefreshConfig(prev => ({
-                                ...prev,
-                                [connection.host]: {
-                                  enabled: e.target.checked,
-                                  duration: prev[connection.host]?.duration || 5
-                                }
-                              }));
-                            }}
-                            size="small"
-                          />
-                        }
-                        label={autoRefreshConfig[connection.host]?.enabled ? 'ON' : 'OFF'}
-                        sx={{ margin: 0 }}
-                      />
-                      {autoRefreshConfig[connection.host]?.enabled && (
-                        <Typography variant="caption" color="textSecondary">
-                          {autoRefreshConfig[connection.host]?.duration || 5}s
-                        </Typography>
-                      )}
-                    </Box>
-                  </TableCell>
                   <TableCell align="right">
                     <IconButton
                       onClick={(e) => handleMenuClick(e, connection)}
@@ -329,17 +206,6 @@ const Connections: React.FC = () => {
                     >
                       <MoreVertIcon />
                     </IconButton>
-                    <Button
-                      size="small"
-                      onClick={() => {
-                        setShowAutoRefreshSettings(
-                          showAutoRefreshSettings === connection.host ? null : connection.host
-                        );
-                      }}
-                      sx={{ mr: 1 }}
-                    >
-                      Settings
-                    </Button>
                     <IconButton 
                       color="error" 
                       onClick={() => handleDelete(connection.id)}
@@ -347,53 +213,8 @@ const Connections: React.FC = () => {
                       <DeleteIcon />
                     </IconButton>
                   </TableCell>
-                </TableRow>,
-                showAutoRefreshSettings === connection.host && (
-                  <TableRow key={`${connection.id}-settings`}>
-                    <TableCell colSpan={6}>
-                      <Collapse in={showAutoRefreshSettings === connection.host}>
-                        <Box sx={{ p: 2, bgcolor: '#f5f5f5' }}>
-                          <Typography variant="subtitle2" gutterBottom>
-                            Auto-Refresh Settings for {connection.host}
-                          </Typography>
-                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mt: 1 }}>
-                            <Typography variant="body2" sx={{ minWidth: '120px' }}>
-                              Refresh Duration:
-                            </Typography>
-                            <Slider
-                              value={autoRefreshConfig[connection.host]?.duration || 5}
-                              onChange={(_, value) => {
-                                setAutoRefreshConfig(prev => ({
-                                  ...prev,
-                                  [connection.host]: {
-                                    enabled: prev[connection.host]?.enabled || false,
-                                    duration: value as number
-                                  }
-                                }));
-                              }}
-                              min={1}
-                              max={30}
-                              step={1}
-                              marks={[
-                                { value: 1, label: '1s' },
-                                { value: 5, label: '5s' },
-                                { value: 10, label: '10s' },
-                                { value: 30, label: '30s' }
-                              ]}
-                              valueLabelDisplay="auto"
-                              valueLabelFormat={(value) => `${value}s`}
-                              sx={{ width: 200, mx: 2 }}
-                            />
-                            <Typography variant="body2">
-                              {autoRefreshConfig[connection.host]?.duration || 5} seconds
-                            </Typography>
-                          </Box>
-                        </Box>
-                      </Collapse>
-                    </TableCell>
-                  </TableRow>
-                )
-              ]).flat().filter(Boolean)
+                </TableRow>
+              ))
             )}
           </TableBody>
         </Table>
