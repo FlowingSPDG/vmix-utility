@@ -184,12 +184,28 @@ struct AppState {
 
 impl AppState {
     fn new() -> Self {
-        Self {
+        let state = Self {
             connections: Arc::new(Mutex::new(Vec::new())),
             auto_refresh_configs: Arc::new(Mutex::new(HashMap::new())),
             last_status_cache: Arc::new(Mutex::new(HashMap::new())),
             inputs_cache: Arc::new(Mutex::new(HashMap::new())),
-        }
+        };
+        
+        // Add localhost connection on startup
+        state.add_localhost_connection();
+        
+        state
+    }
+    
+    fn add_localhost_connection(&self) {
+        let localhost_client = VmixHttpClient::new("localhost", 8088);
+        
+        // Add to connections
+        self.connections.lock().unwrap().push(localhost_client);
+        
+        // Initialize auto-refresh config for localhost
+        self.auto_refresh_configs.lock().unwrap()
+            .insert("localhost".to_string(), AutoRefreshConfig::default());
     }
 
     fn start_auto_refresh_task(&self, app_handle: tauri::AppHandle) {
@@ -353,21 +369,28 @@ struct VmixConnection {
 
 #[tauri::command]
 async fn connect_vmix(state: tauri::State<'_, AppState>, host: String) -> Result<VmixConnection, String> {
-    // Check if this IP is already connected
-    {
-        let connections = state.connections.lock().unwrap();
-        if connections.iter().any(|c| c.host() == host) {
-            return Err(format!("Host {} is already connected", host));
-        }
-    }
-    
     let vmix = VmixHttpClient::new(&host, 8088);
     let status = vmix.get_status().await.unwrap_or(false);
     
-    state.connections.lock().unwrap().push(vmix.clone());
-    // Initialize auto-refresh config for new connection
-    state.auto_refresh_configs.lock().unwrap()
-        .insert(host.clone(), AutoRefreshConfig::default());
+    // Check if this IP is already connected
+    {
+        let mut connections = state.connections.lock().unwrap();
+        if let Some(existing_index) = connections.iter().position(|c| c.host() == host) {
+            // Replace existing connection (for reconnection)
+            connections[existing_index] = vmix.clone();
+        } else {
+            // Add new connection
+            connections.push(vmix.clone());
+        }
+    }
+    
+    // Initialize or update auto-refresh config
+    {
+        let mut configs = state.auto_refresh_configs.lock().unwrap();
+        if !configs.contains_key(&host) {
+            configs.insert(host.clone(), AutoRefreshConfig::default());
+        }
+    }
     
     let active_input = vmix.get_active_input().await.unwrap_or(0);
     let preview_input = vmix.get_preview_input().await.unwrap_or(0);

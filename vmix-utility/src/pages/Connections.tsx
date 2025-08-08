@@ -33,6 +33,7 @@ import DeleteIcon from '@mui/icons-material/Delete';
 import RefreshIcon from '@mui/icons-material/Refresh';
 import MoreVertIcon from '@mui/icons-material/MoreVert';
 import PlayArrowIcon from '@mui/icons-material/PlayArrow';
+import ReconnectIcon from '@mui/icons-material/Refresh';
 
 interface Connection {
   id: number;
@@ -112,6 +113,16 @@ const Connections: React.FC = () => {
     } catch (error) {
       console.error('Failed to disconnect:', error);
       setError(`Failed to disconnect from ${connection.host}: ${error}`);
+    }
+  };
+
+  const handleReconnect = async (host: string) => {
+    setError(null);
+    try {
+      await connectVMix(host);
+    } catch (error) {
+      console.error('Failed to reconnect:', error);
+      setError(`Failed to reconnect to ${host}: ${error}`);
     }
   };
 
@@ -244,12 +255,22 @@ const Connections: React.FC = () => {
                     })()}
                   </TableCell>
                   <TableCell align="right">
-                    <IconButton
-                      onClick={(e) => handleMenuClick(e, connection)}
-                      disabled={connection.status !== 'Connected'}
-                    >
-                      <MoreVertIcon />
-                    </IconButton>
+                    {connection.status === 'Disconnected' ? (
+                      <IconButton
+                        color="primary"
+                        onClick={() => handleReconnect(connection.host)}
+                        title="Reconnect"
+                      >
+                        <ReconnectIcon />
+                      </IconButton>
+                    ) : (
+                      <IconButton
+                        onClick={(e) => handleMenuClick(e, connection)}
+                        disabled={connection.status !== 'Connected'}
+                      >
+                        <MoreVertIcon />
+                      </IconButton>
+                    )}
                     <IconButton 
                       color="error" 
                       onClick={() => handleDelete(connection.id)}
