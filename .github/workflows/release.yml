@@ -1,0 +1,100 @@
+name: 'Publish Release'
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  publish-tauri:
+    permissions:
+      contents: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: 'macos-latest'
+            args: '--target aarch64-apple-darwin'
+          - platform: 'macos-latest'
+            args: '--target x86_64-apple-darwin'
+          - platform: 'ubuntu-22.04'
+            args: ''
+          - platform: 'windows-latest'
+            args: '--target x86_64-pc-windows-msvc'
+
+    runs-on: ${{ matrix.platform }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install dependencies (ubuntu only)
+        if: matrix.platform == 'ubuntu-22.04'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.0-dev libappindicator3-dev librsvg2-dev patchelf
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.platform == 'macos-latest' && 'aarch64-apple-darwin,x86_64-apple-darwin' || '' }}
+
+      - name: Rust cache
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: './app/src-tauri -> target'
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install frontend dependencies
+        run: |
+          cd app
+          bun install
+
+      - name: Set build environment variables
+        shell: bash
+        run: |
+          echo "GIT_COMMIT_HASH=$(git rev-parse --short HEAD)" >> $GITHUB_ENV
+          echo "GIT_BRANCH=${GITHUB_REF_NAME}" >> $GITHUB_ENV
+          echo "BUILD_TIMESTAMP=$(date -u +"%Y-%m-%d %H:%M:%S UTC")" >> $GITHUB_ENV
+
+      - name: Build Tauri App
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_PRIVATE_KEY: ${{ secrets.TAURI_PRIVATE_KEY }}
+          TAURI_KEY_PASSWORD: ${{ secrets.TAURI_KEY_PASSWORD }}
+          GIT_COMMIT_HASH: ${{ env.GIT_COMMIT_HASH }}
+          GIT_BRANCH: ${{ env.GIT_BRANCH }}
+          BUILD_TIMESTAMP: ${{ env.BUILD_TIMESTAMP }}
+        with:
+          projectPath: './app'
+          tagName: v__VERSION__
+          releaseName: 'vmix-utility v__VERSION__'
+          releaseBody: |
+            ## What's Changed
+            - Auto-generated release from GitHub Actions
+            - Built from commit: ${{ env.GIT_COMMIT_HASH }}
+            - Branch: ${{ env.GIT_BRANCH }}
+            - Build time: ${{ env.BUILD_TIMESTAMP }}
+
+            ## Download
+            Select the appropriate installer for your platform:
+            - **Windows**: `.msi` file
+            - **macOS**: `.dmg` file  
+            - **Linux**: `.AppImage` file
+
+            ## Auto-Update
+            This release supports automatic updates. The app will check for updates on startup and you can manually check via the system tray menu.
+
+            See the assets below to download and install this version.
+          releaseDraft: false
+          includeUpdaterJson: true
+          args: ${{ matrix.args }}

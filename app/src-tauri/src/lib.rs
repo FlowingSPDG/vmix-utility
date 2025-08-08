@@ -945,6 +945,94 @@ async fn open_logs_directory(app_handle: tauri::AppHandle) -> Result<(), String>
     Ok(())
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct UpdateInfo {
+    available: bool,
+    current_version: String,
+    latest_version: Option<String>,
+    body: Option<String>,
+}
+
+#[tauri::command]
+async fn check_for_updates(app_handle: tauri::AppHandle) -> Result<UpdateInfo, String> {
+    app_log!(info, "Checking for updates...");
+    
+    let current_version = app_handle.package_info().version.to_string();
+    
+    match tauri_plugin_updater::UpdaterExt::updater(&app_handle) {
+        Ok(updater) => {
+            match updater.check().await {
+                Ok(Some(update)) => {
+                    app_log!(info, "Update available: {} -> {}", current_version, update.version);
+                    Ok(UpdateInfo {
+                        available: true,
+                        current_version,
+                        latest_version: Some(update.version.clone()),
+                        body: update.body.clone(),
+                    })
+                }
+                Ok(None) => {
+                    app_log!(info, "No updates available");
+                    Ok(UpdateInfo {
+                        available: false,
+                        current_version,
+                        latest_version: None,
+                        body: None,
+                    })
+                }
+                Err(e) => {
+                    app_log!(error, "Failed to check for updates: {}", e);
+                    Err(format!("Failed to check for updates: {}", e))
+                }
+            }
+        }
+        Err(e) => {
+            app_log!(error, "Failed to get updater instance: {}", e);
+            Err(format!("Failed to get updater instance: {}", e))
+        }
+    }
+}
+
+#[tauri::command]
+async fn install_update(app_handle: tauri::AppHandle) -> Result<(), String> {
+    app_log!(info, "Starting update installation...");
+    
+    match tauri_plugin_updater::UpdaterExt::updater(&app_handle) {
+        Ok(updater) => {
+            match updater.check().await {
+                Ok(Some(update)) => {
+                    app_log!(info, "Installing update: {}", update.version);
+                    match update.download_and_install(|chunk_length, content_length| {
+                        app_log!(debug, "Downloaded {} of {} bytes", chunk_length, content_length.unwrap_or(0));
+                    }, || {
+                        app_log!(info, "Update downloaded successfully, restarting application...");
+                    }).await {
+                        Ok(_) => {
+                            app_log!(info, "Update installed successfully");
+                            Ok(())
+                        }
+                        Err(e) => {
+                            app_log!(error, "Failed to install update: {}", e);
+                            Err(format!("Failed to install update: {}", e))
+                        }
+                    }
+                }
+                Ok(None) => {
+                    Err("No update available".to_string())
+                }
+                Err(e) => {
+                    app_log!(error, "Failed to check for updates during installation: {}", e);
+                    Err(format!("Failed to check for updates: {}", e))
+                }
+            }
+        }
+        Err(e) => {
+            app_log!(error, "Failed to get updater instance for installation: {}", e);
+            Err(format!("Failed to get updater instance: {}", e))
+        }
+    }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     // Initialize env_logger for console output
@@ -955,6 +1043,7 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_shell::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .on_window_event(|window, event| {
             match event {
                 tauri::WindowEvent::CloseRequested { api, .. } => {
@@ -979,10 +1068,11 @@ pub fn run() {
 
             // system tray icon
             let show_i = MenuItem::with_id(app, "show", "Show", true, None::<&str>)?;
+            let check_update_i = MenuItem::with_id(app, "check_update", "Check Update", true, None::<&str>)?;
             let quit_i = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
-            let menu = Menu::with_items(app, &[&show_i, &quit_i])?;
+            let menu = Menu::with_items(app, &[&show_i, &check_update_i, &quit_i])?;
 
-            let tray = TrayIconBuilder::new()
+            let _tray = TrayIconBuilder::new()
                 .menu(&menu)
                 .show_menu_on_left_click(false)
                 .on_tray_icon_event(|tray, event| {
@@ -1008,6 +1098,50 @@ pub fn run() {
                             let _ = window.set_focus();
                         }
                     }
+                    "check_update" => {
+                        let app_handle = app.clone();
+                        tauri::async_runtime::spawn(async move {
+                            match tauri_plugin_updater::UpdaterExt::updater(&app_handle) {
+                                Ok(updater) => {
+                                    match updater.check().await {
+                                        Ok(Some(update)) => {
+                                            app_log!(info, "Update available from tray: {} -> {}", app_handle.package_info().version, update.version);
+                                            
+                                            let update_info = UpdateInfo {
+                                                available: true,
+                                                current_version: app_handle.package_info().version.to_string(),
+                                                latest_version: Some(update.version.clone()),
+                                                body: update.body.clone(),
+                                            };
+                                            let _ = app_handle.emit("update-available", &update_info);
+                                            
+                                            // Show main window when update is found
+                                            if let Some(window) = app_handle.get_webview_window("main") {
+                                                let _ = window.show();
+                                                let _ = window.set_focus();
+                                            }
+                                        }
+                                        Ok(None) => {
+                                            app_log!(info, "No updates available from tray check");
+                                            let update_info = UpdateInfo {
+                                                available: false,
+                                                current_version: app_handle.package_info().version.to_string(),
+                                                latest_version: None,
+                                                body: None,
+                                            };
+                                            let _ = app_handle.emit("update-checked", &update_info);
+                                        }
+                                        Err(e) => {
+                                            app_log!(error, "Failed to check for updates from tray: {}", e);
+                                        }
+                                    }
+                                }
+                                Err(e) => {
+                                    app_log!(error, "Failed to get updater instance from tray: {}", e);
+                                }
+                            }
+                        });
+                    }
                     "quit" => {
                         std::process::exit(0);
                     }
@@ -1031,6 +1165,40 @@ pub fn run() {
                 app_state.start_auto_refresh_task(app_handle_refresh);
             });
             
+            // Check for updates on startup
+            let app_handle_update = app_handle.clone();
+            tauri::async_runtime::spawn(async move {
+                tokio::time::sleep(tokio::time::Duration::from_secs(3)).await; // Wait 3 seconds after startup
+                
+                match tauri_plugin_updater::UpdaterExt::updater(&app_handle_update) {
+                    Ok(updater) => {
+                        match updater.check().await {
+                            Ok(Some(update)) => {
+                                app_log!(info, "Update available on startup: {} -> {}", app_handle_update.package_info().version, update.version);
+                                
+                                // Emit event to frontend about available update
+                                let update_info = UpdateInfo {
+                                    available: true,
+                                    current_version: app_handle_update.package_info().version.to_string(),
+                                    latest_version: Some(update.version.clone()),
+                                    body: update.body.clone(),
+                                };
+                                let _ = app_handle_update.emit("update-available", &update_info);
+                            }
+                            Ok(None) => {
+                                app_log!(info, "No updates available on startup");
+                            }
+                            Err(e) => {
+                                app_log!(error, "Failed to check for updates on startup: {}", e);
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        app_log!(error, "Failed to get updater instance on startup: {}", e);
+                    }
+                }
+            });
+            
             Ok(())
         })
         .manage(AppState::new())
@@ -1052,7 +1220,9 @@ pub fn run() {
             save_app_settings,
             get_app_settings,
             get_app_info,
-            open_logs_directory
+            open_logs_directory,
+            check_for_updates,
+            install_update
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

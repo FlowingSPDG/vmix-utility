@@ -271,9 +271,6 @@ const ShortcutGenerator = () => {
     }
   }, [selectedConnection, vmixStatusInputs]);
 
-  // Input type state for special input types
-  const [inputType, setInputType] = useState<string>('Input');
-
   // Generate shortcuts separately using useMemo for performance
   const generatedInputs = useMemo(() => {
     const specialInputs: Input[] = [];

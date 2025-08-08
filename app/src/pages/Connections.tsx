@@ -33,7 +33,6 @@ import {
 import AddIcon from '@mui/icons-material/Add';
 import DeleteIcon from '@mui/icons-material/Delete';
 import RefreshIcon from '@mui/icons-material/Refresh';
-import MoreVertIcon from '@mui/icons-material/MoreVert';
 import ReconnectIcon from '@mui/icons-material/Refresh';
 import EditIcon from '@mui/icons-material/Edit';
 
@@ -47,13 +46,12 @@ interface Connection {
 }
 
 const Connections: React.FC = () => {
-  const { connections: vmixConnections, loading: globalLoading, connectVMix, disconnectVMix, sendVMixFunction, autoRefreshConfigs, setAutoRefreshConfig, refreshConnections } = useVMixStatus();
+  const { connections: vmixConnections, loading: globalLoading, connectVMix, disconnectVMix, autoRefreshConfigs, setAutoRefreshConfig, refreshConnections } = useVMixStatus();
   const [connections, setConnections] = useState<Connection[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [open, setOpen] = useState(false);
   const [newHost, setNewHost] = useState('');
   const [connecting, setConnecting] = useState(false);
-  const [selectedConnection, setSelectedConnection] = useState<Connection | null>(null);
   const [labelDialogOpen, setLabelDialogOpen] = useState(false);
   const [editingConnection, setEditingConnection] = useState<Connection | null>(null);
   const [newLabel, setNewLabel] = useState('');
@@ -217,17 +215,6 @@ const Connections: React.FC = () => {
     setNewLabel('');
   };
 
-
-  const sendVmixFunction = async (functionName: string) => {
-    if (!selectedConnection) return;
-    
-    try {
-      await sendVMixFunction(selectedConnection.host, functionName);
-    } catch (error) {
-      console.error('Failed to send function:', error);
-      setError(`Failed to send ${functionName} to ${selectedConnection.host}: ${error}`);
-    }
-  };
 
   // Loading screen component
   const LoadingScreen = () => (

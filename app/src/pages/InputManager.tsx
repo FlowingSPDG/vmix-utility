@@ -71,7 +71,7 @@ const InputManager = () => {
   useEffect(() => {
     if (selectedConnection && globalInputs[selectedConnection]) {
       const vmixInputs = globalInputs[selectedConnection];
-      setInputs(vmixInputs.map((input, index) => ({
+      setInputs(vmixInputs.map((input, _index) => ({
         number: input.number,
         title: input.title,
         type: input.input_type,
@@ -89,12 +89,6 @@ const InputManager = () => {
 
   const handleEditClick = (input: Input) => {
     setEditingStates([...editingStates, input.key]);
-  };
-
-  const handleTitleChange = (key: string, value: string) => {
-    // 配列の場合は直接タイトルを更新できないので、
-    // 一時的な状態として別の方法で管理する必要がある
-    // ここでは編集状態の確認のみを行う
   };
 
   const handleSaveClick = async (key: string) => {

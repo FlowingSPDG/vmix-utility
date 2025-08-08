@@ -2,7 +2,7 @@
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "app",
   "version": "2.0.0",
-  "identifier": "com.vmix-utility.app",
+  "identifier": "com.flowingspdg.vmix-utility",
   "build": {
     "beforeDevCommand": "bun run dev",
     "devUrl": "http://localhost:1420",
@@ -31,6 +31,7 @@
   "bundle": {
     "active": true,
     "targets": "all",
+    "createUpdaterArtifacts": true,
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",
@@ -38,5 +39,13 @@
       "icons/icon.icns",
       "icons/icon.ico"
     ]
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEJFQTFCMDRDQURFNkYxMgpSV1FTYjk3S0JCdnFDNStGZnJNOVRLdjNHaGRObld3Ukcyekpyem13emhRcHoxOVV4Z0Fna0tQcAo=",
+      "endpoints": [
+        "https://github.com/Flowing-tech/vmix-utility/releases/latest/download/latest.json"
+      ]
+    }
   }
 }
