@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { openUrl } from '@tauri-apps/plugin-opener';
+import { useVMixStatus } from '../hooks/useVMixStatus';
 import {
   Box,
   Typography,
@@ -63,7 +64,7 @@ interface Input {
 }
 
 const ShortcutGenerator = () => {
-  const [connections, setConnections] = useState<VmixConnection[]>([]);
+  const { connections, inputs: vmixStatusInputs } = useVMixStatus();
   const [selectedConnection, setSelectedConnection] = useState<string>('');
   const [vmixInputs, setVmixInputs] = useState<VmixInput[]>([]);
   const [loading, setLoading] = useState(false);
@@ -73,53 +74,29 @@ const ShortcutGenerator = () => {
   );
   const [inputTypeFilter, setInputTypeFilter] = useState<string>('All');
   
-  // Get auto-refresh config from localStorage
-  const getAutoRefreshConfig = (host: string) => {
-    const stored = localStorage.getItem('vmix-auto-refresh-config');
-    if (stored) {
-      const config = JSON.parse(stored);
-      return config[host] || { enabled: true, duration: 3 };
-    }
-    return { enabled: true, duration: 3 };
-  };
-  
-  const setAutoRefreshConfig = (host: string, config: {enabled: boolean, duration: number}) => {
-    const stored = localStorage.getItem('vmix-auto-refresh-config');
-    const allConfig = stored ? JSON.parse(stored) : {};
-    allConfig[host] = config;
-    localStorage.setItem('vmix-auto-refresh-config', JSON.stringify(allConfig));
-  };
   
   // Shortcut generation state
   const [inputs, setInputs] = useState<Input[]>([]);
+  
+  // Shared function configuration
+  const [sharedFunctionName, setSharedFunctionName] = useState('PreviewInput');
+  const [sharedQueryParams, setSharedQueryParams] = useState<QueryParam[]>([]);
 
+  // Auto-select first available connection and update inputs when connections change
   useEffect(() => {
-    const fetchConnections = async () => {
-      try {
-        const vmixConnections = await invoke<VmixConnection[]>('get_vmix_statuses');
-        const connectedConnections = vmixConnections.filter(conn => conn.status === 'Connected');
-        setConnections(connectedConnections);
-        
-        // Auto-select first available connection
-        if (connectedConnections.length > 0 && !selectedConnection) {
-          const firstConnection = connectedConnections[0].host;
-          setSelectedConnection(firstConnection);
-          fetchInputs(firstConnection);
-        }
-      } catch (error) {
-        console.error('Failed to fetch vMix connections:', error);
-        setConnections([]);
-      }
-    };
+    const connectedConnections = connections.filter(conn => conn.status === 'Connected');
+    
+    // Auto-select first available connection if none selected
+    if (connectedConnections.length > 0 && !selectedConnection) {
+      const firstConnection = connectedConnections[0].host;
+      setSelectedConnection(firstConnection);
+    }
+  }, [connections, selectedConnection]);
 
-    fetchConnections();
-  }, []);
-
-  const fetchInputs = async (host: string) => {
-    setLoading(true);
-    setError(null);
-    try {
-      const inputs = await invoke<VmixInput[]>('get_vmix_inputs', { host });
+  // Update vmixInputs when vmixStatusInputs changes for selected connection
+  useEffect(() => {
+    if (selectedConnection && vmixStatusInputs[selectedConnection]) {
+      const inputs = vmixStatusInputs[selectedConnection];
       setVmixInputs(inputs);
       
       // Generate default shortcuts for all inputs using shared settings
@@ -135,30 +112,16 @@ const ShortcutGenerator = () => {
       }));
       
       setInputs(defaultShortcuts);
-      // Reset filter when inputs change
       setInputTypeFilter('All');
-    } catch (error) {
-      console.error('Failed to fetch vMix inputs:', error);
-      setError(`Failed to fetch inputs: ${error}`);
-      setVmixInputs([]);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleConnectionChange = (host: string) => {
-    setSelectedConnection(host);
-    if (host) {
-      fetchInputs(host);
     } else {
       setVmixInputs([]);
       setInputs([]);
     }
-  };
+  }, [selectedConnection, vmixStatusInputs, sharedFunctionName, sharedQueryParams]);
 
-  // Shared function configuration
-  const [sharedFunctionName, setSharedFunctionName] = useState('Cut');
-  const [sharedQueryParams, setSharedQueryParams] = useState<QueryParam[]>([]);
+  const handleConnectionChange = (host: string) => {
+    setSelectedConnection(host);
+  };
   
   // State for new query param
   const [newParamKey, setNewParamKey] = useState('');
@@ -215,19 +178,6 @@ const ShortcutGenerator = () => {
     }
   }, [sharedFunctionName, sharedQueryParams]);
 
-  // Auto-refresh inputs based on connection-specific settings
-  useEffect(() => {
-    if (!selectedConnection) return;
-    
-    const config = getAutoRefreshConfig(selectedConnection);
-    if (!config.enabled) return;
-    
-    const interval = setInterval(() => {
-      fetchInputs(selectedConnection);
-    }, config.duration * 1000);
-    
-    return () => clearInterval(interval);
-  }, [selectedConnection]);
 
   const showToast = (message: string, severity: 'success' | 'error' | 'info' = 'success') => {
     setToast({open: true, message, severity});
@@ -409,36 +359,7 @@ const ShortcutGenerator = () => {
               </Select>
             </FormControl>
             
-            {/* Auto-refresh Toggle */}
-            {selectedConnection && (() => {
-              const config = getAutoRefreshConfig(selectedConnection);
-              return (
-                <Button 
-                  variant={config.enabled ? "contained" : "outlined"}
-                  color={config.enabled ? "success" : "primary"}
-                  onClick={() => {
-                    const newConfig = { ...config, enabled: !config.enabled };
-                    setAutoRefreshConfig(selectedConnection, newConfig);
-                    // Force re-render by updating a dummy state
-                    setError(prev => prev);
-                  }}
-                  size="small"
-                >
-                  {config.enabled ? `Auto-Refresh ON (${config.duration}s)` : "Auto-Refresh OFF"}
-                </Button>
-              );
-            })()}
             
-            {/* Manual Refresh */}
-            <Button
-              variant="outlined"
-              startIcon={<RefreshIcon />}
-              onClick={() => selectedConnection && fetchInputs(selectedConnection)}
-              disabled={loading || !selectedConnection}
-              size="small"
-            >
-              Refresh
-            </Button>
           </Box>
         )}
       </Paper>

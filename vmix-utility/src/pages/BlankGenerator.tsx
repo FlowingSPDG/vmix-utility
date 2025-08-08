@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { invoke } from '@tauri-apps/api/core';
+import { useVMixStatus } from '../hooks/useVMixStatus';
 import type { SelectChangeEvent } from '@mui/material';
 import {
   Box,
@@ -38,6 +39,7 @@ interface Connection {
 }
 
 const BlankGenerator = () => {
+  const { connections: vmixConnections } = useVMixStatus();
   const [transparent, setTransparent] = useState(false);
   const [count, setCount] = useState(1);
   const [generated, setGenerated] = useState(false);
@@ -46,33 +48,22 @@ const BlankGenerator = () => {
   const [showConfirmDialog, setShowConfirmDialog] = useState(false);
   const [generating, setGenerating] = useState(false);
 
-  // 接続一覧を取得
+  // Transform connections from useVMixStatus
   useEffect(() => {
-    const fetchConnections = async () => {
-      try {
-        const vmixConnections = await invoke<VmixConnection[]>('get_vmix_statuses');
-        const mappedConnections = vmixConnections.map((conn, index) => ({
-          id: index + 1,
-          host: conn.host,
-          label: conn.label,
-          status: conn.status,
-        }));
-        setConnections(mappedConnections);
-        
-        // Auto-select first available connection
-        const connectedConnections = mappedConnections.filter(conn => conn.status === 'Connected');
-        if (connectedConnections.length > 0 && selectedConnection === '') {
-          setSelectedConnection(connectedConnections[0].id);
-        }
-      } catch (error) {
-        console.error('Failed to fetch vMix connections:', error);
-        // Set empty connections if no connections available
-        setConnections([]);
-      }
-    };
-
-    fetchConnections();
-  }, []);
+    const mappedConnections = vmixConnections.map((conn, index) => ({
+      id: index + 1,
+      host: conn.host,
+      label: conn.label,
+      status: conn.status as 'Connected' | 'Disconnected',
+    }));
+    setConnections(mappedConnections);
+    
+    // Auto-select first available connection
+    const connectedConnections = mappedConnections.filter(conn => conn.status === 'Connected');
+    if (connectedConnections.length > 0 && selectedConnection === '') {
+      setSelectedConnection(connectedConnections[0].id);
+    }
+  }, [vmixConnections, selectedConnection]);
 
   const handleTransparentChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     setTransparent(event.target.checked);

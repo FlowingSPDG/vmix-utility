@@ -21,7 +21,12 @@ import {
   Chip,
   IconButton,
   Menu,
-  MenuItem
+  MenuItem,
+  Switch,
+  FormControlLabel,
+  Select,
+  FormControl,
+  InputLabel
 } from '@mui/material';
 import AddIcon from '@mui/icons-material/Add';
 import DeleteIcon from '@mui/icons-material/Delete';
@@ -39,7 +44,7 @@ interface Connection {
 }
 
 const Connections: React.FC = () => {
-  const { connections: vmixConnections, loading: globalLoading, connectVMix, disconnectVMix, sendVMixFunction } = useVMixStatus();
+  const { connections: vmixConnections, loading: globalLoading, connectVMix, disconnectVMix, sendVMixFunction, autoRefreshConfigs, setAutoRefreshConfig } = useVMixStatus();
   const [connections, setConnections] = useState<Connection[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -128,22 +133,13 @@ const Connections: React.FC = () => {
         <Typography variant="h4" component="h1">
           vMix Connections
         </Typography>
-        <Box sx={{ display: 'flex', gap: 1 }}>
-          <Button 
-            variant="outlined" 
-            startIcon={<RefreshIcon />}
-            disabled={globalLoading}
-          >
-            {globalLoading ? 'Auto-Refreshing...' : 'Auto-Refresh Active'}
-          </Button>
-          <Button 
-            variant="contained" 
-            startIcon={<AddIcon />}
-            onClick={handleClickOpen}
-          >
-            Add Connection
-          </Button>
-        </Box>
+        <Button 
+          variant="contained" 
+          startIcon={<AddIcon />}
+          onClick={handleClickOpen}
+        >
+          Add Connection
+        </Button>
       </Box>
 
       {error && (
@@ -160,19 +156,20 @@ const Connections: React.FC = () => {
               <TableCell>Status</TableCell>
               <TableCell>Active Input</TableCell>
               <TableCell>Preview Input</TableCell>
+              <TableCell>Auto-Refresh</TableCell>
               <TableCell align="right">Actions</TableCell>
             </TableRow>
           </TableHead>
           <TableBody>
             {loading ? (
               <TableRow>
-                <TableCell colSpan={5} align="center">
+                <TableCell colSpan={6} align="center">
                   <CircularProgress />
                 </TableCell>
               </TableRow>
             ) : connections.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={5} align="center">
+                <TableCell colSpan={6} align="center">
                   <Typography color="textSecondary">
                     No vMix connections. Add a connection to get started.
                   </Typography>
@@ -199,6 +196,43 @@ const Connections: React.FC = () => {
                   </TableCell>
                   <TableCell>{connection.activeInput}</TableCell>
                   <TableCell>{connection.previewInput}</TableCell>
+                  <TableCell>
+                    {connection.status === 'Connected' && (() => {
+                      const config = autoRefreshConfigs[connection.host] || { enabled: false, duration: 3 };
+                      return (
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                          <Switch
+                            checked={config.enabled}
+                            onChange={async (e) => {
+                              await setAutoRefreshConfig(connection.host, {
+                                ...config,
+                                enabled: e.target.checked
+                              });
+                            }}
+                            size="small"
+                          />
+                          {config.enabled && (
+                            <FormControl size="small" sx={{ minWidth: 70 }}>
+                              <Select
+                                value={config.duration}
+                                onChange={async (e) => {
+                                  await setAutoRefreshConfig(connection.host, {
+                                    ...config,
+                                    duration: Number(e.target.value)
+                                  });
+                                }}
+                              >
+                                <MenuItem value={1}>1s</MenuItem>
+                                <MenuItem value={3}>3s</MenuItem>
+                                <MenuItem value={5}>5s</MenuItem>
+                                <MenuItem value={10}>10s</MenuItem>
+                              </Select>
+                            </FormControl>
+                          )}
+                        </Box>
+                      );
+                    })()}
+                  </TableCell>
                   <TableCell align="right">
                     <IconButton
                       onClick={(e) => handleMenuClick(e, connection)}

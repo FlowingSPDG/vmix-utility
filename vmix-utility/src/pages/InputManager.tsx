@@ -56,7 +56,7 @@ type Order = 'asc' | 'desc';
 type OrderBy = 'number' | 'title' | 'type';
 
 const InputManager = () => {
-  const { connections, inputs: globalInputs, getVMixInputs, sendVMixFunction } = useVMixStatus();
+  const { connections, inputs: globalInputs, sendVMixFunction } = useVMixStatus();
   const [inputs, setInputs] = useState<Input[]>([]);
   const [selectedConnection, setSelectedConnection] = useState<string>('');
   const [loading, setLoading] = useState(false);
@@ -93,35 +93,8 @@ const InputManager = () => {
     }
   }, [selectedConnection, globalInputs]);
 
-  const fetchInputs = async (host: string) => {
-    setLoading(true);
-    setError(null);
-    try {
-      const vmixInputs = await getVMixInputs(host);
-      setInputs(vmixInputs.map((input: VmixInput, index: number) => ({
-        id: index + 1,
-        number: input.number,
-        title: input.title,
-        type: input.input_type,
-        key: input.key,
-        state: input.state,
-      })));
-    } catch (error) {
-      console.error('Failed to fetch vMix inputs:', error);
-      setError(`Failed to fetch inputs from ${host}: ${error}`);
-      setInputs([]);
-    } finally {
-      setLoading(false);
-    }
-  };
-
   const handleConnectionChange = (host: string) => {
     setSelectedConnection(host);
-    if (host) {
-      fetchInputs(host);
-    } else {
-      setInputs([]);
-    }
   };
 
   const handleEditClick = (input: Input) => {
@@ -230,16 +203,6 @@ const InputManager = () => {
           </Alert>
         )}
 
-        {selectedConnection && (
-          <Button 
-            variant="outlined" 
-            onClick={() => fetchInputs(selectedConnection)}
-            disabled={loading}
-          >
-            {loading ? <CircularProgress size={20} sx={{ mr: 1 }} /> : null}
-            Refresh Inputs
-          </Button>
-        )}
       </Paper>
       
       <TableContainer component={Paper}>
