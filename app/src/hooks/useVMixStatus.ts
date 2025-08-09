@@ -4,6 +4,7 @@ import { invoke } from '@tauri-apps/api/core';
 
 interface VmixConnection {
   host: string;
+  port: number;
   label: string;
   status: string;
   active_input: number;
@@ -28,7 +29,7 @@ interface VMixStatusContextType {
   autoRefreshConfigs: Record<string, AutoRefreshConfig>;
   loading: boolean;
   inputs: Record<string, VmixInput[]>; // inputs by host
-  connectVMix: (host: string) => Promise<VmixConnection>;
+  connectVMix: (host: string, port?: number) => Promise<VmixConnection>;
   disconnectVMix: (host: string) => Promise<void>;
   setAutoRefreshConfig: (host: string, config: AutoRefreshConfig) => Promise<void>;
   getAutoRefreshConfig: (host: string) => Promise<AutoRefreshConfig>;
@@ -140,9 +141,9 @@ export const VMixStatusProvider = ({ children }: { children: React.ReactNode }) 
     loadInitialData();
   }, [loadConnections, loadAutoRefreshConfigs]);
 
-  const connectVMix = async (host: string): Promise<VmixConnection> => {
+  const connectVMix = async (host: string, port?: number): Promise<VmixConnection> => {
     try {
-      const connection = await invoke<VmixConnection>('connect_vmix', { host });
+      const connection = await invoke<VmixConnection>('connect_vmix', { host, port });
       setConnections(prev => {
         const existingIndex = prev.findIndex(conn => conn.host === host);
         if (existingIndex >= 0) {
