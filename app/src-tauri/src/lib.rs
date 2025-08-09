@@ -5,27 +5,22 @@ use std::sync::{Arc, Mutex};
 use std::collections::HashMap;
 use std::time::{Duration, Instant};
 use std::path::PathBuf;
-use reqwest;
-use quick_xml::de;
 use tokio::time::{interval, sleep};
 use tokio::fs;
 use tauri::{Emitter, Manager};
-use url::Url;
 use tauri::{
-    menu::{Menu, MenuItem},
-    WindowEvent
+    menu::{Menu, MenuItem}
 };
-use log::{info, warn, error, debug, trace};
-use chrono::{DateTime, Local};
+use log::info;
+use chrono::Local;
 use once_cell::sync::Lazy;
 use std::io::Write;
 use std::fs::OpenOptions;
-use tauri_plugin_shell::ShellExt;
 use vmix_rs::http::HttpVmixClient;
-use vmix_rs::traits::VmixApiClient;
 // Duration already imported above
 
 #[derive(Debug, Deserialize)]
+#[allow(dead_code)]
 struct VmixXml {
     version: String,
     edition: String,
@@ -220,6 +215,7 @@ impl Default for AutoRefreshConfig {
 
 // Wrapper for HttpVmixClient to include host information
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 struct VmixClientWrapper {
     client: HttpVmixClient,
     host: String,
@@ -735,7 +731,6 @@ async fn connect_vmix(state: tauri::State<'_, AppState>, app_handle: tauri::AppH
     // Check if this IP is already connected
     {
         let mut connections = state.connections.lock().unwrap();
-        let temp_vmix = vmix.clone();
         
         if let Some(existing_index) = connections.iter().position(|c| c.host() == host) {
             // Replace existing connection (for reconnection)
@@ -917,13 +912,13 @@ async fn save_settings(
 }
 
 #[tauri::command]
-async fn set_logging_config(level: String, saveToFile: bool) -> Result<(), String> {
-    println!("Setting logging configuration - level: {}, saveToFile: {}", level, saveToFile);
+async fn set_logging_config(level: String, save_to_file: bool) -> Result<(), String> {
+    println!("Setting logging configuration - level: {}, save_to_file: {}", level, save_to_file);
     
     {
         let mut config = LOGGING_CONFIG.lock().unwrap();
         config.level = level.clone();
-        config.save_to_file = saveToFile;
+        config.save_to_file = save_to_file;
     } // ここでlockを解放
     
     println!("Logging configuration updated successfully");
@@ -1003,9 +998,8 @@ async fn open_logs_directory(app_handle: tauri::AppHandle) -> Result<(), String>
         std::fs::create_dir_all(&logs_dir).map_err(|e| e.to_string())?;
     }
     
-    // Use tauri-plugin-shell to open the directory
-    let shell = app_handle.shell();
-    shell.open(logs_dir.to_string_lossy().to_string(), None).map_err(|e| e.to_string())?;
+    // Use tauri-plugin-opener to open the directory
+    tauri_plugin_opener::open_path(&logs_dir, None::<&str>).map_err(|e| e.to_string())?;
     
     println!("Opened logs directory: {:?}", logs_dir);
     
