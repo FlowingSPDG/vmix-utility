@@ -228,8 +228,7 @@ const ShortcutGenerator = () => {
   const getFilteredShortcuts = (searchTerm: string) => {
     if (!searchTerm) return [];
     return shortcutsData.filter(shortcut => 
-      shortcut.Name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      shortcut.Description.toLowerCase().includes(searchTerm.toLowerCase())
+      shortcut.Name.toLowerCase().includes(searchTerm.toLowerCase())
     );
   };
   const { connections, inputs: vmixStatusInputs, loading: globalLoading } = useVMixStatus();
@@ -539,7 +538,7 @@ const ShortcutGenerator = () => {
             )}
             filterOptions={(_options, { inputValue }) => {
               const filtered = getFilteredShortcuts(inputValue);
-              return filtered.slice(0, 10); // Limit to 10 suggestions
+              return filtered
             }}
           />
           
