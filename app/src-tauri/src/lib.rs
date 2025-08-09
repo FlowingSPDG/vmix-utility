@@ -21,6 +21,9 @@ use once_cell::sync::Lazy;
 use std::io::Write;
 use std::fs::OpenOptions;
 use tauri_plugin_shell::ShellExt;
+use vmix_rs::http::HttpVmixClient;
+use vmix_rs::traits::VmixApiClient;
+// Duration already imported above
 
 #[derive(Debug, Deserialize)]
 struct VmixXml {
@@ -62,11 +65,7 @@ struct VmixInput {
     state: String,
 }
 
-#[derive(Debug, Clone)]
-struct VmixHttpClient {
-    base_url: String,
-    client: reqwest::Client,
-}
+// Using vmix_rs::http::VmixHttpClient instead of custom implementation
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct AutoRefreshConfig {
@@ -219,112 +218,162 @@ impl Default for AutoRefreshConfig {
     }
 }
 
-impl VmixHttpClient {
-    fn new(host: &str, port: u16) -> Self {
-        Self {
-            base_url: format!("http://{}:{}/api", host, port),
-            client: reqwest::Client::new(),
-        }
-    }
+// Wrapper for HttpVmixClient to include host information
+#[derive(Debug, Clone)]
+struct VmixClientWrapper {
+    client: HttpVmixClient,
+    host: String,
+    port: u16,
+}
 
-    async fn get_vmix_data(&self) -> Result<VmixXml> {
-        let response = self.client
-            .get(&self.base_url)
-            .send()
-            .await?;
-        
-        let xml_text = response.text().await?;
-        let vmix_data: VmixXml = de::from_str(&xml_text)?;
-        Ok(vmix_data)
+impl VmixClientWrapper {
+    fn new(host: &str, port: u16) -> Self {
+        let client = HttpVmixClient::new_with_host_port(host, port, Duration::from_secs(10));
+        Self {
+            client,
+            host: host.to_string(),
+            port,
+        }
     }
 
     async fn get_status(&self) -> Result<bool> {
-        match self.get_vmix_data().await {
-            Ok(_) => Ok(true),
-            Err(_) => Ok(false),
-        }
-    }
-
-    async fn send_function(&self, function_name: &str, params: &HashMap<String, String>) -> Result<()> {
-        // Parse base URL and add query parameters using url::Url
-        let mut url = Url::parse(&self.base_url)?;
-        
-        // Add Function parameter automatically
-        url.query_pairs_mut().append_pair("Function", function_name);
-        
-        // Add all parameters from HashMap
-        for (key, value) in params {
-            url.query_pairs_mut().append_pair(key, value);
-        }
-        
-        app_log!(debug, "Sending vMix function: {} to {} with params: {:?}", function_name, self.host(), params);
-        
-        let response = self.client
-            .get(url.as_str())
-            .send()
-            .await?;
-        
-        // HTTP API only returns success/failure, not data
-        if response.status().is_success() {
-            app_log!(info, "Successfully sent vMix function: {} to {}", function_name, self.host());
-            Ok(())
-        } else {
-            app_log!(error, "Failed to send vMix function: {} to {}, status: {}", function_name, self.host(), response.status());
-            Err(anyhow::anyhow!("Function failed"))
-        }
+        Ok(self.client.is_connected().await)
     }
 
     async fn get_active_input(&self) -> Result<i32> {
-        let vmix_data = self.get_vmix_data().await?;
-        if let Some(active) = vmix_data.active {
-            Ok(active.parse().unwrap_or(0))
-        } else {
-            Ok(0)
-        }
+        let active = self.client.get_active_input().await?;
+        Ok(active as i32)
     }
 
     async fn get_preview_input(&self) -> Result<i32> {
-        let vmix_data = self.get_vmix_data().await?;
-        if let Some(preview) = vmix_data.preview {
-            Ok(preview.parse().unwrap_or(0))
-        } else {
-            Ok(0)
-        }
+        let preview = self.client.get_preview_input().await?;
+        Ok(preview as i32)
+    }
+
+    async fn send_function(&self, function_name: &str, params: &HashMap<String, String>) -> Result<()> {
+        app_log!(info, "Sending vMix function: {} to {} with params: {:?}", function_name, self.host(), params);
+        
+        self.client.execute_function(function_name, params).await?;
+        
+        app_log!(info, "Successfully sent vMix function: {} to {}", function_name, self.host());
+        Ok(())
+    }
+
+    async fn get_vmix_data(&self) -> Result<VmixXml> {
+        let vmix_state = self.client.get_xml_state().await?;
+        // Convert vmix-rs Vmix struct to our VmixXml format
+        Ok(VmixXml {
+            version: vmix_state.version,
+            edition: vmix_state.edition,
+            preset: Some(vmix_state.preset),
+            inputs: Inputs {
+                input: vmix_state.inputs.input.into_iter().map(|input| Input {
+                    key: input.key,
+                    number: input.number.to_string(),
+                    title: input.title.clone(),
+                    input_type: Some(input.input_type),
+                    state: Some("Unknown".to_string()), // TODO: Convert State enum properly
+                }).collect(),
+            },
+            active: Some(vmix_state.active),
+            preview: Some(vmix_state.preview),
+        })
     }
 
     fn host(&self) -> &str {
-        // Extract host from base_url
-        let start = "http://".len();
-        let end = self.base_url[start..].find(':').map(|i| start + i).unwrap_or(self.base_url.len());
-        &self.base_url[start..end]
+        &self.host
     }
 }
 
+// Old VmixHttpClient implementation removed - using vmix-rs HttpVmixClient via VmixClientWrapper
+
 // Additional Tauri command for sending vMix functions
 #[tauri::command]
-async fn send_vmix_function(host: String, function_name: String, params: Option<HashMap<String, String>>) -> Result<String, String> {
-    let vmix = VmixHttpClient::new(&host, 8088);
+async fn send_vmix_function(state: tauri::State<'_, AppState>, host: String, function_name: String, params: Option<HashMap<String, String>>) -> Result<String, String> {
     let params_map = params.unwrap_or_default();
     
     app_log!(info, "Sending vMix function command: {} to host: {}", function_name, host);
     
-    match vmix.send_function(&function_name, &params_map).await {
-        Ok(_) => {
-            app_log!(info, "vMix function command sent successfully: {}", function_name);
-            Ok("Function sent successfully".to_string())
+    // First check if connection exists
+    let has_connection = {
+        let connections = state.connections.lock().unwrap();
+        connections.iter().any(|c| c.host() == host)
+    };
+    
+    if has_connection {
+        // Use existing connection - need to clone to avoid lifetime issues
+        let vmix_clone = {
+            let connections = state.connections.lock().unwrap();
+            connections.iter().find(|c| c.host() == host).cloned()
+        };
+        
+        if let Some(vmix) = vmix_clone {
+            match vmix.send_function(&function_name, &params_map).await {
+                Ok(_) => {
+                    app_log!(info, "vMix function command sent successfully: {}", function_name);
+                    Ok("Function sent successfully".to_string())
+                }
+                Err(e) => {
+                    app_log!(error, "Failed to send vMix function command: {} - {}", function_name, e);
+                    Err(e.to_string())
+                }
+            }
+        } else {
+            Err("Connection not found".to_string())
         }
-        Err(e) => {
-            app_log!(error, "Failed to send vMix function command: {} - {}", function_name, e);
-            Err(e.to_string())
+    } else {
+        // Try to establish new connection
+        // Use VmixClientWrapper instead
+        let vmix_clone = {
+            let connections = state.connections.lock().unwrap();
+            connections.iter().find(|c| c.host() == host).cloned()
+        };
+        
+        if let Some(vmix) = vmix_clone {
+            match vmix.send_function(&function_name, &params_map).await {
+                Ok(_) => {
+                    app_log!(info, "vMix function command sent successfully to new connection: {}", function_name);
+                    Ok("Function sent successfully".to_string())
+                }
+                Err(e) => {
+                    app_log!(error, "Failed to send vMix function command to new connection: {} - {}", function_name, e);
+                    Err(e.to_string())
+                }
+            }
+        } else {
+            // Create new connection if not found
+            let new_vmix = VmixClientWrapper::new(&host, 8088);
+            match new_vmix.send_function(&function_name, &params_map).await {
+                Ok(_) => {
+                    app_log!(info, "vMix function command sent successfully to new connection: {}", function_name);
+                    Ok("Function sent successfully".to_string())
+                }
+                Err(e) => {
+                    app_log!(error, "Failed to send vMix function command to new connection: {} - {}", function_name, e);
+                    Err(e.to_string())
+                }
+            }
         }
     }
 }
 
 // Command to get vMix inputs
 #[tauri::command]
-async fn get_vmix_inputs(host: String) -> Result<Vec<VmixInput>, String> {
-    let vmix = VmixHttpClient::new(&host, 8088);
-    let vmix_data = vmix.get_vmix_data().await.map_err(|e| e.to_string())?;
+async fn get_vmix_inputs(state: tauri::State<'_, AppState>, host: String) -> Result<Vec<VmixInput>, String> {
+    // Find existing connection or create new one
+    let vmix_clone = {
+        let connections = state.connections.lock().unwrap();
+        connections.iter().find(|c| c.host() == host).cloned()
+    };
+    
+    let vmix_data = match vmix_clone {
+        Some(vmix) => vmix.get_vmix_data().await.map_err(|e| e.to_string())?,
+        None => {
+            // Try to establish new connection
+            let vmix = VmixClientWrapper::new(&host, 8088);
+            vmix.get_vmix_data().await.map_err(|e| e.to_string())?
+        }
+    };
     
     let inputs: Vec<VmixInput> = vmix_data.inputs.input.iter().map(|input| {
         VmixInput {
@@ -340,7 +389,7 @@ async fn get_vmix_inputs(host: String) -> Result<Vec<VmixInput>, String> {
 }
 
 struct AppState {
-    connections: Arc<Mutex<Vec<VmixHttpClient>>>,
+    connections: Arc<Mutex<Vec<VmixClientWrapper>>>,
     auto_refresh_configs: Arc<Mutex<HashMap<String, AutoRefreshConfig>>>,
     last_status_cache: Arc<Mutex<HashMap<String, VmixConnection>>>,
     inputs_cache: Arc<Mutex<HashMap<String, Vec<VmixInput>>>>,
@@ -380,7 +429,7 @@ impl AppState {
     }
     
     fn add_localhost_connection(&self) {
-        let localhost_client = VmixHttpClient::new("localhost", 8088);
+        let localhost_client = VmixClientWrapper::new("127.0.0.1", 8088);
         
         // Add to connections
         self.connections.lock().unwrap().push(localhost_client);
@@ -468,7 +517,7 @@ impl AppState {
         // Load connections from config
         for (i, conn_config) in config.connections.iter().enumerate() {
             println!("Loading connection {}: {} ({})", i, conn_config.host, conn_config.label);
-            let vmix_client = VmixHttpClient::new(&conn_config.host, 8088);
+            let vmix_client = VmixClientWrapper::new(&conn_config.host, 8088);
             
             {
                 let mut connections = self.connections.lock().unwrap();
@@ -557,6 +606,10 @@ impl AppState {
                                         consecutive_failures.remove(&host);
                                     }
                                     _ => {
+                                        // If connection failed and this is not the first attempt, try to reconnect
+                                        if retry_attempts > 0 && !vmix.get_status().await.unwrap_or(false) {
+                                            app_log!(debug, "Connection lost to {}, will retry", host);
+                                        }
                                         retry_attempts += 1;
                                     }
                                 }
@@ -663,9 +716,14 @@ struct VmixConnection {
 
 #[tauri::command]
 async fn connect_vmix(state: tauri::State<'_, AppState>, app_handle: tauri::AppHandle, host: String) -> Result<VmixConnection, String> {
-    app_log!(info, "Attempting to connect to vMix at {}", host);
+    app_log!(info, "Attempting to connect to vMix at {} via TCP", host);
     
-    let vmix = VmixHttpClient::new(&host, 8088);
+    let vmix = VmixClientWrapper::new(&host, 8088);
+    let _status = vmix.get_status().await.map_err(|e| {
+        app_log!(error, "Failed to establish TCP connection to {}: {}", host, e);
+        e.to_string()
+    })?;
+    
     let status = vmix.get_status().await.unwrap_or(false);
     
     if status {
@@ -677,16 +735,24 @@ async fn connect_vmix(state: tauri::State<'_, AppState>, app_handle: tauri::AppH
     // Check if this IP is already connected
     {
         let mut connections = state.connections.lock().unwrap();
+        let temp_vmix = vmix.clone();
+        
         if let Some(existing_index) = connections.iter().position(|c| c.host() == host) {
             // Replace existing connection (for reconnection)
-            connections[existing_index] = vmix.clone();
+            connections[existing_index] = vmix;
             app_log!(debug, "Replaced existing connection for {}", host);
         } else {
             // Add new connection
-            connections.push(vmix.clone());
+            connections.push(vmix);
             app_log!(debug, "Added new connection for {}", host);
         }
     }
+    
+    // Get connection info with the clone
+    
+    let info_vmix = VmixClientWrapper::new(&host, 8088);
+    let active_input = info_vmix.get_active_input().await.unwrap_or(0);
+    let preview_input = info_vmix.get_preview_input().await.unwrap_or(0);
     
     // Initialize or update auto-refresh config
     {
@@ -696,12 +762,9 @@ async fn connect_vmix(state: tauri::State<'_, AppState>, app_handle: tauri::AppH
         }
     }
     
-    let active_input = vmix.get_active_input().await.unwrap_or(0);
-    let preview_input = vmix.get_preview_input().await.unwrap_or(0);
-    
     let label = {
         let labels = state.connection_labels.lock().unwrap();
-        labels.get(&host).cloned().unwrap_or_else(|| host.clone())
+        labels.get(&host).cloned().unwrap_or_else(|| format!("{} (TCP)", host))
     };
     
     // Save configuration after connection change
@@ -739,7 +802,11 @@ async fn disconnect_vmix(state: tauri::State<'_, AppState>, app_handle: tauri::A
 
 #[tauri::command]
 async fn get_vmix_status(state: tauri::State<'_, AppState>, host: String) -> Result<VmixConnection, String> {
-    let vmix = VmixHttpClient::new(&host, 8088);
+    // Find existing connection or create new one
+    let vmix = {
+        let connections = state.connections.lock().unwrap();
+        connections.iter().find(|c| c.host() == host).cloned()
+    }.unwrap_or_else(|| VmixClientWrapper::new(&host, 8088));
     let status = vmix.get_status().await.map_err(|e| e.to_string())?;
     let active_input = vmix.get_active_input().await.unwrap_or(0);
     let preview_input = vmix.get_preview_input().await.unwrap_or(0);
@@ -767,7 +834,7 @@ async fn get_vmix_statuses(state: tauri::State<'_, AppState>) -> Result<Vec<Vmix
     let mut statuses = Vec::new();
 
     for vmix in connections.iter() {
-        let status = vmix.get_status().await.map_err(|e| e.to_string())?;
+        let status = vmix.get_status().await.unwrap_or(false);
         let active_input = vmix.get_active_input().await.unwrap_or(0);
         let preview_input = vmix.get_preview_input().await.unwrap_or(0);
         let host = vmix.host().to_string();
