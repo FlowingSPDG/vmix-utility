@@ -39,6 +39,7 @@ import EditIcon from '@mui/icons-material/Edit';
 interface Connection {
   id: number;
   host: string;
+  port: number;
   label: string;
   status: 'Connected' | 'Disconnected' | 'Reconnecting';
   activeInput: number;
@@ -51,6 +52,7 @@ const Connections: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [open, setOpen] = useState(false);
   const [newHost, setNewHost] = useState('');
+  const [newPort, setNewPort] = useState(8088);
   const [connecting, setConnecting] = useState(false);
   const [labelDialogOpen, setLabelDialogOpen] = useState(false);
   const [editingConnection, setEditingConnection] = useState<Connection | null>(null);
@@ -66,6 +68,7 @@ const Connections: React.FC = () => {
     const newConnections = vmixConnections.map((conn, index) => ({
       id: index + 1,
       host: conn.host,
+      port: conn.port,
       label: conn.label,
       status: conn.status as 'Connected' | 'Disconnected' | 'Reconnecting',
       activeInput: conn.active_input,
@@ -107,6 +110,7 @@ const Connections: React.FC = () => {
   const handleClose = () => {
     setOpen(false);
     setNewHost('');
+    setNewPort(8088);
     setError(null);
   };
 
@@ -125,7 +129,7 @@ const Connections: React.FC = () => {
     setConnecting(true);
     setError(null);
     try {
-      await connectVMix(trimmedHost);
+      await connectVMix(trimmedHost, newPort);
     } catch (error) {
       console.error('Failed to connect:', error);
       setError(`Failed to connect to ${trimmedHost}: ${error}`);
@@ -271,6 +275,7 @@ const Connections: React.FC = () => {
           <TableHead>
             <TableRow>
               <TableCell>Host</TableCell>
+              <TableCell>Port</TableCell>
               <TableCell>Status</TableCell>
               <TableCell>Active Input</TableCell>
               <TableCell>Preview Input</TableCell>
@@ -281,7 +286,7 @@ const Connections: React.FC = () => {
           <TableBody>
             {(globalLoading) && connections.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={6} align="center" sx={{ py: 4 }}>
+                <TableCell colSpan={7} align="center" sx={{ py: 4 }}>
                   <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
                     <CircularProgress />
                     <Typography variant="body2" color="textSecondary">
@@ -292,7 +297,7 @@ const Connections: React.FC = () => {
               </TableRow>
             ) : connections.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={6} align="center">
+                <TableCell colSpan={7} align="center">
                   <Typography color="textSecondary">
                     No vMix connections. Add a connection to get started.
                   </Typography>
@@ -319,6 +324,9 @@ const Connections: React.FC = () => {
                         <EditIcon fontSize="small" />
                       </IconButton>
                     </Box>
+                  </TableCell>
+                  <TableCell>
+                    <Typography variant="body2">{connection.port}</Typography>
                   </TableCell>
                   <TableCell>
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
@@ -414,6 +422,26 @@ const Connections: React.FC = () => {
             placeholder="192.168.1.6 or localhost"
             helperText="Enter the IP address or hostname of your vMix instance"
             disabled={connecting}
+            sx={{ mb: 2 }}
+          />
+          <TextField
+            margin="dense"
+            id="port"
+            label="Port"
+            type="number"
+            fullWidth
+            variant="outlined"
+            value={newPort}
+            onChange={(e) => setNewPort(parseInt(e.target.value) || 8088)}
+            placeholder="8088"
+            helperText="Enter the HTTP API port (default: 8088)"
+            disabled={connecting}
+            InputProps={{
+              inputProps: {
+                min: 1,
+                max: 65535
+              }
+            }}
           />
           {error && (
             <Alert severity="error" sx={{ mt: 2 }}>
