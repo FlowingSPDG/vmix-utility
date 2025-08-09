@@ -17,6 +17,9 @@ use once_cell::sync::Lazy;
 use std::io::Write;
 use std::fs::OpenOptions;
 use vmix_rs::http::HttpVmixClient;
+use vmix_rs::vmix::VmixApi as TcpVmixClient;
+use vmix_rs::commands::{SendCommand, RecvCommand};
+use std::net::SocketAddr;
 // Duration already imported above
 
 #[derive(Debug, Deserialize)]
@@ -62,6 +65,19 @@ struct VmixInput {
 
 // Using vmix_rs::http::VmixHttpClient instead of custom implementation
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "PascalCase")]
+pub enum ConnectionType {
+    Http,
+    Tcp,
+}
+
+impl Default for ConnectionType {
+    fn default() -> Self {
+        ConnectionType::Http
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct AutoRefreshConfig {
     enabled: bool,
@@ -74,6 +90,8 @@ struct ConnectionConfig {
     port: u16,
     label: String,
     auto_refresh: AutoRefreshConfig,
+    #[serde(default)]
+    connection_type: ConnectionType,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -84,7 +102,6 @@ struct AppConfig {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct AppSettings {
-    startup_auto_launch: bool,
     default_vmix_ip: String,
     default_vmix_port: u16,
     refresh_interval: u32,
@@ -97,7 +114,6 @@ struct AppSettings {
 impl Default for AppSettings {
     fn default() -> Self {
         Self {
-            startup_auto_launch: true,
             default_vmix_ip: "127.0.0.1".to_string(),
             default_vmix_port: 8088,
             refresh_interval: 1000,
@@ -214,13 +230,141 @@ impl Default for AutoRefreshConfig {
     }
 }
 
-// Wrapper for HttpVmixClient to include host information
+// HTTP Wrapper for HttpVmixClient to include host information
 #[derive(Debug, Clone)]
 #[allow(dead_code)]
 struct VmixClientWrapper {
     client: HttpVmixClient,
     host: String,
     port: u16,
+}
+
+// TCP Manager for event-driven TCP handling
+#[derive(Clone)]
+struct TcpVmixManager {
+    client: Arc<TcpVmixClient>,
+    host: String,
+    port: u16,
+    last_xml_request: Arc<Mutex<Instant>>,
+    shutdown_signal: Arc<std::sync::atomic::AtomicBool>,
+}
+
+impl TcpVmixManager {
+    async fn new(host: &str, port: u16) -> Result<Self> {
+        let socket_addr: SocketAddr = format!("{}:{}", host, port).parse()
+            .map_err(|e| anyhow::anyhow!("Invalid socket address: {}", e))?;
+        
+        let client = TcpVmixClient::new(socket_addr, Duration::from_secs(10)).await
+            .map_err(|e| anyhow::anyhow!("Failed to connect TCP client: {}", e))?;
+            
+        Ok(Self {
+            client: Arc::new(client),
+            host: host.to_string(),
+            port,
+            last_xml_request: Arc::new(Mutex::new(Instant::now())),
+            shutdown_signal: Arc::new(std::sync::atomic::AtomicBool::new(false)),
+        })
+    }
+    
+    fn start_monitoring(&self, app_handle: tauri::AppHandle) {
+        let client: Arc<TcpVmixClient> = Arc::clone(&self.client);
+        let host = self.host.clone();
+        let port = self.port;
+        let last_xml_request = Arc::clone(&self.last_xml_request);
+        let shutdown_signal = Arc::clone(&self.shutdown_signal);
+        
+        // XMLコマンドの定期送信タスク
+        let xml_sender_client: Arc<TcpVmixClient> = Arc::clone(&client);
+        let xml_sender_shutdown = Arc::clone(&shutdown_signal);
+        let xml_last_request = Arc::clone(&last_xml_request);
+        let xml_sender_host = host.clone();
+        tokio::spawn(async move {
+            let mut interval = tokio::time::interval(Duration::from_secs(3));
+            
+            while !xml_sender_shutdown.load(std::sync::atomic::Ordering::Relaxed) {
+                interval.tick().await;
+                
+                if let Err(e) = xml_sender_client.send_command(SendCommand::XML) {
+                    app_log!(error, "Failed to send XML command to {}: {}", xml_sender_host, e);
+                } else {
+                    let mut last_req = xml_last_request.lock().unwrap();
+                    *last_req = Instant::now();
+                }
+            }
+        });
+        
+        // レスポンス受信タスク
+        let response_client: Arc<TcpVmixClient> = Arc::clone(&client);
+        let response_shutdown = Arc::clone(&shutdown_signal);
+        let response_host = host.clone();
+        tokio::spawn(async move {
+            while !response_shutdown.load(std::sync::atomic::Ordering::Relaxed) {
+                match response_client.try_receive_command(Duration::from_millis(100)) {
+                    Ok(recv_command) => {
+                        if let RecvCommand::XML(xml_response) = recv_command {
+                            // XMLレスポンスをパースしてイベント送信
+                            if let Ok(vmix_xml) = Self::parse_xml_response(&xml_response.body) {
+                                let connection = VmixConnection {
+                                    host: response_host.clone(),
+                                    port,
+                                    label: format!("{} (TCP)", response_host),
+                                    status: "Connected".to_string(),
+                                    active_input: vmix_xml.active.unwrap_or("1".to_string()).parse().unwrap_or(1),
+                                    preview_input: vmix_xml.preview.unwrap_or("1".to_string()).parse().unwrap_or(1),
+                                    connection_type: ConnectionType::Tcp,
+                                };
+                                let _ = app_handle.emit("vmix-status-updated", &connection);
+                                
+                                // Update inputs cache from XML
+                                // Note: This needs access to AppState, so we'll handle it separately
+                                // For now, just emit the connection update
+                            }
+                        }
+                    },
+                    Err(_) => {
+                        // タイムアウトは正常動作
+                        tokio::time::sleep(Duration::from_millis(10)).await;
+                    }
+                }
+            }
+        });
+    }
+    
+    async fn send_function(&self, function_name: &str, params: &HashMap<String, String>) -> Result<()> {
+        let params_str = if params.is_empty() {
+            None
+        } else {
+            Some(params.iter()
+                .map(|(k, v)| format!("{}={}", k, v))
+                .collect::<Vec<_>>()
+                .join("&"))
+        };
+        
+        let send_command = SendCommand::FUNCTION(function_name.to_string(), params_str);
+        self.client.send_command(send_command)
+            .map_err(|e| anyhow::anyhow!("TCP function send failed: {}", e))
+    }
+    
+    fn is_connected(&self) -> bool {
+        self.client.is_connected()
+    }
+    
+    fn shutdown(&self) {
+        self.shutdown_signal.store(true, std::sync::atomic::Ordering::Relaxed);
+    }
+    
+    fn parse_xml_response(xml: &str) -> Result<VmixXml> {
+        quick_xml::de::from_str(xml)
+            .map_err(|e| anyhow::anyhow!("TCP XML parse error: {}", e))
+    }
+    
+    fn host(&self) -> &str {
+        &self.host
+    }
+    
+    fn port(&self) -> u16 {
+        self.port
+    }
 }
 
 impl VmixClientWrapper {
@@ -295,65 +439,53 @@ async fn send_vmix_function(state: tauri::State<'_, AppState>, host: String, por
     
     app_log!(info, "Sending vMix function command: {} to host: {}", function_name, host);
     
-    // First check if connection exists
-    let has_connection = {
-        let connections = state.connections.lock().unwrap();
-        connections.iter().any(|c| c.host() == host)
+    // First check if connection exists (HTTP or TCP)
+    let http_connection = {
+        let http_connections = state.http_connections.lock().unwrap();
+        http_connections.iter().find(|c| c.host() == host).cloned()
     };
     
-    if has_connection {
-        // Use existing connection - need to clone to avoid lifetime issues
-        let vmix_clone = {
-            let connections = state.connections.lock().unwrap();
-            connections.iter().find(|c| c.host() == host).cloned()
-        };
-        
-        if let Some(vmix) = vmix_clone {
-            match vmix.send_function(&function_name, &params_map).await {
-                Ok(_) => {
-                    app_log!(info, "vMix function command sent successfully: {}", function_name);
-                    Ok("Function sent successfully".to_string())
-                }
-                Err(e) => {
-                    app_log!(error, "Failed to send vMix function command: {} - {}", function_name, e);
-                    Err(e.to_string())
-                }
+    let tcp_connection = {
+        let tcp_connections = state.tcp_connections.lock().unwrap();
+        tcp_connections.iter().find(|c| c.host() == host).cloned()
+    };
+    
+    if let Some(vmix) = http_connection {
+        // Use existing HTTP connection
+        match vmix.send_function(&function_name, &params_map).await {
+            Ok(_) => {
+                app_log!(info, "vMix function command sent successfully via HTTP: {}", function_name);
+                Ok("Function sent successfully".to_string())
             }
-        } else {
-            Err("Connection not found".to_string())
+            Err(e) => {
+                app_log!(error, "Failed to send vMix function command via HTTP: {} - {}", function_name, e);
+                Err(e.to_string())
+            }
+        }
+    } else if let Some(tcp) = tcp_connection {
+        // Use existing TCP connection
+        match tcp.send_function(&function_name, &params_map).await {
+            Ok(_) => {
+                app_log!(info, "vMix function command sent successfully via TCP: {}", function_name);
+                Ok("Function sent successfully".to_string())
+            }
+            Err(e) => {
+                app_log!(error, "Failed to send vMix function command via TCP: {} - {}", function_name, e);
+                Err(e.to_string())
+            }
         }
     } else {
-        // Try to establish new connection
-        // Use VmixClientWrapper instead
-        let vmix_clone = {
-            let connections = state.connections.lock().unwrap();
-            connections.iter().find(|c| c.host() == host).cloned()
-        };
-        
-        if let Some(vmix) = vmix_clone {
-            match vmix.send_function(&function_name, &params_map).await {
-                Ok(_) => {
-                    app_log!(info, "vMix function command sent successfully to new connection: {}", function_name);
-                    Ok("Function sent successfully".to_string())
-                }
-                Err(e) => {
-                    app_log!(error, "Failed to send vMix function command to new connection: {} - {}", function_name, e);
-                    Err(e.to_string())
-                }
+        // No existing connection, create new HTTP connection (default)
+        let port = port.unwrap_or(8088);
+        let new_vmix = VmixClientWrapper::new(&host, port);
+        match new_vmix.send_function(&function_name, &params_map).await {
+            Ok(_) => {
+                app_log!(info, "vMix function command sent successfully to new HTTP connection: {}", function_name);
+                Ok("Function sent successfully".to_string())
             }
-        } else {
-            // Create new connection if not found
-            let port = port.unwrap_or(8088);
-            let new_vmix = VmixClientWrapper::new(&host, port);
-            match new_vmix.send_function(&function_name, &params_map).await {
-                Ok(_) => {
-                    app_log!(info, "vMix function command sent successfully to new connection: {}", function_name);
-                    Ok("Function sent successfully".to_string())
-                }
-                Err(e) => {
-                    app_log!(error, "Failed to send vMix function command to new connection: {} - {}", function_name, e);
-                    Err(e.to_string())
-                }
+            Err(e) => {
+                app_log!(error, "Failed to send vMix function command to new HTTP connection: {} - {}", function_name, e);
+                Err(e.to_string())
             }
         }
     }
@@ -362,16 +494,31 @@ async fn send_vmix_function(state: tauri::State<'_, AppState>, host: String, por
 // Command to get vMix inputs
 #[tauri::command]
 async fn get_vmix_inputs(state: tauri::State<'_, AppState>, host: String, port: Option<u16>) -> Result<Vec<VmixInput>, String> {
-    // Find existing connection or create new one
-    let vmix_clone = {
-        let connections = state.connections.lock().unwrap();
-        connections.iter().find(|c| c.host() == host).cloned()
+    // Find existing HTTP connection
+    let http_vmix = {
+        let http_connections = state.http_connections.lock().unwrap();
+        http_connections.iter().find(|c| c.host() == host).cloned()
     };
     
-    let vmix_data = match vmix_clone {
+    // For TCP connections, use cached data
+    let tcp_exists = {
+        let tcp_connections = state.tcp_connections.lock().unwrap();
+        tcp_connections.iter().any(|c| c.host() == host)
+    };
+    
+    if tcp_exists {
+        // TCP接続の場合はキャッシュから取得
+        let cached_inputs = {
+            let inputs_cache = state.inputs_cache.lock().unwrap();
+            inputs_cache.get(&host).cloned().unwrap_or_default()
+        };
+        return Ok(cached_inputs);
+    }
+    
+    let vmix_data = match http_vmix {
         Some(vmix) => vmix.get_vmix_data().await.map_err(|e| e.to_string())?,
         None => {
-            // Try to establish new connection
+            // Try to establish new HTTP connection
             let port = port.unwrap_or(8088);
             let vmix = VmixClientWrapper::new(&host, port);
             vmix.get_vmix_data().await.map_err(|e| e.to_string())?
@@ -392,7 +539,8 @@ async fn get_vmix_inputs(state: tauri::State<'_, AppState>, host: String, port: 
 }
 
 struct AppState {
-    connections: Arc<Mutex<Vec<VmixClientWrapper>>>,
+    http_connections: Arc<Mutex<Vec<VmixClientWrapper>>>,
+    tcp_connections: Arc<Mutex<Vec<TcpVmixManager>>>,
     auto_refresh_configs: Arc<Mutex<HashMap<String, AutoRefreshConfig>>>,
     last_status_cache: Arc<Mutex<HashMap<String, VmixConnection>>>,
     inputs_cache: Arc<Mutex<HashMap<String, Vec<VmixInput>>>>,
@@ -403,7 +551,8 @@ struct AppState {
 impl AppState {
     fn new() -> Self {
         let state = Self {
-            connections: Arc::new(Mutex::new(Vec::new())),
+            http_connections: Arc::new(Mutex::new(Vec::new())),
+            tcp_connections: Arc::new(Mutex::new(Vec::new())),
             auto_refresh_configs: Arc::new(Mutex::new(HashMap::new())),
             last_status_cache: Arc::new(Mutex::new(HashMap::new())),
             inputs_cache: Arc::new(Mutex::new(HashMap::new())),
@@ -434,16 +583,16 @@ impl AppState {
     fn add_localhost_connection(&self) {
         let localhost_client = VmixClientWrapper::new("127.0.0.1", 8088);
         
-        // Add to connections
-        self.connections.lock().unwrap().push(localhost_client);
+        // Add to HTTP connections (default)
+        self.http_connections.lock().unwrap().push(localhost_client);
         
         // Initialize auto-refresh config for localhost
         self.auto_refresh_configs.lock().unwrap()
-            .insert("localhost".to_string(), AutoRefreshConfig::default());
+            .insert("127.0.0.1".to_string(), AutoRefreshConfig::default());
             
         // Set default label for localhost
         self.connection_labels.lock().unwrap()
-            .insert("localhost".to_string(), "Local vMix".to_string());
+            .insert("127.0.0.1".to_string(), "Local vMix (HTTP)".to_string());
     }
     
     async fn get_config_path(app_handle: &tauri::AppHandle) -> Result<PathBuf, String> {
@@ -457,26 +606,50 @@ impl AppState {
         println!("Saving config to: {:?}", config_path);
         
         let config = {
-            let connections = self.connections.lock().unwrap();
+            let http_connections = self.http_connections.lock().unwrap();
+            let tcp_connections = self.tcp_connections.lock().unwrap();
             let labels = self.connection_labels.lock().unwrap();
             let auto_configs = self.auto_refresh_configs.lock().unwrap();
             
-            println!("Current connections count: {}", connections.len());
+            println!("Current HTTP connections count: {}", http_connections.len());
+            println!("Current TCP connections count: {}", tcp_connections.len());
+            
+            let mut all_connections = Vec::new();
+            
+            // Add HTTP connections
+            for conn in http_connections.iter() {
+                let host = conn.host().to_string();
+                let label = labels.get(&host).cloned().unwrap_or_else(|| format!("{} (HTTP)", host));
+                let auto_refresh = auto_configs.get(&host).cloned().unwrap_or_default();
+                println!("Saving HTTP connection: {} -> {}", host, label);
+                
+                all_connections.push(ConnectionConfig {
+                    host: host.clone(),
+                    port: conn.port(),
+                    label,
+                    auto_refresh,
+                    connection_type: ConnectionType::Http,
+                });
+            }
+            
+            // Add TCP connections
+            for conn in tcp_connections.iter() {
+                let host = conn.host().to_string();
+                let label = labels.get(&host).cloned().unwrap_or_else(|| format!("{} (TCP)", host));
+                let auto_refresh = auto_configs.get(&host).cloned().unwrap_or_default();
+                println!("Saving TCP connection: {} -> {}", host, label);
+                
+                all_connections.push(ConnectionConfig {
+                    host: host.clone(),
+                    port: conn.port(),
+                    label,
+                    auto_refresh,
+                    connection_type: ConnectionType::Tcp,
+                });
+            }
             
             AppConfig {
-                connections: connections.iter().map(|conn| {
-                    let host = conn.host().to_string();
-                    let label = labels.get(&host).cloned().unwrap_or_else(|| host.clone());
-                    let auto_refresh = auto_configs.get(&host).cloned().unwrap_or_default();
-                    println!("Saving connection: {} -> {}", host, label);
-                    
-                    ConnectionConfig {
-                        host: host.clone(),
-                        port: conn.port,
-                        label,
-                        auto_refresh,
-                    }
-                }).collect(),
+                connections: all_connections,
                 app_settings: Some(self.app_settings.lock().unwrap().clone()),
             }
         };
@@ -506,8 +679,12 @@ impl AppState {
         
         // Clear existing connections
         {
-            let mut connections = self.connections.lock().unwrap();
-            connections.clear();
+            let mut http_connections = self.http_connections.lock().unwrap();
+            http_connections.clear();
+        }
+        {
+            let mut tcp_connections = self.tcp_connections.lock().unwrap();
+            tcp_connections.clear();
         }
         {
             let mut labels = self.connection_labels.lock().unwrap();
@@ -520,13 +697,22 @@ impl AppState {
         
         // Load connections from config
         for (i, conn_config) in config.connections.iter().enumerate() {
-            println!("Loading connection {}: {} ({})", i, conn_config.host, conn_config.label);
-            let vmix_client = VmixClientWrapper::new(&conn_config.host, conn_config.port);
+            println!("Loading connection {}: {} ({}) - {:?}", i, conn_config.host, conn_config.label, conn_config.connection_type);
             
-            {
-                let mut connections = self.connections.lock().unwrap();
-                connections.push(vmix_client);
+            match conn_config.connection_type {
+                ConnectionType::Http => {
+                    let vmix_client = VmixClientWrapper::new(&conn_config.host, conn_config.port);
+                    {
+                        let mut http_connections = self.http_connections.lock().unwrap();
+                        http_connections.push(vmix_client);
+                    }
+                },
+                ConnectionType::Tcp => {
+                    // TCP接続はあとで実際に接続時に作成する
+                    println!("TCP connection config loaded, will create on connect: {}", conn_config.host);
+                }
             }
+            
             {
                 let mut labels = self.connection_labels.lock().unwrap();
                 labels.insert(conn_config.host.clone(), conn_config.label.clone());
@@ -550,7 +736,7 @@ impl AppState {
     }
 
     fn start_auto_refresh_task(&self, app_handle: tauri::AppHandle) {
-        let connections = Arc::clone(&self.connections);
+        let http_connections = Arc::clone(&self.http_connections);
         let configs = Arc::clone(&self.auto_refresh_configs);
         let cache = Arc::clone(&self.last_status_cache);
         let inputs_cache = Arc::clone(&self.inputs_cache);
@@ -565,7 +751,7 @@ impl AppState {
                 interval.tick().await;
 
                 let current_connections = {
-                    let guard = connections.lock().unwrap();
+                    let guard = http_connections.lock().unwrap();
                     guard.clone()
                 };
 
@@ -644,6 +830,7 @@ impl AppState {
                                 status: connection_status,
                                 active_input,
                                 preview_input,
+                                connection_type: ConnectionType::Http,
                             };
 
                             // Get current inputs for comparison
@@ -718,47 +905,93 @@ struct VmixConnection {
     status: String,
     active_input: i32,
     preview_input: i32,
+    connection_type: ConnectionType,
 }
 
 #[tauri::command]
-async fn connect_vmix(state: tauri::State<'_, AppState>, app_handle: tauri::AppHandle, host: String, port: Option<u16>) -> Result<VmixConnection, String> {
+async fn connect_vmix(state: tauri::State<'_, AppState>, app_handle: tauri::AppHandle, host: String, port: Option<u16>, connection_type: ConnectionType) -> Result<VmixConnection, String> {
     let port = port.unwrap_or(8088);
-    app_log!(info, "Attempting to connect to vMix at {}:{} via TCP", host, port);
+    app_log!(info, "Attempting to connect to vMix at {}:{} via {:?}", host, port, connection_type);
     
-    let vmix = VmixClientWrapper::new(&host, port);
-    let _status = vmix.get_status().await.map_err(|e| {
-        app_log!(error, "Failed to establish TCP connection to {}: {}", host, e);
-        e.to_string()
-    })?;
-    
-    let status = vmix.get_status().await.unwrap_or(false);
-    
-    if status {
-        app_log!(info, "Successfully connected to vMix at {}", host);
-    } else {
-        app_log!(warn, "Failed to connect to vMix at {}", host);
-    }
-    
-    // Check if this IP is already connected
-    {
-        let mut connections = state.connections.lock().unwrap();
-        
-        if let Some(existing_index) = connections.iter().position(|c| c.host() == host) {
-            // Replace existing connection (for reconnection)
-            connections[existing_index] = vmix;
-            app_log!(debug, "Replaced existing connection for {}", host);
-        } else {
-            // Add new connection
-            connections.push(vmix);
-            app_log!(debug, "Added new connection for {}", host);
+    match connection_type {
+        ConnectionType::Http => {
+            let vmix = VmixClientWrapper::new(&host, port);
+            let _status = vmix.get_status().await.map_err(|e| {
+                app_log!(error, "Failed to establish HTTP connection to {}: {}", host, e);
+                e.to_string()
+            })?;
+            
+            let status = vmix.get_status().await.unwrap_or(false);
+            
+            if status {
+                app_log!(info, "Successfully connected to vMix at {} via HTTP", host);
+            } else {
+                app_log!(warn, "Failed to connect to vMix at {} via HTTP", host);
+            }
+            
+            // Check if this host is already connected (HTTP)
+            {
+                let mut http_connections = state.http_connections.lock().unwrap();
+                
+                if let Some(existing_index) = http_connections.iter().position(|c| c.host() == host) {
+                    // Replace existing connection (for reconnection)
+                    http_connections[existing_index] = vmix;
+                    app_log!(debug, "Replaced existing HTTP connection for {}", host);
+                } else {
+                    // Add new connection
+                    http_connections.push(vmix);
+                    app_log!(debug, "Added new HTTP connection for {}", host);
+                }
+            }
+        },
+        ConnectionType::Tcp => {
+            let tcp_manager = TcpVmixManager::new(&host, port).await.map_err(|e| {
+                app_log!(error, "Failed to establish TCP connection to {}: {}", host, e);
+                e.to_string()
+            })?;
+            
+            if tcp_manager.is_connected() {
+                app_log!(info, "Successfully connected to vMix at {} via TCP", host);
+            } else {
+                app_log!(warn, "Failed to connect to vMix at {} via TCP", host);
+                return Err("TCP connection failed".to_string());
+            }
+            
+            // Start monitoring task
+            tcp_manager.start_monitoring(app_handle.clone());
+            
+            // Check if this host is already connected (TCP)
+            {
+                let mut tcp_connections = state.tcp_connections.lock().unwrap();
+                
+                if let Some(existing_index) = tcp_connections.iter().position(|c| c.host() == host) {
+                    // Shutdown existing connection and replace
+                    tcp_connections[existing_index].shutdown();
+                    tcp_connections[existing_index] = tcp_manager;
+                    app_log!(debug, "Replaced existing TCP connection for {}", host);
+                } else {
+                    // Add new connection
+                    tcp_connections.push(tcp_manager);
+                    app_log!(debug, "Added new TCP connection for {}", host);
+                }
+            }
         }
     }
     
-    // Get connection info with the clone
-    
-    let info_vmix = VmixClientWrapper::new(&host, port);
-    let active_input = info_vmix.get_active_input().await.unwrap_or(0);
-    let preview_input = info_vmix.get_preview_input().await.unwrap_or(0);
+    // Get connection info based on type
+    let (active_input, preview_input, status) = match connection_type {
+        ConnectionType::Http => {
+            let info_vmix = VmixClientWrapper::new(&host, port);
+            let active = info_vmix.get_active_input().await.unwrap_or(0);
+            let preview = info_vmix.get_preview_input().await.unwrap_or(0);
+            let status = info_vmix.get_status().await.unwrap_or(false);
+            (active, preview, status)
+        },
+        ConnectionType::Tcp => {
+            // TCPの場合はバックグラウンドタスクで状態更新されるので初期値を返す
+            (1, 1, true)
+        }
+    };
     
     // Initialize or update auto-refresh config
     {
@@ -770,7 +1003,11 @@ async fn connect_vmix(state: tauri::State<'_, AppState>, app_handle: tauri::AppH
     
     let label = {
         let labels = state.connection_labels.lock().unwrap();
-        labels.get(&host).cloned().unwrap_or_else(|| format!("{} (TCP)", host))
+        let default_label = match connection_type {
+            ConnectionType::Http => format!("{} (HTTP)", host),
+            ConnectionType::Tcp => format!("{} (TCP)", host),
+        };
+        labels.get(&host).cloned().unwrap_or(default_label)
     };
     
     // Save configuration after connection change
@@ -783,14 +1020,24 @@ async fn connect_vmix(state: tauri::State<'_, AppState>, app_handle: tauri::AppH
         status: if status { "Connected".to_string() } else { "Disconnected".to_string() },
         active_input,
         preview_input,
+        connection_type: connection_type,
     })
 }
 
 #[tauri::command]
 async fn disconnect_vmix(state: tauri::State<'_, AppState>, app_handle: tauri::AppHandle, host: String) -> Result<(), String> {
+    // Disconnect from HTTP connections
     {
-        let mut connections = state.connections.lock().unwrap();
-        connections.retain(|c| c.host() != host);
+        let mut http_connections = state.http_connections.lock().unwrap();
+        http_connections.retain(|c| c.host() != host);
+    }
+    // Disconnect from TCP connections
+    {
+        let mut tcp_connections = state.tcp_connections.lock().unwrap();
+        if let Some(pos) = tcp_connections.iter().position(|c| c.host() == host) {
+            tcp_connections[pos].shutdown();
+            tcp_connections.remove(pos);
+        }
     }
     {
         let mut configs = state.auto_refresh_configs.lock().unwrap();
@@ -809,24 +1056,51 @@ async fn disconnect_vmix(state: tauri::State<'_, AppState>, app_handle: tauri::A
 
 #[tauri::command]
 async fn get_vmix_status(state: tauri::State<'_, AppState>, host: String, port: Option<u16>) -> Result<VmixConnection, String> {
-    // Find existing connection or create new one
-    let vmix = {
-        let connections = state.connections.lock().unwrap();
-        connections.iter().find(|c| c.host() == host).cloned()
-    }.unwrap_or_else(|| {
-        let port = port.unwrap_or(8088);
-        VmixClientWrapper::new(&host, port)
-    });
-    let status = vmix.get_status().await.map_err(|e| e.to_string())?;
-    let active_input = vmix.get_active_input().await.unwrap_or(0);
-    let preview_input = vmix.get_preview_input().await.unwrap_or(0);
+    let port = port.unwrap_or(8088);
+    
+    // Try to find in HTTP connections first
+    let http_result = {
+        let http_connections = state.http_connections.lock().unwrap();
+        http_connections.iter().find(|c| c.host() == host).cloned()
+    };
+    
+    // Try to find in TCP connections
+    let tcp_result = {
+        let tcp_connections = state.tcp_connections.lock().unwrap();
+        tcp_connections.iter().find(|c| c.host() == host).map(|c| (c.is_connected(), ConnectionType::Tcp))
+    };
+    
+    let (status, active_input, preview_input, conn_type) = if let Some(vmix) = http_result {
+        let status = vmix.get_status().await.map_err(|e| e.to_string())?;
+        let active_input = vmix.get_active_input().await.unwrap_or(0);
+        let preview_input = vmix.get_preview_input().await.unwrap_or(0);
+        (status, active_input, preview_input, ConnectionType::Http)
+    } else if let Some((tcp_status, conn_type)) = tcp_result {
+        // TCPの場合はキャッシュから取得
+        let cached_connection = {
+            let cache = state.last_status_cache.lock().unwrap();
+            cache.get(&host).cloned()
+        };
+        
+        if let Some(cached) = cached_connection {
+            (tcp_status, cached.active_input, cached.preview_input, conn_type)
+        } else {
+            (tcp_status, 1, 1, conn_type)
+        }
+    } else {
+        // 既存接続がない場合は新しいHTTP接続でテスト
+        let vmix = VmixClientWrapper::new(&host, port);
+        let status = vmix.get_status().await.map_err(|e| e.to_string())?;
+        let active_input = vmix.get_active_input().await.unwrap_or(0);
+        let preview_input = vmix.get_preview_input().await.unwrap_or(0);
+        (status, active_input, preview_input, ConnectionType::Http)
+    };
     
     let label = {
         let labels = state.connection_labels.lock().unwrap();
         labels.get(&host).cloned().unwrap_or_else(|| host.clone())
     };
     
-    let port = port.unwrap_or(8088);
     Ok(VmixConnection {
         host: host.clone(),
         port,
@@ -834,18 +1108,24 @@ async fn get_vmix_status(state: tauri::State<'_, AppState>, host: String, port: 
         status: if status { "Connected".to_string() } else { "Disconnected".to_string() },
         active_input,
         preview_input,
+        connection_type: conn_type,
     })
 }
 
 #[tauri::command]
 async fn get_vmix_statuses(state: tauri::State<'_, AppState>) -> Result<Vec<VmixConnection>, String> {
-    let connections = {
-        let guard = state.connections.lock().unwrap();
+    let http_connections = {
+        let guard = state.http_connections.lock().unwrap();
         guard.clone()
+    };
+    let tcp_connections = {
+        let guard = state.tcp_connections.lock().unwrap();
+        guard.iter().map(|c| (c.host().to_string(), c.port(), c.is_connected())).collect::<Vec<_>>()
     };
     let mut statuses = Vec::new();
 
-    for vmix in connections.iter() {
+    // Process HTTP connections
+    for vmix in http_connections.iter() {
         let status = vmix.get_status().await.unwrap_or(false);
         let active_input = vmix.get_active_input().await.unwrap_or(0);
         let preview_input = vmix.get_preview_input().await.unwrap_or(0);
@@ -853,7 +1133,7 @@ async fn get_vmix_statuses(state: tauri::State<'_, AppState>) -> Result<Vec<Vmix
         
         let label = {
             let labels = state.connection_labels.lock().unwrap();
-            labels.get(&host).cloned().unwrap_or_else(|| host.clone())
+            labels.get(&host).cloned().unwrap_or_else(|| format!("{} (HTTP)", host))
         };
         
         statuses.push(VmixConnection {
@@ -863,6 +1143,35 @@ async fn get_vmix_statuses(state: tauri::State<'_, AppState>) -> Result<Vec<Vmix
             status: if status { "Connected".to_string() } else { "Disconnected".to_string() },
             active_input,
             preview_input,
+            connection_type: ConnectionType::Http,
+        });
+    }
+    
+    // Process TCP connections
+    for (host, port, tcp_status) in tcp_connections {
+        let label = {
+            let labels = state.connection_labels.lock().unwrap();
+            labels.get(&host).cloned().unwrap_or_else(|| format!("{} (TCP)", host))
+        };
+        
+        // TCPの詳細情報はキャッシュから取得
+        let (active_input, preview_input) = {
+            let cache = state.last_status_cache.lock().unwrap();
+            if let Some(cached) = cache.get(&host) {
+                (cached.active_input, cached.preview_input)
+            } else {
+                (1, 1)
+            }
+        };
+        
+        statuses.push(VmixConnection {
+            host,
+            port,
+            label,
+            status: if tcp_status { "Connected".to_string() } else { "Disconnected".to_string() },
+            active_input,
+            preview_input,
+            connection_type: ConnectionType::Tcp,
         });
     }
 

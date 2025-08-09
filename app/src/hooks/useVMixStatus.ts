@@ -9,6 +9,7 @@ interface VmixConnection {
   status: string;
   active_input: number;
   preview_input: number;
+  connection_type: 'Http' | 'Tcp';
 }
 
 interface AutoRefreshConfig {
@@ -29,7 +30,7 @@ interface VMixStatusContextType {
   autoRefreshConfigs: Record<string, AutoRefreshConfig>;
   loading: boolean;
   inputs: Record<string, VmixInput[]>; // inputs by host
-  connectVMix: (host: string, port?: number) => Promise<VmixConnection>;
+  connectVMix: (host: string, port?: number, connectionType?: 'Http' | 'Tcp') => Promise<VmixConnection>;
   disconnectVMix: (host: string) => Promise<void>;
   setAutoRefreshConfig: (host: string, config: AutoRefreshConfig) => Promise<void>;
   getAutoRefreshConfig: (host: string) => Promise<AutoRefreshConfig>;
@@ -141,9 +142,14 @@ export const VMixStatusProvider = ({ children }: { children: React.ReactNode }) 
     loadInitialData();
   }, [loadConnections, loadAutoRefreshConfigs]);
 
-  const connectVMix = async (host: string, port?: number): Promise<VmixConnection> => {
+  const connectVMix = async (host: string, port?: number, connectionType: 'Http' | 'Tcp' = 'Http'): Promise<VmixConnection> => {
     try {
-      const connection = await invoke<VmixConnection>('connect_vmix', { host, port });
+      console.log('Connecting to vMix:', host, port, connectionType);
+      const connection = await invoke<VmixConnection>('connect_vmix', { 
+        host, 
+        port, 
+        connectionType 
+      });
       setConnections(prev => {
         const existingIndex = prev.findIndex(conn => conn.host === host);
         if (existingIndex >= 0) {
