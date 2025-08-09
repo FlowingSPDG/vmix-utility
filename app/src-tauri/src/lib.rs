@@ -1,6 +1,8 @@
 use serde::{Deserialize, Serialize};
+use serde_json;
 use anyhow::Result;
 use tauri::tray::TrayIconBuilder;
+use vmix_rs::acts::ActivatorsData;
 use std::sync::{Arc, Mutex};
 use std::collections::HashMap;
 use std::time::{Duration, Instant};
@@ -18,7 +20,7 @@ use std::io::Write;
 use std::fs::OpenOptions;
 use vmix_rs::http::HttpVmixClient;
 use vmix_rs::vmix::VmixApi as TcpVmixClient;
-use vmix_rs::commands::{SendCommand, RecvCommand};
+use vmix_rs::commands::{RecvCommand, SendCommand, Status};
 use std::net::SocketAddr;
 // Duration already imported above
 
@@ -251,8 +253,13 @@ struct TcpVmixManager {
 
 impl TcpVmixManager {
     async fn new(host: &str, port: u16) -> Result<Self> {
-        let socket_addr: SocketAddr = format!("{}:{}", host, port).parse()
-            .map_err(|e| anyhow::anyhow!("Invalid socket address: {}", e))?;
+        use std::net::ToSocketAddrs;
+        
+        let socket_addr: SocketAddr = format!("{}:{}", host, port)
+            .to_socket_addrs()
+            .map_err(|e| anyhow::anyhow!("Failed to resolve hostname {}: {}", host, e))?
+            .next()
+            .ok_or_else(|| anyhow::anyhow!("No socket address found for {}:{}", host, port))?;
         
         let client = TcpVmixClient::new(socket_addr, Duration::from_secs(10)).await
             .map_err(|e| anyhow::anyhow!("Failed to connect TCP client: {}", e))?;
@@ -266,7 +273,7 @@ impl TcpVmixManager {
         })
     }
     
-    fn start_monitoring(&self, app_handle: tauri::AppHandle) {
+    fn start_monitoring(&self, app_handle: tauri::AppHandle, state: tauri::State<'_, AppState>) {
         let client: Arc<TcpVmixClient> = Arc::clone(&self.client);
         let host = self.host.clone();
         let port = self.port;
@@ -297,28 +304,76 @@ impl TcpVmixManager {
         let response_client: Arc<TcpVmixClient> = Arc::clone(&client);
         let response_shutdown = Arc::clone(&shutdown_signal);
         let response_host = host.clone();
+        let inputs_cache = Arc::clone(&state.inputs_cache);
+        let last_status_cache = Arc::clone(&state.last_status_cache);
+        
         tokio::spawn(async move {
             while !response_shutdown.load(std::sync::atomic::Ordering::Relaxed) {
                 match response_client.try_receive_command(Duration::from_millis(100)) {
                     Ok(recv_command) => {
-                        if let RecvCommand::XML(xml_response) = recv_command {
-                            // XMLレスポンスをパースしてイベント送信
-                            if let Ok(vmix_xml) = Self::parse_xml_response(&xml_response.body) {
-                                let connection = VmixConnection {
-                                    host: response_host.clone(),
-                                    port,
-                                    label: format!("{} (TCP)", response_host),
-                                    status: "Connected".to_string(),
-                                    active_input: vmix_xml.active.unwrap_or("1".to_string()).parse().unwrap_or(1),
-                                    preview_input: vmix_xml.preview.unwrap_or("1".to_string()).parse().unwrap_or(1),
-                                    connection_type: ConnectionType::Tcp,
-                                };
-                                let _ = app_handle.emit("vmix-status-updated", &connection);
-                                
-                                // Update inputs cache from XML
-                                // Note: This needs access to AppState, so we'll handle it separately
-                                // For now, just emit the connection update
+                        match recv_command {
+                            RecvCommand::XML(xml_response) => {
+                                // XMLレスポンスをパースしてイベント送信
+                                if let Ok(vmix_xml) = Self::parse_xml_response(&xml_response.body) {
+                                    let connection = VmixConnection {
+                                        host: response_host.clone(),
+                                        port,
+                                        label: format!("{} (TCP)", response_host),
+                                        status: "Connected".to_string(),
+                                        active_input: vmix_xml.active.unwrap_or("1".to_string()).parse().unwrap_or(1),
+                                        preview_input: vmix_xml.preview.unwrap_or("1".to_string()).parse().unwrap_or(1),
+                                        connection_type: ConnectionType::Tcp,
+                                    };
+                                    let _ = app_handle.emit("vmix-status-updated", &connection);
+                                    
+                                    // Update inputs cache from XML and emit changes
+                                    let new_inputs: Vec<VmixInput> = vmix_xml.inputs.input.iter().map(|input| VmixInput {
+                                        key: input.key.clone(),
+                                        number: input.number.parse().unwrap_or(0),
+                                        title: input.title.clone(),
+                                        input_type: input.input_type.clone().unwrap_or_default(),
+                                        state: input.state.clone().unwrap_or_default(),
+                                    }).collect();
+                                    
+                                    // Compare with cached inputs and emit if changed
+                                    let mut cache = inputs_cache.lock().unwrap();
+                                    let cache_key = response_host.clone();
+                                    let inputs_changed = cache.get(&cache_key).map_or(true, |cached| *cached != new_inputs);
+                                    
+                                    if inputs_changed {
+                                        app_log!(debug, "TCP: Inputs changed for {}, emitting vmix-inputs-updated", response_host);
+                                        cache.insert(cache_key, new_inputs.clone());
+                                        let _ = app_handle.emit("vmix-inputs-updated", serde_json::json!({
+                                            "host": response_host,
+                                            "inputs": new_inputs
+                                        }));
+                                    }
+                                    
+                                    // Update last status cache
+                                    {
+                                        let mut cache = last_status_cache.lock().unwrap();
+                                        cache.insert(response_host.clone(), connection.clone());
+                                    }
+                                }
                             }
+                            RecvCommand::ACTS(acts_event) => {
+                                app_log!(debug, "ACTS event received: {:?}", acts_event);
+                                if matches!(acts_event.status, Status::OK) {
+                                    if let ActivatorsData::Input(input_number, active) = acts_event.body {
+                                        if active {
+                                            app_log!(debug, "Input {} is active (ACTS event)", input_number);
+                                            // 必要に応じてここでactive inputの更新やイベント送信を行う
+                                        }
+                                    }
+                                    if let ActivatorsData::InputPreview(input_number, active) = acts_event.body {
+                                        if active {
+                                            app_log!(debug, "Input {} is active (ACTS event)", input_number);
+                                            // 必要に応じてここでactive inputの更新やイベント送信を行う
+                                        }
+                                    }
+                                }
+                            }
+                            _ => {}
                         }
                     },
                     Err(_) => {
@@ -958,7 +1013,7 @@ async fn connect_vmix(state: tauri::State<'_, AppState>, app_handle: tauri::AppH
             }
             
             // Start monitoring task
-            tcp_manager.start_monitoring(app_handle.clone());
+            tcp_manager.start_monitoring(app_handle.clone(), state.clone());
             
             // Check if this host is already connected (TCP)
             {
