@@ -1476,6 +1476,20 @@ async fn install_update(app_handle: tauri::AppHandle) -> Result<(), String> {
     }
 }
 
+#[cfg(debug_assertions)]
+fn prevent_default() -> tauri::plugin::TauriPlugin<tauri::Wry> {
+  use tauri_plugin_prevent_default::Flags;
+
+  tauri_plugin_prevent_default::Builder::new()
+    .with_flags(Flags::all().difference(Flags::DEV_TOOLS | Flags::RELOAD))
+    .build()
+}
+
+#[cfg(not(debug_assertions))]
+fn prevent_default() -> tauri::plugin::TauriPlugin<tauri::Wry> {
+  tauri_plugin_prevent_default::init()
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     // Initialize env_logger for console output
@@ -1486,6 +1500,7 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_shell::init())
+        .plugin(prevent_default())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .on_window_event(|window, event| {
             match event {
