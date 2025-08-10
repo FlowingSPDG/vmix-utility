@@ -25,6 +25,10 @@ import {
   Switch,
   Select,
   FormControl,
+  FormLabel,
+  FormControlLabel,
+  RadioGroup,
+  Radio,
   Backdrop,
   Card,
   CardContent,
@@ -39,10 +43,12 @@ import EditIcon from '@mui/icons-material/Edit';
 interface Connection {
   id: number;
   host: string;
+  port: number;
   label: string;
   status: 'Connected' | 'Disconnected' | 'Reconnecting';
   activeInput: number;
   previewInput: number;
+  connectionType: 'Http' | 'Tcp';
 }
 
 const Connections: React.FC = () => {
@@ -51,6 +57,8 @@ const Connections: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [open, setOpen] = useState(false);
   const [newHost, setNewHost] = useState('');
+  const [newPort, setNewPort] = useState(8088);
+  const [newConnectionType, setNewConnectionType] = useState<'Http' | 'Tcp'>('Http');
   const [connecting, setConnecting] = useState(false);
   const [labelDialogOpen, setLabelDialogOpen] = useState(false);
   const [editingConnection, setEditingConnection] = useState<Connection | null>(null);
@@ -66,10 +74,12 @@ const Connections: React.FC = () => {
     const newConnections = vmixConnections.map((conn, index) => ({
       id: index + 1,
       host: conn.host,
+      port: conn.port,
       label: conn.label,
       status: conn.status as 'Connected' | 'Disconnected' | 'Reconnecting',
       activeInput: conn.active_input,
       previewInput: conn.preview_input,
+      connectionType: conn.connection_type,
     }));
     
     setConnections(newConnections);
@@ -107,6 +117,8 @@ const Connections: React.FC = () => {
   const handleClose = () => {
     setOpen(false);
     setNewHost('');
+    setNewPort(8088);
+    setNewConnectionType('Http');
     setError(null);
   };
 
@@ -125,7 +137,8 @@ const Connections: React.FC = () => {
     setConnecting(true);
     setError(null);
     try {
-      await connectVMix(trimmedHost);
+      const portToUse = newConnectionType === 'Tcp' ? 8099 : newPort;
+      await connectVMix(trimmedHost, portToUse, newConnectionType);
     } catch (error) {
       console.error('Failed to connect:', error);
       setError(`Failed to connect to ${trimmedHost}: ${error}`);
@@ -163,13 +176,13 @@ const Connections: React.FC = () => {
     setConnectionToDelete(null);
   };
 
-  const handleReconnect = async (host: string) => {
+  const handleReconnect = async (connection: Connection) => {
     setError(null);
     try {
-      await connectVMix(host);
+      await connectVMix(connection.host, connection.port, connection.connectionType);
     } catch (error) {
       console.error('Failed to reconnect:', error);
-      setError(`Failed to reconnect to ${host}: ${error}`);
+      setError(`Failed to reconnect to ${connection.host}: ${error}`);
     }
   };
 
@@ -191,7 +204,7 @@ const Connections: React.FC = () => {
       
       // Only try to reconnect if the connection is connected or reconnecting
       if (editingConnection.status === 'Connected' || editingConnection.status === 'Reconnecting') {
-        await connectVMix(editingConnection.host);
+        await connectVMix(editingConnection.host, editingConnection.port, editingConnection.connectionType);
       }
       
       setLabelDialogOpen(false);
@@ -271,6 +284,8 @@ const Connections: React.FC = () => {
           <TableHead>
             <TableRow>
               <TableCell>Host</TableCell>
+              <TableCell>Port</TableCell>
+              <TableCell>Type</TableCell>
               <TableCell>Status</TableCell>
               <TableCell>Active Input</TableCell>
               <TableCell>Preview Input</TableCell>
@@ -281,7 +296,7 @@ const Connections: React.FC = () => {
           <TableBody>
             {(globalLoading) && connections.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={6} align="center" sx={{ py: 4 }}>
+                <TableCell colSpan={8} align="center" sx={{ py: 4 }}>
                   <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
                     <CircularProgress />
                     <Typography variant="body2" color="textSecondary">
@@ -292,7 +307,7 @@ const Connections: React.FC = () => {
               </TableRow>
             ) : connections.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={6} align="center">
+                <TableCell colSpan={8} align="center">
                   <Typography color="textSecondary">
                     No vMix connections. Add a connection to get started.
                   </Typography>
@@ -321,6 +336,17 @@ const Connections: React.FC = () => {
                     </Box>
                   </TableCell>
                   <TableCell>
+                    <Typography variant="body2">{connection.port}</Typography>
+                  </TableCell>
+                  <TableCell>
+                    <Chip 
+                      label={connection.connectionType}
+                      color={connection.connectionType === 'Tcp' ? 'primary' : 'default'}
+                      variant="outlined"
+                      size="small"
+                    />
+                  </TableCell>
+                  <TableCell>
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                       <Chip 
                         label={connection.status}
@@ -336,7 +362,7 @@ const Connections: React.FC = () => {
                   <TableCell>{connection.activeInput}</TableCell>
                   <TableCell>{connection.previewInput}</TableCell>
                   <TableCell>
-                    {connection.status === 'Connected' && (() => {
+                    {connection.status === 'Connected' && connection.connectionType === 'Http' && (() => {
                       const config = autoRefreshConfigs[connection.host] || { enabled: true, duration: 3 };
                       return (
                         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
@@ -371,12 +397,17 @@ const Connections: React.FC = () => {
                         </Box>
                       );
                     })()}
+                    {connection.connectionType === 'Tcp' && (
+                      <Typography variant="body2" color="textSecondary">
+                        Real-time
+                      </Typography>
+                    )}
                   </TableCell>
                   <TableCell align="right">
                     {connection.status === 'Disconnected' ? (
                       <IconButton
                         color="primary"
-                        onClick={() => handleReconnect(connection.host)}
+                        onClick={() => handleReconnect(connection)}
                         title="Reconnect"
                       >
                         <ReconnectIcon />
@@ -414,7 +445,52 @@ const Connections: React.FC = () => {
             placeholder="192.168.1.6 or localhost"
             helperText="Enter the IP address or hostname of your vMix instance"
             disabled={connecting}
+            sx={{ mb: 2 }}
           />
+          <TextField
+            margin="dense"
+            id="port"
+            label="Port"
+            type="number"
+            fullWidth
+            variant="outlined"
+            value={newConnectionType === 'Tcp' ? 8099 : newPort}
+            onChange={(e) => {
+              if (newConnectionType === 'Http') {
+                setNewPort(parseInt(e.target.value) || 8088);
+              }
+            }}
+            placeholder={newConnectionType === 'Tcp' ? "8099" : "8088"}
+            helperText={newConnectionType === 'Tcp' ? "TCP API port (fixed: 8099)" : "HTTP API port (default: 8088)"}
+            disabled={connecting || newConnectionType === 'Tcp'}
+            InputProps={{
+              inputProps: {
+                min: 1,
+                max: 65535
+              }
+            }}
+          />
+          <FormControl component="fieldset" sx={{ mt: 2, mb: 1 }}>
+            <FormLabel component="legend">Connection Type</FormLabel>
+            <RadioGroup
+              row
+              value={newConnectionType}
+              onChange={(e) => setNewConnectionType(e.target.value as 'Http' | 'Tcp')}
+            >
+              <FormControlLabel
+                value="Http"
+                control={<Radio />}
+                label="HTTP API"
+                disabled={connecting}
+              />
+              <FormControlLabel
+                value="Tcp"
+                control={<Radio />}
+                label="TCP API"
+                disabled={connecting}
+              />
+            </RadioGroup>
+          </FormControl>
           {error && (
             <Alert severity="error" sx={{ mt: 2 }}>
               {error}

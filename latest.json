@@ -1,22 +1,22 @@
 {
-  "version": "2.0.0",
-  "notes": "Initial release with auto-update support",
+  "version": "2.1.0",
+  "notes": "Support TCP API",
   "platforms": {
     "darwin-x86_64": {
       "signature": "",
-      "url": "https://github.com/Flowing-tech/vmix-utility/releases/download/v2.0.0/vmix-utility_2.0.0_x64.app.tar.gz"
+      "url": "https://github.com/Flowing-tech/vmix-utility/releases/download/v2.1.0/vmix-utility_2.1.0_x64.app.tar.gz"
     },
     "darwin-aarch64": {
       "signature": "",
-      "url": "https://github.com/Flowing-tech/vmix-utility/releases/download/v2.0.0/vmix-utility_2.0.0_aarch64.app.tar.gz"
+      "url": "https://github.com/Flowing-tech/vmix-utility/releases/download/v2.1.0/vmix-utility_2.1.0_aarch64.app.tar.gz"
     },
     "linux-x86_64": {
       "signature": "",
-      "url": "https://github.com/Flowing-tech/vmix-utility/releases/download/v2.0.0/vmix-utility_2.0.0_amd64.AppImage.tar.gz"
+      "url": "https://github.com/Flowing-tech/vmix-utility/releases/download/v2.1.0/vmix-utility_2.1.0_amd64.AppImage.tar.gz"
     },
     "windows-x86_64": {
       "signature": "",
-      "url": "https://github.com/Flowing-tech/vmix-utility/releases/download/v2.0.0/vmix-utility_2.0.0_x64-setup.nsis.zip"
+      "url": "https://github.com/Flowing-tech/vmix-utility/releases/download/v2.1.0/vmix-utility_2.1.0_x64-setup.nsis.zip"
     }
   }
 }

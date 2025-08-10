@@ -1,9 +1,0 @@
-{
-  "permissions": {
-    "allow": [
-      "Bash(grep:*)",
-      "WebFetch(domain:v2.tauri.app)"
-    ],
-    "deny": []
-  }
-}
