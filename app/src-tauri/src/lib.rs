@@ -263,7 +263,14 @@ impl TcpVmixManager {
         
         let client = TcpVmixClient::new(socket_addr, Duration::from_secs(10)).await
             .map_err(|e| anyhow::anyhow!("Failed to connect TCP client: {}", e))?;
-            
+
+        // Send initial XML command to get current state and populate cache
+        if let Err(e) = client.send_command(SendCommand::XML) {
+            app_log!(warn, "Failed to send initial XML command for {}: {}", host, e);
+        } else {
+            app_log!(info, "Sent initial XML command to populate cache for {}", host);
+        }
+                    
         Ok(Self {
             client: Arc::new(client),
             host: host.to_string(),
@@ -313,19 +320,8 @@ impl TcpVmixManager {
                     Ok(recv_command) => {
                         match recv_command {
                             RecvCommand::XML(xml_response) => {
-                                // XMLレスポンスをパースしてイベント送信
+                                // XMLレスポンスをパースしてInputs情報のみ更新
                                 if let Ok(vmix_xml) = Self::parse_xml_response(&xml_response.body) {
-                                    let connection = VmixConnection {
-                                        host: response_host.clone(),
-                                        port,
-                                        label: format!("{} (TCP)", response_host),
-                                        status: "Connected".to_string(),
-                                        active_input: vmix_xml.active.unwrap_or("1".to_string()).parse().unwrap_or(1),
-                                        preview_input: vmix_xml.preview.unwrap_or("1".to_string()).parse().unwrap_or(1),
-                                        connection_type: ConnectionType::Tcp,
-                                    };
-                                    let _ = app_handle.emit("vmix-status-updated", &connection);
-                                    
                                     // Update inputs cache from XML and emit changes
                                     let new_inputs: Vec<VmixInput> = vmix_xml.inputs.input.iter().map(|input| VmixInput {
                                         key: input.key.clone(),
@@ -349,35 +345,138 @@ impl TcpVmixManager {
                                         }));
                                     }
                                     
-                                    // Update last status cache
+                                    // Update status cache with active/preview inputs from XML
+                                    let active_input = vmix_xml.active
+                                        .as_ref()
+                                        .and_then(|s| s.parse::<i32>().ok())
+                                        .unwrap_or(0);
+                                    let preview_input = vmix_xml.preview
+                                        .as_ref()
+                                        .and_then(|s| s.parse::<i32>().ok())
+                                        .unwrap_or(0);
+                                    
+                                    let connection_status = VmixConnection {
+                                        host: response_host.clone(),
+                                        port,
+                                        label: format!("vMix {}", response_host),
+                                        status: "Connected".to_string(),
+                                        active_input,
+                                        preview_input,
+                                        connection_type: ConnectionType::Tcp,
+                                    };
+                                    
+                                    // Update the status cache
                                     {
-                                        let mut cache = last_status_cache.lock().unwrap();
-                                        cache.insert(response_host.clone(), connection.clone());
+                                        let mut status_cache = last_status_cache.lock().unwrap();
+                                        status_cache.insert(response_host.clone(), connection_status.clone());
+                                        app_log!(debug, "TCP: Updated status cache - Active: {}, Preview: {}", active_input, preview_input);
                                     }
+                                    
+                                    // Send status update to frontend
+                                    let _ = app_handle.emit("vmix-status-updated", &connection_status);
+                                    app_log!(debug, "TCP: Sent initial vmix-status-updated event from XML response");
                                 }
                             }
                             RecvCommand::ACTS(acts_event) => {
                                 app_log!(debug, "ACTS event received: {:?}", acts_event);
                                 if matches!(acts_event.status, Status::OK) {
-                                    if let ActivatorsData::Input(input_number, active) = acts_event.body {
-                                        if active {
-                                            app_log!(debug, "Input {} is active (ACTS event)", input_number);
-                                            // 必要に応じてここでactive inputの更新やイベント送信を行う
+                                    let mut status_changed = false;
+                                    let mut new_active_input = None;
+                                    let mut new_preview_input = None;
+                                    
+                                    // Get current status from cache
+                                    let current_status = {
+                                        let cache = last_status_cache.lock().unwrap();
+                                        cache.get(&response_host).cloned()
+                                    };
+                                    
+                                    match acts_event.body {
+                                        ActivatorsData::Input(input_number, active) => {
+                                            app_log!(debug, "Input {} {} (ACTS event)", input_number, if active { "activated" } else { "deactivated" });
+                                            if active {
+                                                // New input became active
+                                                new_active_input = Some(input_number as i32);
+                                                status_changed = true;
+                                            } else if let Some(ref status) = current_status {
+                                                // Input deactivated - keep current active if it's different
+                                                if status.active_input == input_number as i32 {
+                                                    // Current active was deactivated, but we don't know the new one yet
+                                                    app_log!(debug, "Current active input {} was deactivated, waiting for new active", input_number);
+                                                }
+                                            }
+                                        }
+                                        ActivatorsData::InputPreview(input_number, active) => {
+                                            app_log!(debug, "InputPreview {} {} (ACTS event)", input_number, if active { "activated" } else { "deactivated" });
+                                            if active {
+                                                // New input became preview
+                                                new_preview_input = Some(input_number as i32);
+                                                status_changed = true;
+                                            } else if let Some(ref status) = current_status {
+                                                // Preview deactivated - keep current preview if it's different
+                                                if status.preview_input == input_number as i32 {
+                                                    // Current preview was deactivated, but we don't know the new one yet
+                                                    app_log!(debug, "Current preview input {} was deactivated, waiting for new preview", input_number);
+                                                }
+                                            }
+                                        }
+                                        _ => {
+                                            app_log!(debug, "TCP: Received unhandled ACTS event type: {:?}", acts_event.body);
                                         }
                                     }
-                                    if let ActivatorsData::InputPreview(input_number, active) = acts_event.body {
-                                        if active {
-                                            app_log!(debug, "Input {} is active (ACTS event)", input_number);
-                                            // 必要に応じてここでactive inputの更新やイベント送信を行う
+                                    
+                                    // Send immediate status update if we have new active/preview info
+                                    if status_changed {
+                                        if let Some(ref status) = current_status {
+                                            let updated_connection = VmixConnection {
+                                                host: response_host.clone(),
+                                                port,
+                                                label: status.label.clone(),
+                                                status: status.status.clone(),
+                                                active_input: new_active_input.unwrap_or(status.active_input),
+                                                preview_input: new_preview_input.unwrap_or(status.preview_input),
+                                                connection_type: ConnectionType::Tcp,
+                                            };
+                                            
+                                            // Update cache
+                                            {
+                                                let mut cache = last_status_cache.lock().unwrap();
+                                                cache.insert(response_host.clone(), updated_connection.clone());
+                                            }
+                                            
+                                            // Send immediate update to frontend
+                                            let _ = app_handle.emit("vmix-status-updated", &updated_connection);
+                                            app_log!(debug, "TCP: ACTS event triggered immediate status update - Active: {}, Preview: {}", 
+                                                updated_connection.active_input, updated_connection.preview_input);
                                         }
                                     }
                                 }
                             }
-                            _ => {}
+                            RecvCommand::VERSION(version_response) => {
+                                app_log!(debug, "TCP: Received VERSION command: {:?}", version_response);
+                                // Subscribe to ACTS events to receive real-time input/preview changes
+                                if let Err(e) = client.send_command(SendCommand::SUBSCRIBE(vmix_rs::commands::SUBSCRIBECommand::ACTS)) {
+                                    app_log!(warn, "Failed to send subscribe command to ACTS events for {}: {}", host, e);
+                                } else {
+                                    app_log!(info, "Successfully send subscribe command to ACTS events for {}", host);
+                                }
+                            }
+                            RecvCommand::SUBSCRIBE(subscribe_response) => {
+                                app_log!(debug, "TCP: Received SUBSCRIBE command: {:?}", subscribe_response);
+                            }
+                            RecvCommand::UNSUBSCRIBE(unsubscribe_response) => {
+                                app_log!(debug, "TCP: Received UNSUBSCRIBE command: {:?}", unsubscribe_response);
+                            }
+                            _ => {
+                                app_log!(debug, "TCP: Received unhandled command type");
+                            }
                         }
                     },
-                    Err(_) => {
-                        // タイムアウトは正常動作
+                    Err(e) => {
+                        // Handle errors more gracefully
+                        let error_msg = format!("{}", e);
+                        if !error_msg.contains("timeout") && !error_msg.contains("No matching command found") {
+                            app_log!(debug, "TCP: Receive error: {}", e);
+                        }
                         tokio::time::sleep(Duration::from_millis(10)).await;
                     }
                 }

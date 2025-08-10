@@ -89,7 +89,8 @@ export const VMixStatusProvider = ({ children }: { children: React.ReactNode }) 
 
   // Listen for status updates from Tauri backend
   useEffect(() => {
-    const unlisten = listen<VmixConnection>('vmix-status-updated', (event) => {
+    const unlistenStatus = listen<VmixConnection>('vmix-status-updated', (event) => {
+      console.log('vmix-status-updated', event);
       const updatedConnection = event.payload;
       
       setConnections(prev => {
@@ -112,9 +113,27 @@ export const VMixStatusProvider = ({ children }: { children: React.ReactNode }) 
     });
 
     return () => {
-      unlisten.then(f => f());
+      unlistenStatus.then(f => f());
     };
   }, [fetchInputsForHost]);
+
+  // Listen for inputs updates (especially for TCP connections)
+  useEffect(() => {
+    const unlistenInputs = listen<{host: string, inputs: VmixInput[]}>('vmix-inputs-updated', (event) => {
+      const { host, inputs: updatedInputs } = event.payload;
+      
+      setInputs(prev => ({
+        ...prev,
+        [host]: updatedInputs
+      }));
+      
+      console.log(`Inputs updated for ${host}:`, updatedInputs);
+    });
+
+    return () => {
+      unlistenInputs.then(f => f());
+    };
+  }, []);
 
   // Load initial connections and configs with retry
   useEffect(() => {
