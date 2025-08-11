@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useVMixStatus } from '../hooks/useVMixStatus';
 import {
   Box,
@@ -50,7 +50,9 @@ const InputManager = () => {
   const [error, setError] = useState<string | null>(null);
   
   // Track editing state for each input
-  const [editingStates, setEditingStates] = useState<string[]>([]);
+  const [editingStates, setEditingStates] = useState<Set<string>>(new Set());
+  // Track editing values separately to avoid re-rendering all inputs
+  const [editingValues, setEditingValues] = useState<{[key: string]: string}>({});
   const [order, setOrder] = useState<Order>('asc');
   const [orderBy, setOrderBy] = useState<OrderBy>('number');
   
@@ -88,30 +90,40 @@ const InputManager = () => {
   };
 
   const handleEditClick = (input: Input) => {
-    setEditingStates([...editingStates, input.key]);
+    setEditingStates(prev => new Set([...prev, input.key]));
+    setEditingValues(prev => ({ ...prev, [input.key]: input.title }));
   };
 
   const handleSaveClick = async (key: string) => {
     const input = inputs.find(inp => inp.key === key);
+    const newTitle = editingValues[key];
     
-    if (input && selectedConnection) {
+    if (input && selectedConnection && newTitle !== undefined) {
       try {
         // Send SetInputName function to update input title in vMix
         await sendVMixFunction(selectedConnection, 'SetInputName', {
           Input: input.number.toString(),
-          Value: input.title
+          Value: newTitle
         });
 
         // Update local state
         setInputs(inputs.map(inp =>
           inp.key === key
-            ? { ...inp, title: input.title }
+            ? { ...inp, title: newTitle }
             : inp
         ));
+
         
         // Remove this input from editing state
-        const newEditingStates = editingStates.filter(k => k !== key);
-        setEditingStates(newEditingStates);
+        setEditingStates(prev => {
+          const newSet = new Set(prev);
+          newSet.delete(key);
+          return newSet;
+        });
+        setEditingValues(prev => {
+          const { [key]: _, ...rest } = prev;
+          return rest;
+        });
       } catch (error) {
         console.error('Failed to update input title:', error);
         setError(`Failed to update input title: ${error}`);
@@ -121,8 +133,15 @@ const InputManager = () => {
 
   const handleCancelClick = (key: string) => {
     // Remove this input from editing state
-    const newEditingStates = editingStates.filter(k => k !== key);
-    setEditingStates(newEditingStates);
+    setEditingStates(prev => {
+      const newSet = new Set(prev);
+      newSet.delete(key);
+      return newSet;
+    });
+    setEditingValues(prev => {
+      const { [key]: _, ...rest } = prev;
+      return rest;
+    });
   };
 
   const handleDeleteClick = (key: string) => {
@@ -163,16 +182,18 @@ const InputManager = () => {
     setOrderBy(property);
   };
 
-  const sortedInputs = [...inputs].sort((a, b) => {
-    const aValue = a[orderBy];
-    const bValue = b[orderBy];
-    
-    const compareResult = typeof aValue === 'string' && typeof bValue === 'string'
-      ? aValue.localeCompare(bValue)
-      : (aValue as number) - (bValue as number);
+  const sortedInputs = useMemo(() => {
+    return [...inputs].sort((a, b) => {
+      const aValue = a[orderBy];
+      const bValue = b[orderBy];
       
-    return order === 'asc' ? compareResult : -compareResult;
-  });
+      const compareResult = typeof aValue === 'string' && typeof bValue === 'string'
+        ? aValue.localeCompare(bValue)
+        : (aValue as number) - (bValue as number);
+        
+      return order === 'asc' ? compareResult : -compareResult;
+    });
+  }, [inputs, order, orderBy]);
 
   return (
     <Box sx={{ p: 3 }}>
@@ -266,7 +287,8 @@ const InputManager = () => {
               </TableRow>
             ) : (
               sortedInputs.map((input) => {
-                const isEditing = editingStates.includes(input.key);
+                const isEditing = editingStates.has(input.key);
+                const displayValue = isEditing ? (editingValues[input.key] ?? input.title) : input.title;
                 
                 return (
                   <TableRow key={input.key}>
@@ -274,14 +296,11 @@ const InputManager = () => {
                     <TableCell>
                     <Box sx={{ display: 'flex', alignItems: 'center' }}>
                       <TextField
-                        value={input.title}
+                        value={displayValue}
                         onChange={(e) => {
-                          // 直接inputのtitleを更新
-                          setInputs(inputs.map(inp =>
-                            inp.key === input.key
-                              ? { ...inp, title: e.target.value }
-                              : inp
-                          ));
+                          if (isEditing) {
+                            setEditingValues(prev => ({ ...prev, [input.key]: e.target.value }));
+                          }
                         }}
                         size="small"
                         disabled={!isEditing}
@@ -357,13 +376,14 @@ const InputManager = () => {
           color="primary"
           onClick={async () => {
             // editingStatesに含まれる全てのkeyに対して順番に保存処理をawaitで実行
-            for (const key of editingStates) {
+            for (const key of Array.from(editingStates)) {
               await handleSaveClick(key);
             }
             // 全ての保存処理が終わった後に編集状態をクリア
-            setEditingStates([]);
+            setEditingStates(new Set());
+            setEditingValues({});
           }}
-          disabled={editingStates.length === 0}
+          disabled={editingStates.size === 0}
         >
           Apply All Changes
         </Button>
