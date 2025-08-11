@@ -161,7 +161,7 @@ const VirtualizedInputItem = memo(({ index, style, data }: {
         
         {/* Generated URL */}
         <Box sx={{ flex: 1, minWidth: 0 }}>
-          <Box sx={{ display: 'flex', alignItems: 'center', bgcolor: '#f5f5f5', p: 1, borderRadius: 1 }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', bgcolor: 'action.hover', p: 1, borderRadius: 1 }}>
             <Typography 
               component="pre" 
               variant="caption" 
@@ -547,7 +547,7 @@ const ShortcutGenerator = () => {
             const selectedShortcut = shortcutsData.find(s => s.Name === sharedFunctionName);
             if (selectedShortcut) {
               return (
-                <Box sx={{ mt: 1, p: 1, bgcolor: 'grey.50', borderRadius: 1 }}>
+                <Box sx={{ mt: 1, p: 1, bgcolor: 'background.paper', borderRadius: 1 }}>
                   <Typography variant="caption" color="text.secondary">
                     <strong>Description:</strong> {selectedShortcut.Description}
                   </Typography>
