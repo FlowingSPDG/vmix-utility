@@ -19,16 +19,21 @@ import {
   GitHub,
   Code,
   FavoriteOutlined,
-  CoffeeOutlined,
   Description,
   Star,
 } from '@mui/icons-material';
+import { openUrl } from '@tauri-apps/plugin-opener';
 
 const Developer = () => {
   const repositoryUrl = 'https://github.com/FlowingSPDG/vmix-utility';
   const developerGitHub = 'https://github.com/FlowingSPDG';
   const sponsorUrl = 'https://github.com/sponsors/FlowingSPDG';
-  const koFiUrl = 'https://ko-fi.com/flowingpsdg';
+  const fanboxUrl = 'https://flowingspdg.fanbox.cc/';
+
+  const openInBrowser = (url: string) => {
+    openUrl(url);
+  };
+
 
   return (
     <Box sx={{ p: 3 }}>
@@ -63,9 +68,7 @@ const Developer = () => {
               <Button
                 variant="contained"
                 startIcon={<GitHub />}
-                href={repositoryUrl}
-                target="_blank"
-                rel="noopener noreferrer"
+                onClick={() => openInBrowser(repositoryUrl)}
                 fullWidth
               >
                 View on GitHub
@@ -99,9 +102,7 @@ const Developer = () => {
               <Button
                 variant="outlined"
                 startIcon={<GitHub />}
-                href={developerGitHub}
-                target="_blank"
-                rel="noopener noreferrer"
+                onClick={() => openInBrowser(developerGitHub)}
                 fullWidth
                 sx={{ mt: 2 }}
               >
@@ -132,9 +133,7 @@ const Developer = () => {
                     variant="contained"
                     color="secondary"
                     startIcon={<Star />}
-                    href={repositoryUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
+                    onClick={() => openInBrowser(repositoryUrl)}
                     fullWidth
                   >
                     Star on GitHub
@@ -148,9 +147,7 @@ const Developer = () => {
                       '&:hover': { backgroundColor: '#0FA8CC' }
                     }}
                     startIcon={<FavoriteOutlined />}
-                    href={sponsorUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
+                    onClick={() => openInBrowser(sponsorUrl)}
                     fullWidth
                   >
                     GitHub Sponsors
@@ -160,16 +157,14 @@ const Developer = () => {
                   <Button
                     variant="contained"
                     sx={{ 
-                      backgroundColor: '#FF5E5B',
-                      '&:hover': { backgroundColor: '#E54B47' }
+                      backgroundColor: '#0096FA',
+                      '&:hover': { backgroundColor: '#0078CC' }
                     }}
-                    startIcon={<CoffeeOutlined />}
-                    href={koFiUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
+                    startIcon={<FavoriteOutlined />}
+                    onClick={() => openInBrowser(fanboxUrl)}
                     fullWidth
                   >
-                    Buy me a coffee
+                    Support on FANBOX
                   </Button>
                 </Grid>
               </Grid>
@@ -222,9 +217,9 @@ SOFTWARE.`}
             <Typography variant="body2" color="text.secondary" sx={{ mt: 2 }}>
               For more information, see the{' '}
               <Link
-                href={`${repositoryUrl}/blob/master/LICENSE`}
-                target="_blank"
-                rel="noopener noreferrer"
+                component="button"
+                onClick={() => openInBrowser(`${repositoryUrl}/blob/master/LICENSE`)}
+                sx={{ textDecoration: 'underline', cursor: 'pointer' }}
               >
                 LICENSE file
               </Link>{' '}
@@ -248,9 +243,9 @@ SOFTWARE.`}
                 <ListItemText
                   primary={
                     <Link
-                      href={`${repositoryUrl}/issues`}
-                      target="_blank"
-                      rel="noopener noreferrer"
+                      component="button"
+                      onClick={() => openInBrowser(`${repositoryUrl}/issues`)}
+                      sx={{ textDecoration: 'underline', cursor: 'pointer' }}
                     >
                       Report Issues
                     </Link>
@@ -266,9 +261,9 @@ SOFTWARE.`}
                 <ListItemText
                   primary={
                     <Link
-                      href={`${repositoryUrl}/wiki`}
-                      target="_blank"
-                      rel="noopener noreferrer"
+                      component="button"
+                      onClick={() => openInBrowser(`${repositoryUrl}/wiki`)}
+                      sx={{ textDecoration: 'underline', cursor: 'pointer' }}
                     >
                       Documentation
                     </Link>
@@ -284,9 +279,9 @@ SOFTWARE.`}
                 <ListItemText
                   primary={
                     <Link
-                      href={`${repositoryUrl}/pulls`}
-                      target="_blank"
-                      rel="noopener noreferrer"
+                      component="button"
+                      onClick={() => openInBrowser(`${repositoryUrl}/pulls`)}
+                      sx={{ textDecoration: 'underline', cursor: 'pointer' }}
                     >
                       Contribute
                     </Link>
