@@ -289,7 +289,8 @@ const InputManager = () => {
                         sx={{
                           mr: 1,
                           "& .MuiInputBase-input.Mui-disabled": {
-                            WebkitTextFillColor: isEditing ? "rgba(0, 0, 0, 0.87)" : "rgba(0, 0, 0, 0.38)"
+                            WebkitTextFillColor: "unset",
+                            color: "text.primary"
                           }
                         }}
                       />
