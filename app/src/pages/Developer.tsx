@@ -19,7 +19,6 @@ import {
   GitHub,
   Code,
   FavoriteOutlined,
-  CoffeeOutlined,
   Description,
   Star,
 } from '@mui/icons-material';
@@ -29,11 +28,12 @@ const Developer = () => {
   const repositoryUrl = 'https://github.com/FlowingSPDG/vmix-utility';
   const developerGitHub = 'https://github.com/FlowingSPDG';
   const sponsorUrl = 'https://github.com/sponsors/FlowingSPDG';
-  const koFiUrl = 'https://ko-fi.com/flowingpsdg';
+  const fanboxUrl = 'https://flowingspdg.fanbox.cc/';
 
   const openInBrowser = (url: string) => {
     openUrl(url);
   };
+
 
   return (
     <Box sx={{ p: 3 }}>
@@ -157,14 +157,14 @@ const Developer = () => {
                   <Button
                     variant="contained"
                     sx={{ 
-                      backgroundColor: '#FF5E5B',
-                      '&:hover': { backgroundColor: '#E54B47' }
+                      backgroundColor: '#0096FA',
+                      '&:hover': { backgroundColor: '#0078CC' }
                     }}
-                    startIcon={<CoffeeOutlined />}
-                    onClick={() => openInBrowser(koFiUrl)}
+                    startIcon={<FavoriteOutlined />}
+                    onClick={() => openInBrowser(fanboxUrl)}
                     fullWidth
                   >
-                    Buy me a coffee
+                    Support on FANBOX
                   </Button>
                 </Grid>
               </Grid>
