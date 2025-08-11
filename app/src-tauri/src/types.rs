@@ -138,6 +138,8 @@ pub struct VmixConnection {
     pub active_input: i32,
     pub preview_input: i32,
     pub connection_type: ConnectionType,
+    pub version: String,
+    pub edition: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

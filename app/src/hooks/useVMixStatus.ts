@@ -10,6 +10,8 @@ interface VmixConnection {
   active_input: number;
   preview_input: number;
   connection_type: 'Http' | 'Tcp';
+  version: string;
+  edition: string;
 }
 
 interface AutoRefreshConfig {

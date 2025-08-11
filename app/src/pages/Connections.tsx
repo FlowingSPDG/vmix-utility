@@ -49,6 +49,8 @@ interface Connection {
   activeInput: number;
   previewInput: number;
   connectionType: 'Http' | 'Tcp';
+  version: string;
+  edition: string;
 }
 
 const Connections: React.FC = () => {
@@ -80,6 +82,8 @@ const Connections: React.FC = () => {
       activeInput: conn.active_input,
       previewInput: conn.preview_input,
       connectionType: conn.connection_type,
+      version: conn.version,
+      edition: conn.edition,
     }));
     
     setConnections(newConnections);
@@ -287,6 +291,8 @@ const Connections: React.FC = () => {
               <TableCell>Port</TableCell>
               <TableCell>Type</TableCell>
               <TableCell>Status</TableCell>
+              <TableCell>Version</TableCell>
+              <TableCell>Edition</TableCell>
               <TableCell>Active Input</TableCell>
               <TableCell>Preview Input</TableCell>
               <TableCell>Auto-Refresh</TableCell>
@@ -296,7 +302,7 @@ const Connections: React.FC = () => {
           <TableBody>
             {(globalLoading) && connections.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={8} align="center" sx={{ py: 4 }}>
+                <TableCell colSpan={10} align="center" sx={{ py: 4 }}>
                   <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
                     <CircularProgress />
                     <Typography variant="body2" color="textSecondary">
@@ -307,7 +313,7 @@ const Connections: React.FC = () => {
               </TableRow>
             ) : connections.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={8} align="center">
+                <TableCell colSpan={10} align="center">
                   <Typography color="textSecondary">
                     No vMix connections. Add a connection to get started.
                   </Typography>
@@ -358,6 +364,12 @@ const Connections: React.FC = () => {
                         <CircularProgress size={16} />
                       )}
                     </Box>
+                  </TableCell>
+                  <TableCell>
+                    <Typography variant="body2">{connection.version}</Typography>
+                  </TableCell>
+                  <TableCell>
+                    <Typography variant="body2">{connection.edition}</Typography>
                   </TableCell>
                   <TableCell>{connection.activeInput}</TableCell>
                   <TableCell>{connection.previewInput}</TableCell>

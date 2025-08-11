@@ -304,6 +304,8 @@ impl AppState {
                                 active_input,
                                 preview_input,
                                 connection_type: ConnectionType::Http,
+                                version: "Unknown".to_string(),
+                                edition: "Unknown".to_string(),
                             };
 
                             // Get current inputs for comparison

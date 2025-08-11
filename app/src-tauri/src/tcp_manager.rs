@@ -133,6 +133,8 @@ impl TcpVmixManager {
                                         active_input,
                                         preview_input,
                                         connection_type: ConnectionType::Tcp,
+                                        version: vmix_xml.version,
+                                        edition: vmix_xml.edition,
                                     };
                                     
                                     // Update the status cache
@@ -205,6 +207,8 @@ impl TcpVmixManager {
                                                 active_input: new_active_input.unwrap_or(status.active_input),
                                                 preview_input: new_preview_input.unwrap_or(status.preview_input),
                                                 connection_type: ConnectionType::Tcp,
+                                                version: status.version.clone(),
+                                                edition: status.edition.clone(),
                                             };
                                             
                                             // Update cache
