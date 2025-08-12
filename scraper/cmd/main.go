@@ -10,9 +10,15 @@ import (
 	"github.com/FlowingSPDG/vmix-utility/scraper"
 )
 
+var (
+	helpVer  int
+	dumpPath string
+)
+
 func main() {
-	helpVer := 0
 	flag.IntVar(&helpVer, "helpver", 28, "vMix Help Version")
+	flag.StringVar(&dumpPath, "dumppath", "../app/src/assets", "Path to dump the shortcuts.json file")
+	flag.Parse()
 
 	sc, err := scraper.GetShortcuts(helpVer)
 	if err != nil {
@@ -20,7 +26,7 @@ func main() {
 	}
 
 	// create new file
-	dumpPath := path.Join(".", "app", "src", "assets", "shortcuts.json")
+	dumpPath := path.Join(dumpPath, "shortcuts.json")
 	dumpFile, err := os.Create(dumpPath)
 	if err != nil {
 		panic(err)
