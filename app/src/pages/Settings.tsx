@@ -27,12 +27,10 @@ const Settings = () => {
   const [settings, setSettings] = useState({
     defaultVMixIP: '127.0.0.1',
     defaultVMixPort: 8088,
-    refreshInterval: 1000,
     theme: themeMode,
     logLevel: 'info',
     saveLogsToFile: false,
     logFilePath: '',
-    maxLogFileSize: 10,
   });
 
   const [appInfo, setAppInfo] = useState<{
@@ -97,11 +95,7 @@ const Settings = () => {
         settings: {
           default_vmix_ip: settings.defaultVMixIP,
           default_vmix_port: settings.defaultVMixPort,
-          refresh_interval: settings.refreshInterval,
           theme: settings.theme,
-          auto_reconnect: false,
-          auto_reconnect_interval: 5000,
-          max_log_file_size: settings.maxLogFileSize,
         }
       });
 
@@ -130,9 +124,7 @@ const Settings = () => {
             ...prev,
             defaultVMixIP: settings_data.default_vmix_ip ?? '127.0.0.1',
             defaultVMixPort: settings_data.default_vmix_port ?? 8088,
-            refreshInterval: settings_data.refresh_interval ?? 1000,
             theme: settings_data.theme ?? 'Auto',
-            maxLogFileSize: settings_data.max_log_file_size ?? 10,
           }));
         }
 

@@ -23,7 +23,8 @@
       "Bash(find:*)",
       "Bash(cargo --version)",
       "Bash(ls:*)",
-      "Bash(grep:*)"
+      "Bash(grep:*)",
+      "Bash(rg:*)"
     ]
   },
   "enableAllProjectMcpServers": true,

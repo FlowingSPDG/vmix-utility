@@ -124,6 +124,7 @@ impl AppState {
             AppConfig {
                 connections: all_connections,
                 app_settings: Some(self.app_settings.lock().unwrap().clone()),
+                logging_config: Some(crate::logging::LOGGING_CONFIG.lock().unwrap().clone()),
             }
         };
         
@@ -201,6 +202,13 @@ impl AppState {
             let mut settings = self.app_settings.lock().unwrap();
             *settings = app_settings;
             println!("Loaded app settings");
+        }
+        
+        // Load logging config
+        if let Some(logging_config) = config.logging_config {
+            let mut config = crate::logging::LOGGING_CONFIG.lock().unwrap();
+            *config = logging_config;
+            println!("Loaded logging config");
         }
         
         println!("Config loading completed");

@@ -341,7 +341,7 @@ const Connections: React.FC = () => {
                   </TableCell>
                   <TableCell>
                     <Chip 
-                      label={connection.connectionType}
+                      label={connection.connectionType === 'Tcp' ? 'TCP (Experimental)' : connection.connectionType}
                       color={connection.connectionType === 'Tcp' ? 'primary' : 'default'}
                       variant="outlined"
                       size="small"
@@ -493,7 +493,7 @@ const Connections: React.FC = () => {
               <FormControlLabel
                 value="Tcp"
                 control={<Radio />}
-                label="TCP API"
+                label="TCP API (Experimental)"
                 disabled={connecting}
               />
             </RadioGroup>
