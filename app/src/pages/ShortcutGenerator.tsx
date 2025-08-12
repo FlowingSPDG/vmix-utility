@@ -19,7 +19,8 @@ import {
   Snackbar,
   Alert,
   Autocomplete,
-  Chip
+  Chip,
+  Collapse
 } from '@mui/material';
 import CodeIcon from '@mui/icons-material/Code';
 import PlayArrowIcon from '@mui/icons-material/PlayArrow';
@@ -27,6 +28,8 @@ import AddIcon from '@mui/icons-material/Add';
 import DeleteIcon from '@mui/icons-material/Delete';
 import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 import OpenInBrowserIcon from '@mui/icons-material/OpenInBrowser';
+import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
+import ExpandLessIcon from '@mui/icons-material/ExpandLess';
 import shortcuts from '../assets/shortcuts.json';
 
 interface VmixInput {
@@ -129,16 +132,28 @@ const VirtualizedInputItem = memo(({ index, style, data }: {
 
   return (
     <Box style={style}>
-      <Box sx={{ p: 2, display: 'flex', alignItems: 'center', gap: 2 }}>
+      <Box sx={{ 
+        p: 1.5, 
+        display: 'flex', 
+        alignItems: 'center', 
+        gap: 1.5,
+        flexWrap: 'wrap',
+        minHeight: '70px'
+      }}>
         {/* Input Info */}
-        <Box sx={{ minWidth: '200px', maxWidth: '300px', overflow: 'hidden' }}>
+        <Box sx={{ 
+          minWidth: '160px', 
+          maxWidth: '220px', 
+          overflow: 'hidden'
+        }}>
           <Typography 
-            variant="body1" 
+            variant="body2" 
             fontWeight="medium"
             sx={{
               overflow: 'hidden',
               textOverflow: 'ellipsis',
-              whiteSpace: 'nowrap'
+              whiteSpace: 'nowrap',
+              fontSize: '0.875rem'
             }}
             title={isSpecialInput ? input.title.replace(`${input.functionName} to `, '') : `Input ${input.number}: ${vmixInput?.title || 'Unknown'}`}
           >
@@ -151,7 +166,8 @@ const VirtualizedInputItem = memo(({ index, style, data }: {
               overflow: 'hidden',
               textOverflow: 'ellipsis',
               whiteSpace: 'nowrap',
-              display: 'block'
+              display: 'block',
+              fontSize: '0.7rem'
             }}
             title={`${input.functionName} | ${input.queryParams.map(p => `${p.key}=${p.value}`).join(', ')}`}
           >
@@ -159,59 +175,103 @@ const VirtualizedInputItem = memo(({ index, style, data }: {
           </Typography>
         </Box>
         
-        {/* Generated URL */}
-        <Box sx={{ flex: 1, minWidth: 0 }}>
-          <Box sx={{ display: 'flex', alignItems: 'center', bgcolor: 'action.hover', p: 1, borderRadius: 1 }}>
-            <Typography 
-              component="pre" 
-              variant="caption" 
+        {/* Generated URL and Actions Container */}
+        <Box sx={{ 
+          flex: 1, 
+          minWidth: 0,
+          display: 'flex',
+          gap: 1,
+          alignItems: 'center'
+        }}>
+          {/* Generated URL */}
+          <Box sx={{ 
+            flex: 1, 
+            minWidth: 0,
+            minHeight: '36px'
+          }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', bgcolor: 'action.hover', borderRadius: 1, height: '100%' }}>
+              <Box 
+                sx={{ 
+                  flex: 1, 
+                  p: 0.75,
+                  overflow: 'auto',
+                  maxHeight: '60px',
+                  '&::-webkit-scrollbar': {
+                    height: '4px',
+                  },
+                  '&::-webkit-scrollbar-track': {
+                    background: 'transparent',
+                  },
+                  '&::-webkit-scrollbar-thumb': {
+                    background: 'rgba(0,0,0,0.2)',
+                    borderRadius: '2px',
+                  },
+                  '&::-webkit-scrollbar-thumb:hover': {
+                    background: 'rgba(0,0,0,0.3)',
+                  }
+                }}
+              >
+                <Typography 
+                  component="pre" 
+                  variant="caption" 
+                  sx={{ 
+                    fontFamily: 'monospace', 
+                    fontSize: '0.7rem',
+                    whiteSpace: 'nowrap',
+                    margin: 0,
+                    lineHeight: 1.2
+                  }}
+                >
+                  {generateUrl(input)}
+                </Typography>
+              </Box>
+              <IconButton
+                size="small"
+                onClick={handleCopyUrl}
+                sx={{ p: 0.5, flexShrink: 0 }}
+              >
+                <ContentCopyIcon fontSize="small" />
+              </IconButton>
+            </Box>
+          </Box>
+          
+          {/* Action Buttons */}
+          <Box sx={{ flexShrink: 0 }}>
+            <ButtonGroup 
+              variant="outlined" 
+              size="small"
               sx={{ 
-                fontFamily: 'monospace', 
-                fontSize: '0.75rem',
-                wordBreak: 'break-all',
-                whiteSpace: 'pre-wrap',
-                flex: 1,
-                margin: 0,
-                overflow: 'hidden'
+                '& .MuiButton-root': { 
+                  minWidth: 'auto', 
+                  px: 1
+                }
               }}
             >
-              {generateUrl(input)}
-            </Typography>
-            <IconButton
-              size="small"
-              onClick={handleCopyUrl}
-              sx={{ ml: 1 }}
-            >
-              <ContentCopyIcon fontSize="small" />
-            </IconButton>
+              <Button
+                startIcon={<CodeIcon fontSize="small" />}
+                onClick={handleCopyScript}
+                size="small"
+              >
+                SCRIPT
+              </Button>
+              <Button
+                startIcon={<OpenInBrowserIcon fontSize="small" />}
+                onClick={() => openTallyInBrowser(input)}
+                size="small"
+              >
+                TALLY
+              </Button>
+              <Button
+                startIcon={<PlayArrowIcon fontSize="small" />}
+                color="primary"
+                onClick={handleTryCommand}
+                size="small"
+              >
+                TRY!
+              </Button>
+            </ButtonGroup>
           </Box>
         </Box>
-        
-        {/* Action Buttons */}
-        <ButtonGroup variant="outlined" size="small">
-          <Button
-            startIcon={<CodeIcon />}
-            onClick={handleCopyScript}
-            size="small"
-          >
-            SCRIPT
-          </Button>
-          <Button
-            startIcon={<OpenInBrowserIcon />}
-            onClick={() => openTallyInBrowser(input)}
-            size="small"
-          >
-            TALLY
-          </Button>
-          <Button
-            startIcon={<PlayArrowIcon />}
-            color="primary"
-            onClick={handleTryCommand}
-            size="small"
-          >
-            TRY!
-          </Button>
-        </ButtonGroup>
       </Box>
       {!isLastItem && <Divider />}
     </Box>
@@ -238,6 +298,10 @@ const ShortcutGenerator = () => {
     {open: false, message: '', severity: 'info'}
   );
   const [inputTypeFilter, setInputTypeFilter] = useState<string>('All');
+  
+  // Collapse states
+  const [functionConfigExpanded, setFunctionConfigExpanded] = useState(true);
+  const [specialInputsExpanded, setSpecialInputsExpanded] = useState(true);
   
   
   // Shortcut generation state
@@ -385,16 +449,33 @@ const ShortcutGenerator = () => {
     return ['All', ...types];
   }, [vmixInputs]);
 
-  // Filter inputs based on selected type - memoized for performance
-  const filteredInputs = useMemo(() => {
+  // Separate special inputs and regular inputs
+  const { specialInputs, regularInputs } = useMemo(() => {
+    const special = inputs.filter(input => input.id < 0);
+    const regular = inputs.filter(input => input.id > 0);
+    return { specialInputs: special, regularInputs: regular };
+  }, [inputs]);
+
+  // Filter regular inputs based on selected type
+  const filteredRegularInputs = useMemo(() => {
     if (inputTypeFilter === 'All') {
-      return inputs;
+      return regularInputs;
     }
-    return inputs.filter(input => {
+    return regularInputs.filter(input => {
       const vmixInput = vmixInputs.find(vi => vi.number === input.number);
       return vmixInput?.input_type === inputTypeFilter;
     });
-  }, [inputs, inputTypeFilter, vmixInputs]);
+  }, [regularInputs, inputTypeFilter, vmixInputs]);
+  
+  // Combine inputs based on collapse states
+  const filteredInputs = useMemo(() => {
+    const result = [];
+    if (specialInputsExpanded) {
+      result.push(...specialInputs);
+    }
+    result.push(...filteredRegularInputs);
+    return result;
+  }, [specialInputs, filteredRegularInputs, specialInputsExpanded]);
 
   const generateParamsObject = useCallback((input: Input) => {
     const params: { [key: string]: string } = {};
@@ -430,38 +511,30 @@ const ShortcutGenerator = () => {
         Shortcut Generator
       </Typography>
       
-      <Paper sx={{ p: 2, mb: 3 }}>
-        <FormControl fullWidth sx={{ mb: 2 }}>
-          <InputLabel id="vmix-select-label">Select vMix Connection</InputLabel>
-          <Select
-            labelId="vmix-select-label"
-            value={selectedConnection}
-            label="Select vMix Connection"
-            onChange={(e) => handleConnectionChange(e.target.value as string)}
-          >
-            <MenuItem value="">
-              <em>Select a vMix connection</em>
-            </MenuItem>
-            {connections.filter(conn => conn.status === 'Connected').map((conn) => (
-              <MenuItem key={conn.host} value={conn.host}>
-                {conn.label} ({conn.host})
+      <Paper sx={{ p: 2, mb: 2 }}>
+        {/* Connection and Filter Row */}
+        <Box sx={{ display: 'flex', gap: 2, alignItems: 'flex-start', flexWrap: 'wrap', mb: 2 }}>
+          <FormControl sx={{ flex: 1, minWidth: 250 }}>
+            <InputLabel id="vmix-select-label">Select vMix Connection</InputLabel>
+            <Select
+              labelId="vmix-select-label"
+              value={selectedConnection}
+              label="Select vMix Connection"
+              onChange={(e) => handleConnectionChange(e.target.value as string)}
+              size="small"
+            >
+              <MenuItem value="">
+                <em>Select a vMix connection</em>
               </MenuItem>
-            ))}
-          </Select>
-        </FormControl>
+              {connections.filter(conn => conn.status === 'Connected').map((conn) => (
+                <MenuItem key={conn.host} value={conn.host}>
+                  {conn.label} ({conn.host})
+                </MenuItem>
+              ))}
+            </Select>
+          </FormControl>
 
-        {globalLoading && (
-          <Box sx={{ mb: 2, display: 'flex', alignItems: 'center' }}>
-            <Typography variant="body2" sx={{ mr: 1 }}>
-              Loading inputs...
-            </Typography>
-          </Box>
-        )}
-
-        {/* Controls Row */}
-        {vmixInputs.length > 0 && (
-          <Box sx={{ display: 'flex', gap: 2, alignItems: 'center', flexWrap: 'wrap' }}>
-            {/* Input Type Filter */}
+          {vmixInputs.length > 0 && (
             <FormControl sx={{ minWidth: 200 }}>
               <InputLabel id="input-type-filter-label">Filter by Input Type</InputLabel>
               <Select
@@ -473,7 +546,7 @@ const ShortcutGenerator = () => {
               >
                 {availableInputTypes.map((type) => (
                   <MenuItem key={type} value={type}>
-                    {type} {type === 'All' ? `(${inputs.length})` : `(${inputs.filter(input => {
+                    {type} {type === 'All' ? `(${regularInputs.length})` : `(${regularInputs.filter(input => {
                       const vmixInput = vmixInputs.find(vi => vi.number === input.number);
                       return vmixInput?.input_type === type;
                     }).length})`}
@@ -481,19 +554,33 @@ const ShortcutGenerator = () => {
                 ))}
               </Select>
             </FormControl>
-            
-          </Box>
+          )}
+        </Box>
+
+        {globalLoading && (
+          <Typography variant="body2" color="text.secondary">
+            Loading inputs...
+          </Typography>
         )}
       </Paper>
 
       {/* Shared Function Configuration */}
-      <Paper sx={{ p: 2, mb: 3 }}>
-        <Typography variant="h6" gutterBottom>
-          Function Configuration (applies to all inputs)
-        </Typography>
+      <Paper sx={{ p: 1.5, mb: 2 }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1 }}>
+          <Typography variant="h6" sx={{ fontSize: '1.1rem' }}>
+            Function Configuration
+          </Typography>
+          <IconButton
+            size="small"
+            onClick={() => setFunctionConfigExpanded(!functionConfigExpanded)}
+          >
+            {functionConfigExpanded ? <ExpandLessIcon /> : <ExpandMoreIcon />}
+          </IconButton>
+        </Box>
         
+        <Collapse in={functionConfigExpanded}>
         {/* Function Name with Autocomplete */}
-        <Box sx={{ mb: 2 }}>
+        <Box sx={{ mb: 1.5, display: 'flex', alignItems: 'flex-start', gap: 2, flexWrap: 'wrap' }}>
           <Autocomplete
             freeSolo
             options={shortcutsData}
@@ -515,8 +602,8 @@ const ShortcutGenerator = () => {
                 {...params}
                 label="Function Name"
                 size="small"
-                sx={{ mb: 1, mr: 2, width: '300px' }}
-                helperText="Type to search for vMix functions. Select from suggestions or enter custom function name."
+                sx={{ width: '250px' }}
+                helperText="Search functions or enter custom"
               />
             )}
             renderOption={(props, option) => (
@@ -530,7 +617,7 @@ const ShortcutGenerator = () => {
                   </Typography>
                   {option.Parameters && (
                     <Typography variant="caption" color="text.secondary" display="block">
-                      Parameters: {option.Parameters.length} required: ({option.Parameters.join(', ')})
+                      Params: {option.Parameters.join(', ')}
                     </Typography>
                   )}
                 </Box>
@@ -542,35 +629,12 @@ const ShortcutGenerator = () => {
             }}
           />
           
-          {/* Show selected function details */}
-          {sharedFunctionName && (() => {
-            const selectedShortcut = shortcutsData.find(s => s.Name === sharedFunctionName);
-            if (selectedShortcut) {
-              return (
-                <Box sx={{ mt: 1, p: 1, bgcolor: 'background.paper', borderRadius: 1 }}>
-                  <Typography variant="caption" color="text.secondary">
-                    <strong>Description:</strong> {selectedShortcut.Description}
-                  </Typography>
-                  {selectedShortcut.Parameters && (
-                    <Typography variant="caption" color="text.secondary" display="block">
-                      <strong>Parameters:</strong> {selectedShortcut.Parameters.length} required: ({selectedShortcut.Parameters.join(', ')})
-                    </Typography>
-                  )}
-                </Box>
-              );
-            }
-            return null;
-          })()}
-        </Box>
-        
-
-        {/* Quick Function Selection */}
-        <Box sx={{ mb: 2 }}>
-          <Typography variant="subtitle2" gutterBottom>
-            Quick Functions:
-          </Typography>
-          <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
-            {['PreviewInput','Cut', 'Fade', 'Merge', 'Stinger1', 'Stinger2', 'Stinger3', 'Stinger4'].map((funcName) => (
+          {/* Quick Function Selection - moved to same row */}
+          <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5, alignItems: 'center' }}>
+            <Typography variant="caption" color="text.secondary" sx={{ mr: 1 }}>
+              Quick:
+            </Typography>
+            {['PreviewInput','Cut', 'Fade', 'Merge', 'Stinger1', 'Stinger2'].map((funcName) => (
               <Chip
                 key={funcName}
                 label={funcName}
@@ -578,57 +642,78 @@ const ShortcutGenerator = () => {
                 onClick={() => setSharedFunctionName(funcName)}
                 color={sharedFunctionName === funcName ? 'primary' : 'default'}
                 variant={sharedFunctionName === funcName ? 'filled' : 'outlined'}
+                sx={{ fontSize: '0.7rem', height: '24px' }}
               />
             ))}
           </Box>
         </Box>
         
-        {/* Shared Query Parameters */}
-        <Typography variant="subtitle2" gutterBottom>
-          Additional Query Parameters:
-        </Typography>
+        {/* Show selected function details - more compact */}
+        {sharedFunctionName && (() => {
+          const selectedShortcut = shortcutsData.find(s => s.Name === sharedFunctionName);
+          if (selectedShortcut) {
+            return (
+              <Box sx={{ mb: 1.5, p: 0.75, bgcolor: 'action.hover', borderRadius: 1 }}>
+                <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.75rem' }}>
+                  {selectedShortcut.Description}
+                  {selectedShortcut.Parameters && ` | Params: ${selectedShortcut.Parameters.join(', ')}`}
+                </Typography>
+              </Box>
+            );
+          }
+          return null;
+        })()}
         
-        {sharedQueryParams.map((param) => (
-          <Box key={param.id} sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
-            <TextField
-              label="Key"
-              value={param.key}
-              onChange={(e) => handleSharedParamChange(param.id, e.target.value, param.value)}
-              size="small"
-              sx={{ mr: 1, width: '150px' }}
-            />
-            <TextField
-              label="Value"
-              value={param.value}
-              onChange={(e) => handleSharedParamChange(param.id, param.key, e.target.value)}
-              size="small"
-              sx={{ mr: 1, width: '150px' }}
-            />
-            <IconButton
-              size="small"
-              color="error"
-              onClick={() => handleDeleteSharedParam(param.id)}
-            >
-              <DeleteIcon fontSize="small" />
-            </IconButton>
+        {/* Shared Query Parameters - more compact */}
+        {sharedQueryParams.length > 0 && (
+          <Box sx={{ mb: 1 }}>
+            <Typography variant="caption" color="text.secondary" gutterBottom>
+              Additional Parameters:
+            </Typography>
+            {sharedQueryParams.map((param) => (
+              <Box key={param.id} sx={{ display: 'flex', alignItems: 'center', mb: 0.5, gap: 1 }}>
+                <TextField
+                  label="Key"
+                  value={param.key}
+                  onChange={(e) => handleSharedParamChange(param.id, e.target.value, param.value)}
+                  size="small"
+                  sx={{ width: '120px' }}
+                />
+                <TextField
+                  label="Value"
+                  value={param.value}
+                  onChange={(e) => handleSharedParamChange(param.id, param.key, e.target.value)}
+                  size="small"
+                  sx={{ width: '120px' }}
+                />
+                <IconButton
+                  size="small"
+                  color="error"
+                  onClick={() => handleDeleteSharedParam(param.id)}
+                  sx={{ p: 0.5 }}
+                >
+                  <DeleteIcon fontSize="small" />
+                </IconButton>
+              </Box>
+            ))}
           </Box>
-        ))}
+        )}
         
-        {/* Add New Parameter */}
-        <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
+        {/* Add New Parameter - inline */}
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
           <TextField
-            label="New Parameter Key"
+            label="Add Key"
             value={newParamKey}
             onChange={(e) => setNewParamKey(e.target.value)}
             size="small"
-            sx={{ mr: 1, width: '150px' }}
+            sx={{ width: '120px' }}
           />
           <TextField
-            label="New Parameter Value"
+            label="Add Value"
             value={newParamValue}
             onChange={(e) => setNewParamValue(e.target.value)}
             size="small"
-            sx={{ mr: 1, width: '150px' }}
+            sx={{ width: '120px' }}
           />
           <Button
             variant="outlined"
@@ -636,28 +721,47 @@ const ShortcutGenerator = () => {
             startIcon={<AddIcon />}
             onClick={handleAddSharedParam}
             disabled={!newParamKey || !newParamValue}
+            sx={{ minWidth: 'auto', px: 1 }}
           >
-            Add Parameter
+            Add
           </Button>
         </Box>
+        </Collapse>
       </Paper>
 
-      <Paper sx={{ height: '600px', width: '100%' }}>
-        <List
-          width={"100%"}
-          height={600}
-          itemCount={filteredInputs.length}
-          itemSize={120}
-          itemData={{
-            filteredInputs,
-            vmixInputs,
-            selectedConnection,
-            showToast,
-            onTryCommand: tryCommand
-          }}
-        >
-          {VirtualizedInputItem}
-        </List>
+      <Paper sx={{ width: '100%' }}>
+        {/* Special Inputs Header */}
+        {specialInputs.length > 0 && (
+          <Box sx={{ p: 1.5, display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid', borderColor: 'divider' }}>
+            <Typography variant="subtitle2" color="text.secondary">
+              Special Inputs (None/Preview/Program/Dynamic) ({specialInputs.length})
+            </Typography>
+            <IconButton
+              size="small"
+              onClick={() => setSpecialInputsExpanded(!specialInputsExpanded)}
+            >
+              {specialInputsExpanded ? <ExpandLessIcon /> : <ExpandMoreIcon />}
+            </IconButton>
+          </Box>
+        )}
+        
+        <Box sx={{ height: '600px' }}>
+          <List
+            width={"100%"}
+            height={600}
+            itemCount={filteredInputs.length}
+            itemSize={100}
+            itemData={{
+              filteredInputs,
+              vmixInputs,
+              selectedConnection,
+              showToast,
+              onTryCommand: tryCommand
+            }}
+          >
+            {VirtualizedInputItem}
+          </List>
+        </Box>
       </Paper>
 
       {/* Toast Notification */}
