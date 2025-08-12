@@ -8,7 +8,7 @@ use crate::state::AppState;
 use crate::logging::LOGGING_CONFIG;
 use crate::app_log;
 use std::collections::HashMap;
-use tauri::{AppHandle, Manager, State};
+use tauri::{AppHandle, Manager, State, Emitter};
 
 // Additional Tauri command for sending vMix functions
 #[tauri::command]
@@ -264,11 +264,38 @@ pub async fn disconnect_vmix(
     app_handle: AppHandle, 
     host: String
 ) -> Result<(), String> {
+    app_log!(info, "Disconnecting from vMix host: {}", host);
+    
+    // Get connection info before disconnecting for event emission
+    let connection_info = {
+        let labels = state.connection_labels.lock().unwrap();
+        let label = labels.get(&host).cloned().unwrap_or_else(|| format!("{}", host));
+        
+        // Check if it's HTTP or TCP connection
+        let is_tcp = {
+            let tcp_connections = state.tcp_connections.lock().unwrap();
+            tcp_connections.iter().any(|c| c.host() == host)
+        };
+        
+        let port = if is_tcp {
+            8099
+        } else {
+            let http_connections = state.http_connections.lock().unwrap();
+            http_connections.iter()
+                .find(|c| c.host() == host)
+                .map(|c| c.port())
+                .unwrap_or(8088)
+        };
+        
+        (label, port, if is_tcp { ConnectionType::Tcp } else { ConnectionType::Http })
+    };
+    
     // Disconnect from HTTP connections
     {
         let mut http_connections = state.http_connections.lock().unwrap();
         http_connections.retain(|c| c.host() != host);
     }
+    
     // Disconnect from TCP connections
     {
         let mut tcp_connections = state.tcp_connections.lock().unwrap();
@@ -277,6 +304,8 @@ pub async fn disconnect_vmix(
             tcp_connections.remove(pos);
         }
     }
+    
+    // Clean up state
     {
         let mut configs = state.auto_refresh_configs.lock().unwrap();
         configs.remove(&host);
@@ -285,6 +314,26 @@ pub async fn disconnect_vmix(
         let mut cache = state.last_status_cache.lock().unwrap();
         cache.remove(&host);
     }
+    {
+        let mut inputs_cache = state.inputs_cache.lock().unwrap();
+        inputs_cache.remove(&host);
+    }
+    
+    // Emit disconnection event to frontend
+    let disconnected_connection = VmixConnection {
+        host: host.clone(),
+        port: connection_info.1,
+        label: connection_info.0,
+        status: "Disconnected".to_string(),
+        active_input: 0,
+        preview_input: 0,
+        connection_type: connection_info.2,
+        version: "".to_string(),
+        edition: "".to_string(),
+    };
+    
+    let _ = app_handle.emit("vmix-status-updated", &disconnected_connection);
+    app_log!(info, "Emitted vmix-status-updated event for disconnected host: {}", host);
     
     // Save configuration after disconnection
     let _ = state.save_config(&app_handle).await;

@@ -92,7 +92,7 @@ export const VMixStatusProvider = ({ children }: { children: React.ReactNode }) 
   // Listen for status updates from Tauri backend
   useEffect(() => {
     const unlistenStatus = listen<VmixConnection>('vmix-status-updated', (event) => {
-      console.log('vmix-status-updated', event);
+      console.log('vmix-status-updated event received:', event);
       const updatedConnection = event.payload;
       
       setConnections(prev => {
@@ -101,9 +101,11 @@ export const VMixStatusProvider = ({ children }: { children: React.ReactNode }) 
           // Update existing connection
           const updated = [...prev];
           updated[existingIndex] = updatedConnection;
+          console.log(`Updated connection status for ${updatedConnection.host}: ${updatedConnection.status}`);
           return updated;
         } else {
           // Add new connection if it doesn't exist
+          console.log(`Added new connection for ${updatedConnection.host}: ${updatedConnection.status}`);
           return [...prev, updatedConnection];
         }
       });
@@ -111,6 +113,14 @@ export const VMixStatusProvider = ({ children }: { children: React.ReactNode }) 
       // If connection is established, fetch inputs
       if (updatedConnection.status === 'Connected') {
         fetchInputsForHost(updatedConnection.host);
+      } else if (updatedConnection.status === 'Disconnected') {
+        // Clear inputs for disconnected hosts
+        console.log(`Clearing inputs for disconnected host: ${updatedConnection.host}`);
+        setInputs(prev => {
+          const updated = { ...prev };
+          delete updated[updatedConnection.host];
+          return updated;
+        });
       }
     });
 
@@ -163,6 +173,7 @@ export const VMixStatusProvider = ({ children }: { children: React.ReactNode }) 
     loadInitialData();
   }, [loadConnections, loadAutoRefreshConfigs]);
 
+
   const connectVMix = async (host: string, port?: number, connectionType: 'Http' | 'Tcp' = 'Http'): Promise<VmixConnection> => {
     try {
       console.log('Connecting to vMix:', host, port, connectionType);
@@ -196,18 +207,12 @@ export const VMixStatusProvider = ({ children }: { children: React.ReactNode }) 
 
   const disconnectVMix = async (host: string): Promise<void> => {
     try {
+      console.log(`Disconnecting from vMix host: ${host}`);
       await invoke('disconnect_vmix', { host });
-      setConnections(prev => prev.filter(conn => conn.host !== host));
-      setAutoRefreshConfigs(prev => {
-        const updated = { ...prev };
-        delete updated[host];
-        return updated;
-      });
-      setInputs(prev => {
-        const updated = { ...prev };
-        delete updated[host];
-        return updated;
-      });
+      
+      // Note: State will be updated via vmix-status-updated event from backend
+      // No need to manually update state here as backend will emit the event
+      
     } catch (error) {
       console.error('Failed to disconnect from vMix:', error);
       throw error;
