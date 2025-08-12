@@ -103,11 +103,7 @@ impl Default for ThemeMode {
 pub struct AppSettings {
     pub default_vmix_ip: String,
     pub default_vmix_port: u16,
-    pub refresh_interval: u32,
     pub theme: ThemeMode,
-    pub auto_reconnect: bool,
-    pub auto_reconnect_interval: u32,
-    pub max_log_file_size: u32,
 }
 
 impl Default for AppSettings {
@@ -115,11 +111,7 @@ impl Default for AppSettings {
         Self {
             default_vmix_ip: "127.0.0.1".to_string(),
             default_vmix_port: 8088,
-            refresh_interval: 1000,
             theme: ThemeMode::Auto,
-            auto_reconnect: true,
-            auto_reconnect_interval: 5000,
-            max_log_file_size: 10,
         }
     }
 }

@@ -68,7 +68,7 @@ macro_rules! app_log {
     ($level:ident, $($arg:tt)*) => {
         {
             let config = $crate::logging::LOGGING_CONFIG.lock().unwrap();
-            if config.enabled {
+            if config.enabled && $crate::logging::should_log_level(stringify!($level), &config.level) {
                 let message = format!($($arg)*);
                 
                 // Log to console
@@ -84,4 +84,51 @@ macro_rules! app_log {
             }
         }
     };
+}
+
+// Helper function to check if log level should be output
+pub fn should_log_level(current_level: &str, config_level: &str) -> bool {
+    let level_priority = |level: &str| -> u8 {
+        match level.to_lowercase().as_str() {
+            "error" => 4,
+            "warn" => 3,
+            "info" => 2,
+            "debug" => 1,
+            _ => 0,
+        }
+    };
+    
+    level_priority(current_level) >= level_priority(config_level)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_log_level_filtering() {
+        // Test error level allows error only
+        assert!(should_log_level("error", "error"));
+        assert!(!should_log_level("warn", "error"));
+        assert!(!should_log_level("info", "error"));
+        assert!(!should_log_level("debug", "error"));
+
+        // Test warn level allows warn and error
+        assert!(should_log_level("error", "warn"));
+        assert!(should_log_level("warn", "warn"));
+        assert!(!should_log_level("info", "warn"));
+        assert!(!should_log_level("debug", "warn"));
+
+        // Test info level allows info, warn, and error
+        assert!(should_log_level("error", "info"));
+        assert!(should_log_level("warn", "info"));
+        assert!(should_log_level("info", "info"));
+        assert!(!should_log_level("debug", "info"));
+
+        // Test debug level allows all
+        assert!(should_log_level("error", "debug"));
+        assert!(should_log_level("warn", "debug"));
+        assert!(should_log_level("info", "debug"));
+        assert!(should_log_level("debug", "debug"));
+    }
 }
