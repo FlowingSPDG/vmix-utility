@@ -319,21 +319,9 @@ pub async fn disconnect_vmix(
         inputs_cache.remove(&host);
     }
     
-    // Emit disconnection event to frontend
-    let disconnected_connection = VmixConnection {
-        host: host.clone(),
-        port: connection_info.1,
-        label: connection_info.0,
-        status: "Disconnected".to_string(),
-        active_input: 0,
-        preview_input: 0,
-        connection_type: connection_info.2,
-        version: "".to_string(),
-        edition: "".to_string(),
-    };
-    
-    let _ = app_handle.emit("vmix-status-updated", &disconnected_connection);
-    app_log!(info, "Emitted vmix-status-updated event for disconnected host: {}", host);
+    // Emit connection removal event to frontend
+    let _ = app_handle.emit("vmix-connection-removed", serde_json::json!({"host": host}));
+    app_log!(info, "Emitted vmix-connection-removed event for host: {}", host);
     
     // Save configuration after disconnection
     let _ = state.save_config(&app_handle).await;

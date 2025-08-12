@@ -129,6 +129,31 @@ export const VMixStatusProvider = ({ children }: { children: React.ReactNode }) 
     };
   }, [fetchInputsForHost]);
 
+  // Listen for connection removal events
+  useEffect(() => {
+    const unlistenRemoval = listen<{host: string}>('vmix-connection-removed', (event) => {
+      const { host } = event.payload;
+      console.log('vmix-connection-removed event received for host:', host);
+      
+      setConnections(prev => {
+        const filtered = prev.filter(conn => conn.host !== host);
+        console.log(`Removed connection ${host}, remaining connections:`, filtered.length);
+        return filtered;
+      });
+      
+      // Also clear inputs for removed host
+      setInputs(prev => {
+        const updated = { ...prev };
+        delete updated[host];
+        return updated;
+      });
+    });
+
+    return () => {
+      unlistenRemoval.then(f => f());
+    };
+  }, []);
+
   // Listen for inputs updates (especially for TCP connections)
   useEffect(() => {
     const unlistenInputs = listen<{host: string, inputs: VmixInput[]}>('vmix-inputs-updated', (event) => {
@@ -208,13 +233,30 @@ export const VMixStatusProvider = ({ children }: { children: React.ReactNode }) 
   const disconnectVMix = async (host: string): Promise<void> => {
     try {
       console.log(`Disconnecting from vMix host: ${host}`);
+      
+      // Optimistically remove from UI immediately for better UX
+      setConnections(prev => {
+        const filtered = prev.filter(conn => conn.host !== host);
+        console.log(`Optimistically removed connection ${host}, remaining:`, filtered.length);
+        return filtered;
+      });
+      
+      // Clear inputs immediately
+      setInputs(prev => {
+        const updated = { ...prev };
+        delete updated[host];
+        return updated;
+      });
+      
+      // Call backend to actually disconnect
       await invoke('disconnect_vmix', { host });
       
-      // Note: State will be updated via vmix-status-updated event from backend
-      // No need to manually update state here as backend will emit the event
+      // Backend will also emit vmix-connection-removed event, but UI is already updated
       
     } catch (error) {
       console.error('Failed to disconnect from vMix:', error);
+      // Restore connection on error by refreshing
+      loadConnections();
       throw error;
     }
   };

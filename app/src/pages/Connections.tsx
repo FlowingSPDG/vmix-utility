@@ -205,14 +205,20 @@ const Connections: React.FC = () => {
         label: newLabel.trim()
       });
       
-      // Only try to reconnect if the connection is connected or reconnecting
-      if (editingConnection.status === 'Connected' || editingConnection.status === 'Reconnecting') {
-        await connectVMix(editingConnection.host, editingConnection.port, editingConnection.connectionType);
-      }
-      
+      // Always close the modal after successful label update
       setLabelDialogOpen(false);
       setEditingConnection(null);
       setNewLabel('');
+      
+      // Only try to reconnect if the connection is connected or reconnecting
+      if (editingConnection.status === 'Connected' || editingConnection.status === 'Reconnecting') {
+        try {
+          await connectVMix(editingConnection.host, editingConnection.port, editingConnection.connectionType);
+        } catch (reconnectError) {
+          console.error('Failed to reconnect after label update:', reconnectError);
+          // Don't show error for reconnect failure as label was updated successfully
+        }
+      }
     } catch (error) {
       console.error('Failed to update label:', error);
       setError(`Failed to update label: ${error}`);
