@@ -10,6 +10,8 @@ interface VmixConnection {
   active_input: number;
   preview_input: number;
   connection_type: 'Http' | 'Tcp';
+  version: string;
+  edition: string;
 }
 
 interface AutoRefreshConfig {
@@ -90,7 +92,7 @@ export const VMixStatusProvider = ({ children }: { children: React.ReactNode }) 
   // Listen for status updates from Tauri backend
   useEffect(() => {
     const unlistenStatus = listen<VmixConnection>('vmix-status-updated', (event) => {
-      console.log('vmix-status-updated', event);
+      console.log('vmix-status-updated event received:', event);
       const updatedConnection = event.payload;
       
       setConnections(prev => {
@@ -99,9 +101,11 @@ export const VMixStatusProvider = ({ children }: { children: React.ReactNode }) 
           // Update existing connection
           const updated = [...prev];
           updated[existingIndex] = updatedConnection;
+          console.log(`Updated connection status for ${updatedConnection.host}: ${updatedConnection.status}`);
           return updated;
         } else {
           // Add new connection if it doesn't exist
+          console.log(`Added new connection for ${updatedConnection.host}: ${updatedConnection.status}`);
           return [...prev, updatedConnection];
         }
       });
@@ -109,6 +113,14 @@ export const VMixStatusProvider = ({ children }: { children: React.ReactNode }) 
       // If connection is established, fetch inputs
       if (updatedConnection.status === 'Connected') {
         fetchInputsForHost(updatedConnection.host);
+      } else if (updatedConnection.status === 'Disconnected') {
+        // Clear inputs for disconnected hosts
+        console.log(`Clearing inputs for disconnected host: ${updatedConnection.host}`);
+        setInputs(prev => {
+          const updated = { ...prev };
+          delete updated[updatedConnection.host];
+          return updated;
+        });
       }
     });
 
@@ -116,6 +128,31 @@ export const VMixStatusProvider = ({ children }: { children: React.ReactNode }) 
       unlistenStatus.then(f => f());
     };
   }, [fetchInputsForHost]);
+
+  // Listen for connection removal events
+  useEffect(() => {
+    const unlistenRemoval = listen<{host: string}>('vmix-connection-removed', (event) => {
+      const { host } = event.payload;
+      console.log('vmix-connection-removed event received for host:', host);
+      
+      setConnections(prev => {
+        const filtered = prev.filter(conn => conn.host !== host);
+        console.log(`Removed connection ${host}, remaining connections:`, filtered.length);
+        return filtered;
+      });
+      
+      // Also clear inputs for removed host
+      setInputs(prev => {
+        const updated = { ...prev };
+        delete updated[host];
+        return updated;
+      });
+    });
+
+    return () => {
+      unlistenRemoval.then(f => f());
+    };
+  }, []);
 
   // Listen for inputs updates (especially for TCP connections)
   useEffect(() => {
@@ -161,6 +198,7 @@ export const VMixStatusProvider = ({ children }: { children: React.ReactNode }) 
     loadInitialData();
   }, [loadConnections, loadAutoRefreshConfigs]);
 
+
   const connectVMix = async (host: string, port?: number, connectionType: 'Http' | 'Tcp' = 'Http'): Promise<VmixConnection> => {
     try {
       console.log('Connecting to vMix:', host, port, connectionType);
@@ -194,20 +232,31 @@ export const VMixStatusProvider = ({ children }: { children: React.ReactNode }) 
 
   const disconnectVMix = async (host: string): Promise<void> => {
     try {
-      await invoke('disconnect_vmix', { host });
-      setConnections(prev => prev.filter(conn => conn.host !== host));
-      setAutoRefreshConfigs(prev => {
-        const updated = { ...prev };
-        delete updated[host];
-        return updated;
+      console.log(`Disconnecting from vMix host: ${host}`);
+      
+      // Optimistically remove from UI immediately for better UX
+      setConnections(prev => {
+        const filtered = prev.filter(conn => conn.host !== host);
+        console.log(`Optimistically removed connection ${host}, remaining:`, filtered.length);
+        return filtered;
       });
+      
+      // Clear inputs immediately
       setInputs(prev => {
         const updated = { ...prev };
         delete updated[host];
         return updated;
       });
+      
+      // Call backend to actually disconnect
+      await invoke('disconnect_vmix', { host });
+      
+      // Backend will also emit vmix-connection-removed event, but UI is already updated
+      
     } catch (error) {
       console.error('Failed to disconnect from vMix:', error);
+      // Restore connection on error by refreshing
+      loadConnections();
       throw error;
     }
   };

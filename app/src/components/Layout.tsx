@@ -41,13 +41,18 @@ interface NavItem {
 
 const Layout = () => {
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [desktopOpen, setDesktopOpen] = useState(true);
   const [selectedIndex, setSelectedIndex] = useState(0);
   
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
 
   const handleDrawerToggle = () => {
-    setMobileOpen(!mobileOpen);
+    if (isMobile) {
+      setMobileOpen(!mobileOpen);
+    } else {
+      setDesktopOpen(!desktopOpen);
+    }
   };
 
   const navItems: NavItem[] = [
@@ -120,17 +125,17 @@ const Layout = () => {
       <AppBar
         position="fixed"
         sx={{
-          width: { sm: `calc(100% - ${drawerWidth}px)` },
-          ml: { sm: `${drawerWidth}px` },
+          width: { sm: `calc(100% - ${desktopOpen ? drawerWidth : 0}px)` },
+          ml: { sm: `${desktopOpen ? drawerWidth : 0}px` },
         }}
       >
         <Toolbar>
           <IconButton
             color="inherit"
-            aria-label="open drawer"
+            aria-label="toggle drawer"
             edge="start"
             onClick={handleDrawerToggle}
-            sx={{ mr: 2, display: { sm: 'none' } }}
+            sx={{ mr: 2 }}
           >
             <MenuIcon />
           </IconButton>
@@ -141,7 +146,7 @@ const Layout = () => {
       </AppBar>
       <Box
         component="nav"
-        sx={{ width: { sm: drawerWidth }, flexShrink: { sm: 0 } }}
+        sx={{ width: { sm: desktopOpen ? drawerWidth : 0 }, flexShrink: { sm: 0 } }}
         aria-label="navigation"
       >
         <Drawer
@@ -149,7 +154,7 @@ const Layout = () => {
           open={mobileOpen}
           onClose={handleDrawerToggle}
           ModalProps={{
-            keepMounted: true, // Better open performance on mobile.
+            keepMounted: true,
           }}
           sx={{
             display: { xs: 'block', sm: 'none' },
@@ -159,12 +164,15 @@ const Layout = () => {
           {drawer}
         </Drawer>
         <Drawer
-          variant="permanent"
+          variant="persistent"
+          open={desktopOpen}
           sx={{
             display: { xs: 'none', sm: 'block' },
-            '& .MuiDrawer-paper': { boxSizing: 'border-box', width: drawerWidth },
+            '& .MuiDrawer-paper': { 
+              boxSizing: 'border-box', 
+              width: drawerWidth,
+            },
           }}
-          open
         >
           {drawer}
         </Drawer>
@@ -174,8 +182,8 @@ const Layout = () => {
         sx={{ 
           flexGrow: 1, 
           p: 3, 
-          width: { sm: `calc(100% - ${drawerWidth}px)` },
-          marginTop: '64px' // AppBar height
+          width: { sm: `calc(100% - ${desktopOpen ? drawerWidth : 0}px)` },
+          marginTop: '64px',
         }}
       >
         {navItems[selectedIndex].component}

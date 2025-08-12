@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo, useCallback, memo } from 'react';
 import { useVMixStatus } from '../hooks/useVMixStatus';
 import {
   Box,
@@ -43,14 +43,115 @@ interface Input {
 type Order = 'asc' | 'desc';
 type OrderBy = 'number' | 'title' | 'type';
 
+interface InputRowProps {
+  input: Input;
+  isEditing: boolean;
+  editingValue: string;
+  onEditClick: (input: Input) => void;
+  onSaveClick: (key: string) => void;
+  onCancelClick: (key: string) => void;
+  onDeleteClick: (key: string) => void;
+  onTitleChange: (key: string, value: string) => void;
+}
+
+
+const textFieldSx = {
+  mr: 1,
+  "& .MuiInputBase-input.Mui-disabled": {
+    WebkitTextFillColor: "unset",
+    color: "text.primary"
+  }
+};
+
+const boxSx = { display: 'flex', alignItems: 'center' };
+
+const OptimizedInputRow = memo(({ 
+  input, 
+  isEditing, 
+  editingValue,
+  onEditClick, 
+  onSaveClick, 
+  onCancelClick, 
+  onDeleteClick, 
+  onTitleChange 
+}: InputRowProps) => {
+  return (
+    <TableRow key={input.key}>
+      <TableCell>{input.number}</TableCell>
+      <TableCell>
+        <Box sx={boxSx}>
+          <TextField
+            value={editingValue}
+            onChange={isEditing ? (e) => onTitleChange(input.key, e.target.value) : undefined}
+            size="small"
+            disabled={!isEditing}
+            variant={isEditing ? "outlined" : "standard"}
+            sx={textFieldSx}
+          />
+          {isEditing ? (
+            <>
+              <IconButton
+                size="small"
+                color="primary"
+                onClick={() => onSaveClick(input.key)}
+              >
+                <SaveIcon fontSize="small" />
+              </IconButton>
+              <IconButton
+                size="small"
+                onClick={() => onCancelClick(input.key)}
+              >
+                <CancelIcon fontSize="small" />
+              </IconButton>
+            </>
+          ) : (
+            <IconButton
+              size="small"
+              onClick={() => onEditClick(input)}
+            >
+              <EditIcon fontSize="small" />
+            </IconButton>
+          )}
+        </Box>
+      </TableCell>
+      <TableCell>{input.type}</TableCell>
+      <TableCell>
+        <Chip 
+          label={input.state}
+          color={input.state === 'Running' ? 'success' : input.state === 'Paused' ? 'warning' : 'default'}
+          variant="outlined"
+          size="small"
+        />
+      </TableCell>
+      <TableCell>
+        <Typography variant="caption" color="textSecondary">
+          {input.key.substring(0, 8)}...
+        </Typography>
+      </TableCell>
+      <TableCell>
+        <IconButton
+          color="error"
+          size="small"
+          onClick={() => onDeleteClick(input.key)}
+        >
+          <DeleteIcon />
+        </IconButton>
+      </TableCell>
+    </TableRow>
+  );
+});
+
+const InputRow = OptimizedInputRow;
+
+
 const InputManager = () => {
   const { connections, inputs: globalInputs, sendVMixFunction, loading: globalLoading } = useVMixStatus();
   const [inputs, setInputs] = useState<Input[]>([]);
   const [selectedConnection, setSelectedConnection] = useState<string>('');
   const [error, setError] = useState<string | null>(null);
   
-  // Track editing state for each input
-  const [editingStates, setEditingStates] = useState<string[]>([]);
+  // Single editing state to minimize re-renders
+  const [editingData, setEditingData] = useState<{[key: string]: string}>({});
   const [order, setOrder] = useState<Order>('asc');
   const [orderBy, setOrderBy] = useState<OrderBy>('number');
   
@@ -58,14 +159,17 @@ const InputManager = () => {
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [inputToDelete, setInputToDelete] = useState<Input | null>(null);
 
+  const connectedConnections = useMemo(() => 
+    connections.filter(conn => conn.status === 'Connected'), 
+    [connections]
+  );
+
   useEffect(() => {
-    // Auto-select first available connected connection
-    const connectedConnections = connections.filter(conn => conn.status === 'Connected');
     if (connectedConnections.length > 0 && selectedConnection === '') {
       const firstConnection = connectedConnections[0].host;
       setSelectedConnection(firstConnection);
     }
-  }, [connections, selectedConnection]);
+  }, [connectedConnections, selectedConnection]);
 
   // Update inputs when global inputs change or selected connection changes
   useEffect(() => {
@@ -87,51 +191,66 @@ const InputManager = () => {
     setSelectedConnection(host);
   };
 
-  const handleEditClick = (input: Input) => {
-    setEditingStates([...editingStates, input.key]);
-  };
+  const handleEditClick = useCallback((input: Input) => {
+    setEditingData(prev => ({ ...prev, [input.key]: input.title }));
+  }, []);
 
-  const handleSaveClick = async (key: string) => {
-    const input = inputs.find(inp => inp.key === key);
-    
-    if (input && selectedConnection) {
-      try {
-        // Send SetInputName function to update input title in vMix
-        await sendVMixFunction(selectedConnection, 'SetInputName', {
-          Input: input.number.toString(),
-          Value: input.title
-        });
-
-        // Update local state
-        setInputs(inputs.map(inp =>
-          inp.key === key
-            ? { ...inp, title: input.title }
-            : inp
-        ));
+  const handleSaveClick = useCallback(async (key: string) => {
+    setEditingData(currentEditingData => {
+      const newTitle = currentEditingData[key];
+      
+      setInputs(currentInputs => {
+        const input = currentInputs.find(inp => inp.key === key);
         
-        // Remove this input from editing state
-        const newEditingStates = editingStates.filter(k => k !== key);
-        setEditingStates(newEditingStates);
-      } catch (error) {
-        console.error('Failed to update input title:', error);
-        setError(`Failed to update input title: ${error}`);
+        if (input && selectedConnection && newTitle !== undefined) {
+          (async () => {
+            try {
+              await sendVMixFunction(selectedConnection, 'SetInputName', {
+                Input: input.number.toString(),
+                Value: newTitle
+              });
+
+              setInputs(prevInputs =>
+                prevInputs.map(inp =>
+                  inp.key === key ? { ...inp, title: newTitle } : inp
+                )
+              );
+            } catch (error) {
+              console.error('Failed to update input title:', error);
+              setError(`Failed to update input title: ${error}`);
+            }
+          })();
+        }
+        
+        return currentInputs;
+      });
+      
+      const { [key]: _, ...rest } = currentEditingData;
+      return rest;
+    });
+  }, [selectedConnection, sendVMixFunction]);
+
+  const handleTitleChange = useCallback((key: string, value: string) => {
+    setEditingData(prev => ({ ...prev, [key]: value }));
+  }, []);
+
+  const handleCancelClick = useCallback((key: string) => {
+    setEditingData(prev => {
+      const { [key]: _, ...rest } = prev;
+      return rest;
+    });
+  }, []);
+
+  const handleDeleteClick = useCallback((key: string) => {
+    setInputs(currentInputs => {
+      const input = currentInputs.find(inp => inp.key === key);
+      if (input) {
+        setInputToDelete(input);
+        setDeleteDialogOpen(true);
       }
-    }
-  };
-
-  const handleCancelClick = (key: string) => {
-    // Remove this input from editing state
-    const newEditingStates = editingStates.filter(k => k !== key);
-    setEditingStates(newEditingStates);
-  };
-
-  const handleDeleteClick = (key: string) => {
-    const input = inputs.find(inp => inp.key === key);
-    if (input) {
-      setInputToDelete(input);
-      setDeleteDialogOpen(true);
-    }
-  };
+      return currentInputs;
+    });
+  }, []);
 
   const handleDeleteConfirm = async () => {
     if (inputToDelete && selectedConnection) {
@@ -142,7 +261,7 @@ const InputManager = () => {
         });
 
         // update local state
-        setInputs(inputs.filter(input => input.key !== inputToDelete.key));
+        setInputs(prevInputs => prevInputs.filter(input => input.key !== inputToDelete.key));
       } catch (error) {
         console.error('Failed to delete input:', error);
         setError(`Failed to delete input: ${error}`);
@@ -163,22 +282,35 @@ const InputManager = () => {
     setOrderBy(property);
   };
 
-  const sortedInputs = [...inputs].sort((a, b) => {
-    const aValue = a[orderBy];
-    const bValue = b[orderBy];
-    
-    const compareResult = typeof aValue === 'string' && typeof bValue === 'string'
-      ? aValue.localeCompare(bValue)
-      : (aValue as number) - (bValue as number);
+  const sortedInputs = useMemo(() => {
+    return [...inputs].sort((a, b) => {
+      const aValue = a[orderBy];
+      const bValue = b[orderBy];
       
-    return order === 'asc' ? compareResult : -compareResult;
-  });
+      const compareResult = typeof aValue === 'string' && typeof bValue === 'string'
+        ? aValue.localeCompare(bValue)
+        : (aValue as number) - (bValue as number);
+        
+      return order === 'asc' ? compareResult : -compareResult;
+    });
+  }, [inputs, order, orderBy]);
+
+  const inputRowData = useMemo(() => {
+    return sortedInputs.map(input => {
+      const isEditing = input.key in editingData;
+      return {
+        input,
+        isEditing,
+        editingValue: editingData[input.key] ?? input.title
+      };
+    });
+  }, [sortedInputs, editingData]);
 
   return (
     <Box sx={{ p: 3 }}>
-      <Typography variant="h4" component="h1" gutterBottom>
-        Input Manager
-      </Typography>
+        <Typography variant="h4" component="h1" gutterBottom>
+          Input Manager
+        </Typography>
 
       <Paper sx={{ p: 2, mb: 3 }}>
         <FormControl fullWidth sx={{ mb: 2 }}>
@@ -192,13 +324,11 @@ const InputManager = () => {
             <MenuItem value="">
               <em>Select a vMix connection</em>
             </MenuItem>
-            {connections
-              .filter(conn => conn.status === 'Connected')
-              .map((conn) => (
-                <MenuItem key={conn.host} value={conn.host}>
-                  {conn.label} ({conn.host})
-                </MenuItem>
-              ))}
+            {connectedConnections.map((conn) => (
+              <MenuItem key={conn.host} value={conn.host}>
+                {conn.label} ({conn.host})
+              </MenuItem>
+            ))}
           </Select>
         </FormControl>
 
@@ -265,86 +395,19 @@ const InputManager = () => {
                 </TableCell>
               </TableRow>
             ) : (
-              sortedInputs.map((input) => {
-                const isEditing = editingStates.includes(input.key);
-                
-                return (
-                  <TableRow key={input.key}>
-                    <TableCell>{input.number}</TableCell>
-                    <TableCell>
-                    <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                      <TextField
-                        value={input.title}
-                        onChange={(e) => {
-                          // 直接inputのtitleを更新
-                          setInputs(inputs.map(inp =>
-                            inp.key === input.key
-                              ? { ...inp, title: e.target.value }
-                              : inp
-                          ));
-                        }}
-                        size="small"
-                        disabled={!isEditing}
-                        variant={isEditing ? "outlined" : "standard"}
-                        sx={{
-                          mr: 1,
-                          "& .MuiInputBase-input.Mui-disabled": {
-                            WebkitTextFillColor: isEditing ? "rgba(0, 0, 0, 0.87)" : "rgba(0, 0, 0, 0.38)"
-                          }
-                        }}
-                      />
-                      {isEditing ? (
-                        <>
-                          <IconButton
-                            size="small"
-                            color="primary"
-                            onClick={() => handleSaveClick(input.key)}
-                          >
-                            <SaveIcon fontSize="small" />
-                          </IconButton>
-                          <IconButton
-                            size="small"
-                            onClick={() => handleCancelClick(input.key)}
-                          >
-                            <CancelIcon fontSize="small" />
-                          </IconButton>
-                        </>
-                      ) : (
-                        <IconButton
-                          size="small"
-                          onClick={() => handleEditClick(input)}
-                        >
-                          <EditIcon fontSize="small" />
-                        </IconButton>
-                      )}
-                    </Box>
-                  </TableCell>
-                  <TableCell>{input.type}</TableCell>
-                  <TableCell>
-                    <Chip 
-                      label={input.state}
-                      color={input.state === 'Running' ? 'success' : input.state === 'Paused' ? 'warning' : 'default'}
-                      variant="outlined"
-                      size="small"
-                    />
-                  </TableCell>
-                  <TableCell>
-                    <Typography variant="caption" color="textSecondary">
-                      {input.key.substring(0, 8)}...
-                    </Typography>
-                  </TableCell>
-                  <TableCell>
-                    <IconButton
-                      color="error"
-                      size="small"
-                      onClick={() => handleDeleteClick(input.key)}
-                    >
-                      <DeleteIcon />
-                    </IconButton>
-                  </TableCell>
-                </TableRow>
-              );
-            })
+              inputRowData.map((rowData) => (
+                <InputRow
+                  key={rowData.input.key}
+                  input={rowData.input}
+                  isEditing={rowData.isEditing}
+                  editingValue={rowData.editingValue}
+                  onEditClick={handleEditClick}
+                  onSaveClick={handleSaveClick}
+                  onCancelClick={handleCancelClick}
+                  onDeleteClick={handleDeleteClick}
+                  onTitleChange={handleTitleChange}
+                />
+              ))
             )}
           </TableBody>
         </Table>
@@ -355,14 +418,12 @@ const InputManager = () => {
           variant="contained"
           color="primary"
           onClick={async () => {
-            // editingStatesに含まれる全てのkeyに対して順番に保存処理をawaitで実行
-            for (const key of editingStates) {
+            for (const key of Object.keys(editingData)) {
               await handleSaveClick(key);
             }
-            // 全ての保存処理が終わった後に編集状態をクリア
-            setEditingStates([]);
+            setEditingData({});
           }}
-          disabled={editingStates.length === 0}
+          disabled={Object.keys(editingData).length === 0}
         >
           Apply All Changes
         </Button>

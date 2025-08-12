@@ -64,17 +64,36 @@ impl TcpVmixManager {
         let xml_sender_host = host.clone();
         tokio::spawn(async move {
             let mut interval = tokio::time::interval(Duration::from_secs(3));
+            let mut consecutive_failures = 0;
             
             while !xml_sender_shutdown.load(std::sync::atomic::Ordering::Relaxed) {
                 interval.tick().await;
                 
-                if let Err(e) = xml_sender_client.send_command(SendCommand::XML) {
-                    app_log!(error, "Failed to send XML command to {}: {}", xml_sender_host, e);
-                } else {
-                    let mut last_req = xml_last_request.lock().unwrap();
-                    *last_req = Instant::now();
+                // Check if connection is still alive
+                if !xml_sender_client.is_connected() {
+                    app_log!(warn, "TCP connection lost for {} during XML sending, stopping XML sender task", xml_sender_host);
+                    break;
+                }
+                
+                match xml_sender_client.send_command(SendCommand::XML) {
+                    Ok(_) => {
+                        let mut last_req = xml_last_request.lock().unwrap();
+                        *last_req = Instant::now();
+                        consecutive_failures = 0; // Reset failure counter on success
+                    },
+                    Err(e) => {
+                        consecutive_failures += 1;
+                        app_log!(error, "Failed to send XML command to {} (attempt {}): {}", xml_sender_host, consecutive_failures, e);
+                        
+                        // Stop after 3 consecutive failures to avoid endless error spam
+                        if consecutive_failures >= 3 {
+                            app_log!(error, "Too many consecutive failures for {}, stopping XML sender task", xml_sender_host);
+                            break;
+                        }
+                    }
                 }
             }
+            app_log!(info, "XML sender task ended for {}", xml_sender_host);
         });
         
         // レスポンス受信タスク
@@ -133,6 +152,8 @@ impl TcpVmixManager {
                                         active_input,
                                         preview_input,
                                         connection_type: ConnectionType::Tcp,
+                                        version: vmix_xml.version,
+                                        edition: vmix_xml.edition,
                                     };
                                     
                                     // Update the status cache
@@ -205,6 +226,8 @@ impl TcpVmixManager {
                                                 active_input: new_active_input.unwrap_or(status.active_input),
                                                 preview_input: new_preview_input.unwrap_or(status.preview_input),
                                                 connection_type: ConnectionType::Tcp,
+                                                version: status.version.clone(),
+                                                edition: status.edition.clone(),
                                             };
                                             
                                             // Update cache
@@ -244,9 +267,62 @@ impl TcpVmixManager {
                     Err(e) => {
                         // Handle errors more gracefully
                         let error_msg = format!("{}", e);
-                        if !error_msg.contains("timeout") && !error_msg.contains("No matching command found") {
-                            app_log!(debug, "TCP: Receive error: {}", e);
+                        
+                        // Check if this is a real connection failure (not just timeout)
+                        if error_msg.contains("Connection reset") || 
+                           error_msg.contains("Connection refused") ||
+                           error_msg.contains("Connection aborted") ||
+                           error_msg.contains("Broken pipe") ||
+                           (!response_client.is_connected() && !error_msg.contains("timeout")) {
+                            
+                            app_log!(error, "TCP connection lost for {}: {}", response_host, e);
+                            
+                            // Get current connection info from cache for event emission
+                            let disconnected_connection = {
+                                let cache = last_status_cache.lock().unwrap();
+                                if let Some(cached) = cache.get(&response_host) {
+                                    VmixConnection {
+                                        host: response_host.clone(),
+                                        port,
+                                        label: cached.label.clone(),
+                                        status: "Disconnected".to_string(),
+                                        active_input: cached.active_input,
+                                        preview_input: cached.preview_input,
+                                        connection_type: ConnectionType::Tcp,
+                                        version: cached.version.clone(),
+                                        edition: cached.edition.clone(),
+                                    }
+                                } else {
+                                    VmixConnection {
+                                        host: response_host.clone(),
+                                        port,
+                                        label: format!("{} (TCP)", response_host),
+                                        status: "Disconnected".to_string(),
+                                        active_input: 0,
+                                        preview_input: 0,
+                                        connection_type: ConnectionType::Tcp,
+                                        version: "".to_string(),
+                                        edition: "".to_string(),
+                                    }
+                                }
+                            };
+                            
+                            // Emit disconnection event
+                            let _ = app_handle.emit("vmix-status-updated", &disconnected_connection);
+                            app_log!(info, "Emitted vmix-status-updated disconnection event for {}", response_host);
+                            
+                            // Signal shutdown to stop XML sender task
+                            response_shutdown.store(true, std::sync::atomic::Ordering::Relaxed);
+                            
+                            // Exit the monitoring loop for this connection
+                            break;
                         }
+                        
+                        // Normal timeout or other non-critical errors - just sleep and continue
+                        if !error_msg.contains("timeout") && !error_msg.contains("No matching command found") {
+                            app_log!(debug, "TCP: Receive error for {}: {}", response_host, e);
+                        }
+                        
                         tokio::time::sleep(Duration::from_millis(10)).await;
                     }
                 }

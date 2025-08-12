@@ -8,7 +8,7 @@ use crate::state::AppState;
 use crate::logging::LOGGING_CONFIG;
 use crate::app_log;
 use std::collections::HashMap;
-use tauri::{AppHandle, Manager, State};
+use tauri::{AppHandle, Manager, State, Emitter};
 
 // Additional Tauri command for sending vMix functions
 #[tauri::command]
@@ -203,17 +203,25 @@ pub async fn connect_vmix(
     }
     
     // Get connection info based on type
-    let (active_input, preview_input, status) = match connection_type {
+    let (active_input, preview_input, status, version, edition) = match connection_type {
         ConnectionType::Http => {
             let info_vmix = VmixClientWrapper::new(&host, port);
             let active = info_vmix.get_active_input().await.unwrap_or(0);
             let preview = info_vmix.get_preview_input().await.unwrap_or(0);
             let status = info_vmix.get_status().await.unwrap_or(false);
-            (active, preview, status)
+            
+            // Get vMix data to extract version and edition information
+            let (version, edition) = match info_vmix.get_vmix_data().await {
+                Ok(vmix_data) => (vmix_data.version, vmix_data.edition),
+                Err(_) => ("Unknown".to_string(), "Unknown".to_string())
+            };
+            
+            (active, preview, status, version, edition)
         },
         ConnectionType::Tcp => {
             // TCPの場合はバックグラウンドタスクで状態更新されるので初期値を返す
-            (1, 1, true)
+            // version/editionはXMLレスポンスから後で更新される
+            (1, 1, true, "Unknown".to_string(), "Unknown".to_string())
         }
     };
     
@@ -245,6 +253,8 @@ pub async fn connect_vmix(
         active_input,
         preview_input,
         connection_type: connection_type,
+        version,
+        edition,
     })
 }
 
@@ -254,11 +264,38 @@ pub async fn disconnect_vmix(
     app_handle: AppHandle, 
     host: String
 ) -> Result<(), String> {
+    app_log!(info, "Disconnecting from vMix host: {}", host);
+    
+    // Get connection info before disconnecting for event emission
+    let connection_info = {
+        let labels = state.connection_labels.lock().unwrap();
+        let label = labels.get(&host).cloned().unwrap_or_else(|| format!("{}", host));
+        
+        // Check if it's HTTP or TCP connection
+        let is_tcp = {
+            let tcp_connections = state.tcp_connections.lock().unwrap();
+            tcp_connections.iter().any(|c| c.host() == host)
+        };
+        
+        let port = if is_tcp {
+            8099
+        } else {
+            let http_connections = state.http_connections.lock().unwrap();
+            http_connections.iter()
+                .find(|c| c.host() == host)
+                .map(|c| c.port())
+                .unwrap_or(8088)
+        };
+        
+        (label, port, if is_tcp { ConnectionType::Tcp } else { ConnectionType::Http })
+    };
+    
     // Disconnect from HTTP connections
     {
         let mut http_connections = state.http_connections.lock().unwrap();
         http_connections.retain(|c| c.host() != host);
     }
+    
     // Disconnect from TCP connections
     {
         let mut tcp_connections = state.tcp_connections.lock().unwrap();
@@ -267,6 +304,8 @@ pub async fn disconnect_vmix(
             tcp_connections.remove(pos);
         }
     }
+    
+    // Clean up state
     {
         let mut configs = state.auto_refresh_configs.lock().unwrap();
         configs.remove(&host);
@@ -275,6 +314,14 @@ pub async fn disconnect_vmix(
         let mut cache = state.last_status_cache.lock().unwrap();
         cache.remove(&host);
     }
+    {
+        let mut inputs_cache = state.inputs_cache.lock().unwrap();
+        inputs_cache.remove(&host);
+    }
+    
+    // Emit connection removal event to frontend
+    let _ = app_handle.emit("vmix-connection-removed", serde_json::json!({"host": host}));
+    app_log!(info, "Emitted vmix-connection-removed event for host: {}", host);
     
     // Save configuration after disconnection
     let _ = state.save_config(&app_handle).await;
@@ -302,11 +349,18 @@ pub async fn get_vmix_status(
         tcp_connections.iter().find(|c| c.host() == host).map(|c| (c.is_connected(), ConnectionType::Tcp))
     };
     
-    let (status, active_input, preview_input, conn_type) = if let Some(vmix) = http_result {
+    let (status, active_input, preview_input, conn_type, version, edition) = if let Some(vmix) = http_result {
         let status = vmix.get_status().await.map_err(|e| e.to_string())?;
         let active_input = vmix.get_active_input().await.unwrap_or(0);
         let preview_input = vmix.get_preview_input().await.unwrap_or(0);
-        (status, active_input, preview_input, ConnectionType::Http)
+        
+        // Get version and edition information
+        let (version, edition) = match vmix.get_vmix_data().await {
+            Ok(vmix_data) => (vmix_data.version, vmix_data.edition),
+            Err(_) => ("Unknown".to_string(), "Unknown".to_string())
+        };
+        
+        (status, active_input, preview_input, ConnectionType::Http, version, edition)
     } else if let Some((tcp_status, conn_type)) = tcp_result {
         // TCPの場合はキャッシュから取得
         let cached_connection = {
@@ -315,9 +369,9 @@ pub async fn get_vmix_status(
         };
         
         if let Some(cached) = cached_connection {
-            (tcp_status, cached.active_input, cached.preview_input, conn_type)
+            (tcp_status, cached.active_input, cached.preview_input, conn_type, cached.version, cached.edition)
         } else {
-            (tcp_status, 1, 1, conn_type)
+            (tcp_status, 1, 1, conn_type, "Unknown".to_string(), "Unknown".to_string())
         }
     } else {
         // 既存接続がない場合は新しいHTTP接続でテスト
@@ -325,7 +379,14 @@ pub async fn get_vmix_status(
         let status = vmix.get_status().await.map_err(|e| e.to_string())?;
         let active_input = vmix.get_active_input().await.unwrap_or(0);
         let preview_input = vmix.get_preview_input().await.unwrap_or(0);
-        (status, active_input, preview_input, ConnectionType::Http)
+        
+        // Get version and edition information
+        let (version, edition) = match vmix.get_vmix_data().await {
+            Ok(vmix_data) => (vmix_data.version, vmix_data.edition),
+            Err(_) => ("Unknown".to_string(), "Unknown".to_string())
+        };
+        
+        (status, active_input, preview_input, ConnectionType::Http, version, edition)
     };
     
     let label = {
@@ -341,6 +402,8 @@ pub async fn get_vmix_status(
         active_input,
         preview_input,
         connection_type: conn_type,
+        version,
+        edition,
     })
 }
 
@@ -363,6 +426,12 @@ pub async fn get_vmix_statuses(state: State<'_, AppState>) -> Result<Vec<VmixCon
         let preview_input = vmix.get_preview_input().await.unwrap_or(0);
         let host = vmix.host().to_string();
         
+        // Get version and edition information
+        let (version, edition) = match vmix.get_vmix_data().await {
+            Ok(vmix_data) => (vmix_data.version, vmix_data.edition),
+            Err(_) => ("Unknown".to_string(), "Unknown".to_string())
+        };
+        
         let label = {
             let labels = state.connection_labels.lock().unwrap();
             labels.get(&host).cloned().unwrap_or_else(|| format!("{} (HTTP)", host))
@@ -376,6 +445,8 @@ pub async fn get_vmix_statuses(state: State<'_, AppState>) -> Result<Vec<VmixCon
             active_input,
             preview_input,
             connection_type: ConnectionType::Http,
+            version,
+            edition,
         });
     }
     
@@ -387,12 +458,12 @@ pub async fn get_vmix_statuses(state: State<'_, AppState>) -> Result<Vec<VmixCon
         };
         
         // TCPの詳細情報はキャッシュから取得
-        let (active_input, preview_input) = {
+        let (active_input, preview_input, version, edition) = {
             let cache = state.last_status_cache.lock().unwrap();
             if let Some(cached) = cache.get(&host) {
-                (cached.active_input, cached.preview_input)
+                (cached.active_input, cached.preview_input, cached.version.clone(), cached.edition.clone())
             } else {
-                (1, 1)
+                (1, 1, "Unknown".to_string(), "Unknown".to_string())
             }
         };
         
@@ -404,6 +475,8 @@ pub async fn get_vmix_statuses(state: State<'_, AppState>) -> Result<Vec<VmixCon
             active_input,
             preview_input,
             connection_type: ConnectionType::Tcp,
+            version,
+            edition,
         });
     }
 

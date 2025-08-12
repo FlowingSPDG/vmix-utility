@@ -296,6 +296,26 @@ impl AppState {
                                 labels_guard.get(&host).cloned().unwrap_or_else(|| host.clone())
                             };
 
+                            // Get vMix data once if connected, then use it for both version/edition and inputs
+                            let vmix_data_opt = if connection_successful {
+                                vmix.get_vmix_data().await.ok()
+                            } else {
+                                None
+                            };
+
+                            // Preserve version/edition from cache if they exist, otherwise get from vMix data
+                            let (version, edition) = if let Some(ref data) = vmix_data_opt {
+                                (data.version.clone(), data.edition.clone())
+                            } else {
+                                // If no data available (failed request or disconnected), preserve cached values
+                                let cache_guard = cache.lock().unwrap();
+                                if let Some(cached) = cache_guard.get(&host) {
+                                    (cached.version.clone(), cached.edition.clone())
+                                } else {
+                                    ("Unknown".to_string(), "Unknown".to_string())
+                                }
+                            };
+
                             let new_connection = VmixConnection {
                                 host: host.clone(),
                                 port: vmix.port(),
@@ -304,22 +324,19 @@ impl AppState {
                                 active_input,
                                 preview_input,
                                 connection_type: ConnectionType::Http,
+                                version,
+                                edition,
                             };
 
                             // Get current inputs for comparison
-                            let current_inputs = if connection_successful {
-                                match vmix.get_vmix_data().await {
-                                    Ok(data) => {
-                                        data.inputs.input.into_iter().map(|input| VmixInput {
-                                            key: input.key,
-                                            number: input.number.parse().unwrap_or(0),
-                                            title: input.title,
-                                            input_type: input.input_type.unwrap_or_default(),
-                                            state: input.state.unwrap_or_default(),
-                                        }).collect::<Vec<_>>()
-                                    }
-                                    Err(_) => Vec::new(),
-                                }
+                            let current_inputs = if let Some(data) = vmix_data_opt {
+                                data.inputs.input.into_iter().map(|input| VmixInput {
+                                    key: input.key,
+                                    number: input.number.parse().unwrap_or(0),
+                                    title: input.title,
+                                    input_type: input.input_type.unwrap_or_default(),
+                                    state: input.state.unwrap_or_default(),
+                                }).collect::<Vec<_>>()
                             } else {
                                 Vec::new()
                             };

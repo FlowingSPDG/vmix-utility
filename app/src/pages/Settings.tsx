@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import type { SelectChangeEvent } from '@mui/material';
+import { useTheme, type ThemeMode } from '../hooks/useTheme';
 import {
   Box,
   Typography,
@@ -22,11 +23,12 @@ import {
 import FolderOpenIcon from '@mui/icons-material/FolderOpen';
 
 const Settings = () => {
+  const { themeMode, setThemeMode, resolvedTheme } = useTheme();
   const [settings, setSettings] = useState({
     defaultVMixIP: '127.0.0.1',
     defaultVMixPort: 8088,
     refreshInterval: 1000,
-    theme: 'light',
+    theme: themeMode,
     logLevel: 'info',
     saveLogsToFile: false,
     logFilePath: '',
@@ -85,10 +87,14 @@ const Settings = () => {
 
   const handleApply = async () => {
     try {
+      // Apply theme change first
+      if (settings.theme !== themeMode) {
+        await setThemeMode(settings.theme as ThemeMode);
+      }
+      
       // Save app settings to backend
       await invoke('save_app_settings', {
         settings: {
-          startup_auto_launch: false,
           default_vmix_ip: settings.defaultVMixIP,
           default_vmix_port: settings.defaultVMixPort,
           refresh_interval: settings.refreshInterval,
@@ -125,7 +131,7 @@ const Settings = () => {
             defaultVMixIP: settings_data.default_vmix_ip ?? '127.0.0.1',
             defaultVMixPort: settings_data.default_vmix_port ?? 8088,
             refreshInterval: settings_data.refresh_interval ?? 1000,
-            theme: settings_data.theme ?? 'light',
+            theme: settings_data.theme ?? 'Auto',
             maxLogFileSize: settings_data.max_log_file_size ?? 10,
           }));
         }
@@ -179,11 +185,15 @@ const Settings = () => {
                   onChange={handleSelectChange}
                   label="Theme"
                 >
-                  <MenuItem value="light">Light</MenuItem>
-                  <MenuItem value="dark">Dark</MenuItem>
-                  <MenuItem value="system">System Default</MenuItem>
+                  <MenuItem value="Light">Light</MenuItem>
+                  <MenuItem value="Dark">Dark</MenuItem>
+                  <MenuItem value="Auto">Auto (System Default)</MenuItem>
                 </Select>
               </FormControl>
+              <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+                Current theme: {resolvedTheme}
+                {themeMode === 'Auto' && ' (following system preference)'}
+              </Typography>
             </Box>
 
           </Grid>

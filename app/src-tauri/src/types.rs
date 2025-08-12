@@ -85,12 +85,26 @@ pub struct AppConfig {
     pub app_settings: Option<AppSettings>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "PascalCase")]
+pub enum ThemeMode {
+    Light,
+    Dark,
+    Auto,
+}
+
+impl Default for ThemeMode {
+    fn default() -> Self {
+        ThemeMode::Auto
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AppSettings {
     pub default_vmix_ip: String,
     pub default_vmix_port: u16,
     pub refresh_interval: u32,
-    pub theme: String,
+    pub theme: ThemeMode,
     pub auto_reconnect: bool,
     pub auto_reconnect_interval: u32,
     pub max_log_file_size: u32,
@@ -102,7 +116,7 @@ impl Default for AppSettings {
             default_vmix_ip: "127.0.0.1".to_string(),
             default_vmix_port: 8088,
             refresh_interval: 1000,
-            theme: "light".to_string(),
+            theme: ThemeMode::Auto,
             auto_reconnect: true,
             auto_reconnect_interval: 5000,
             max_log_file_size: 10,
@@ -138,6 +152,8 @@ pub struct VmixConnection {
     pub active_input: i32,
     pub preview_input: i32,
     pub connection_type: ConnectionType,
+    pub version: String,
+    pub edition: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

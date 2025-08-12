@@ -36,7 +36,6 @@ import {
 } from '@mui/material';
 import AddIcon from '@mui/icons-material/Add';
 import DeleteIcon from '@mui/icons-material/Delete';
-import RefreshIcon from '@mui/icons-material/Refresh';
 import ReconnectIcon from '@mui/icons-material/Refresh';
 import EditIcon from '@mui/icons-material/Edit';
 
@@ -49,6 +48,8 @@ interface Connection {
   activeInput: number;
   previewInput: number;
   connectionType: 'Http' | 'Tcp';
+  version: string;
+  edition: string;
 }
 
 const Connections: React.FC = () => {
@@ -80,6 +81,8 @@ const Connections: React.FC = () => {
       activeInput: conn.active_input,
       previewInput: conn.preview_input,
       connectionType: conn.connection_type,
+      version: conn.version,
+      edition: conn.edition,
     }));
     
     setConnections(newConnections);
@@ -202,14 +205,20 @@ const Connections: React.FC = () => {
         label: newLabel.trim()
       });
       
-      // Only try to reconnect if the connection is connected or reconnecting
-      if (editingConnection.status === 'Connected' || editingConnection.status === 'Reconnecting') {
-        await connectVMix(editingConnection.host, editingConnection.port, editingConnection.connectionType);
-      }
-      
+      // Always close the modal after successful label update
       setLabelDialogOpen(false);
       setEditingConnection(null);
       setNewLabel('');
+      
+      // Only try to reconnect if the connection is connected or reconnecting
+      if (editingConnection.status === 'Connected' || editingConnection.status === 'Reconnecting') {
+        try {
+          await connectVMix(editingConnection.host, editingConnection.port, editingConnection.connectionType);
+        } catch (reconnectError) {
+          console.error('Failed to reconnect after label update:', reconnectError);
+          // Don't show error for reconnect failure as label was updated successfully
+        }
+      }
     } catch (error) {
       console.error('Failed to update label:', error);
       setError(`Failed to update label: ${error}`);
@@ -254,23 +263,13 @@ const Connections: React.FC = () => {
         <Typography variant="h4" component="h1">
           vMix Connections
         </Typography>
-        <Box sx={{ display: 'flex', gap: 1 }}>
-          <Button 
-            variant="outlined" 
-            startIcon={<RefreshIcon />}
-            onClick={refreshConnections}
-            disabled={globalLoading}
-          >
-            Refresh
-          </Button>
-          <Button 
-            variant="contained" 
-            startIcon={<AddIcon />}
-            onClick={handleClickOpen}
-          >
-            Add Connection
-          </Button>
-        </Box>
+        <Button 
+          variant="contained" 
+          startIcon={<AddIcon />}
+          onClick={handleClickOpen}
+        >
+          Add Connection
+        </Button>
       </Box>
 
       {error && (
@@ -287,6 +286,8 @@ const Connections: React.FC = () => {
               <TableCell>Port</TableCell>
               <TableCell>Type</TableCell>
               <TableCell>Status</TableCell>
+              <TableCell>Version</TableCell>
+              <TableCell>Edition</TableCell>
               <TableCell>Active Input</TableCell>
               <TableCell>Preview Input</TableCell>
               <TableCell>Auto-Refresh</TableCell>
@@ -296,7 +297,7 @@ const Connections: React.FC = () => {
           <TableBody>
             {(globalLoading) && connections.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={8} align="center" sx={{ py: 4 }}>
+                <TableCell colSpan={10} align="center" sx={{ py: 4 }}>
                   <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
                     <CircularProgress />
                     <Typography variant="body2" color="textSecondary">
@@ -307,7 +308,7 @@ const Connections: React.FC = () => {
               </TableRow>
             ) : connections.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={8} align="center">
+                <TableCell colSpan={10} align="center">
                   <Typography color="textSecondary">
                     No vMix connections. Add a connection to get started.
                   </Typography>
@@ -358,6 +359,12 @@ const Connections: React.FC = () => {
                         <CircularProgress size={16} />
                       )}
                     </Box>
+                  </TableCell>
+                  <TableCell>
+                    <Typography variant="body2">{connection.version}</Typography>
+                  </TableCell>
+                  <TableCell>
+                    <Typography variant="body2">{connection.edition}</Typography>
                   </TableCell>
                   <TableCell>{connection.activeInput}</TableCell>
                   <TableCell>{connection.previewInput}</TableCell>
