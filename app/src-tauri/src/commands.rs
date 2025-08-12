@@ -521,7 +521,7 @@ pub async fn save_settings(
 }
 
 #[tauri::command]
-pub async fn set_logging_config(level: String, save_to_file: bool) -> Result<(), String> {
+pub async fn set_logging_config(app_handle: AppHandle, level: String, save_to_file: bool) -> Result<(), String> {
     println!("Setting logging configuration - level: {}, save_to_file: {}", level, save_to_file);
     
     {
@@ -530,7 +530,11 @@ pub async fn set_logging_config(level: String, save_to_file: bool) -> Result<(),
         config.save_to_file = save_to_file;
     } // ここでlockを解放
     
-    println!("Logging configuration updated successfully");
+    // Save to config file
+    let app_state = app_handle.state::<AppState>();
+    app_state.save_config(&app_handle).await?;
+    
+    println!("Logging configuration updated and saved successfully");
     
     Ok(())
 }

@@ -83,6 +83,7 @@ pub struct ConnectionConfig {
 pub struct AppConfig {
     pub connections: Vec<ConnectionConfig>,
     pub app_settings: Option<AppSettings>,
+    pub logging_config: Option<LoggingConfig>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
