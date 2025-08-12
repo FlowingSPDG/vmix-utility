@@ -21,7 +21,8 @@
       "mcp__serena__replace_regex",
       "mcp__serena__think_about_collected_information",
       "Bash(find:*)",
-      "Bash(cargo --version)"
+      "Bash(cargo --version)",
+      "Bash(ls:*)"
     ]
   },
   "enableAllProjectMcpServers": true,
