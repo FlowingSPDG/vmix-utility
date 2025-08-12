@@ -266,29 +266,6 @@ pub async fn disconnect_vmix(
 ) -> Result<(), String> {
     app_log!(info, "Disconnecting from vMix host: {}", host);
     
-    // Get connection info before disconnecting for event emission
-    let connection_info = {
-        let labels = state.connection_labels.lock().unwrap();
-        let label = labels.get(&host).cloned().unwrap_or_else(|| format!("{}", host));
-        
-        // Check if it's HTTP or TCP connection
-        let is_tcp = {
-            let tcp_connections = state.tcp_connections.lock().unwrap();
-            tcp_connections.iter().any(|c| c.host() == host)
-        };
-        
-        let port = if is_tcp {
-            8099
-        } else {
-            let http_connections = state.http_connections.lock().unwrap();
-            http_connections.iter()
-                .find(|c| c.host() == host)
-                .map(|c| c.port())
-                .unwrap_or(8088)
-        };
-        
-        (label, port, if is_tcp { ConnectionType::Tcp } else { ConnectionType::Http })
-    };
     
     // Disconnect from HTTP connections
     {
