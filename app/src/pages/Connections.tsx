@@ -36,7 +36,6 @@ import {
 } from '@mui/material';
 import AddIcon from '@mui/icons-material/Add';
 import DeleteIcon from '@mui/icons-material/Delete';
-import RefreshIcon from '@mui/icons-material/Refresh';
 import ReconnectIcon from '@mui/icons-material/Refresh';
 import EditIcon from '@mui/icons-material/Edit';
 
@@ -258,23 +257,13 @@ const Connections: React.FC = () => {
         <Typography variant="h4" component="h1">
           vMix Connections
         </Typography>
-        <Box sx={{ display: 'flex', gap: 1 }}>
-          <Button 
-            variant="outlined" 
-            startIcon={<RefreshIcon />}
-            onClick={refreshConnections}
-            disabled={globalLoading}
-          >
-            Refresh
-          </Button>
-          <Button 
-            variant="contained" 
-            startIcon={<AddIcon />}
-            onClick={handleClickOpen}
-          >
-            Add Connection
-          </Button>
-        </Box>
+        <Button 
+          variant="contained" 
+          startIcon={<AddIcon />}
+          onClick={handleClickOpen}
+        >
+          Add Connection
+        </Button>
       </Box>
 
       {error && (
