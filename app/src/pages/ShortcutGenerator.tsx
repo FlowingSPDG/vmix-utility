@@ -105,14 +105,14 @@ const VirtualizedInputItem = memo(({ index, style, data }: {
     try {
       const inputKey = input.queryParams.find(param => param.key === 'Input')?.value;
       if (!inputKey) {
-        showToast('Input keyが見つかりません', 'error');
+        showToast('Input key not found', 'error');
         return;
       }
       await openUrl(`http://${selectedConnection}:8088/tally/?key=${inputKey}`);
-      showToast('Tallyインターフェースをブラウザで開きました', 'info');
+      showToast('Opened Tally interface in browser', 'info');
     } catch (error) {
       console.error('Failed to open tally URL:', error);
-      showToast('Tally URLのブラウザオープンに失敗しました', 'error');
+      showToast('Failed to open Tally URL in browser', 'error');
     }
   }, [showToast, input]);
 
