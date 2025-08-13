@@ -164,3 +164,25 @@ pub struct UpdateInfo {
     pub latest_version: Option<String>,
     pub body: Option<String>,
 }
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct VmixVideoListItem {
+    pub key: String,
+    pub number: i32,
+    pub title: String,
+    pub input_type: String,
+    pub state: String,
+    pub selected: bool, // True if this is the currently selected item in the list
+    pub enabled: bool,  // True if this item is enabled in the list
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct VmixVideoListInput {
+    pub key: String,
+    pub number: i32,
+    pub title: String,
+    pub input_type: String,
+    pub state: String,
+    pub items: Vec<VmixVideoListItem>,
+    pub selected_index: Option<i32>, // Currently selected item index in the list
+}

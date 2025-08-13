@@ -67,6 +67,11 @@ impl VmixClientWrapper {
         })
     }
 
+    // Get raw vmix-rs state for VideoList processing
+    pub async fn get_raw_vmix_state(&self) -> Result<vmix_rs::models::Vmix> {
+        self.client.get_xml_state().await
+    }
+
     pub fn host(&self) -> &str {
         &self.host
     }

@@ -1,6 +1,6 @@
 use crate::types::{
     AppInfo, AppSettings, AutoRefreshConfig, ConnectionType, LoggingConfig,
-    UpdateInfo, VmixConnection, VmixInput,
+    UpdateInfo, VmixConnection, VmixInput, VmixVideoListInput, VmixVideoListItem,
 };
 use crate::http_client::VmixClientWrapper;
 use crate::tcp_manager::TcpVmixManager;
@@ -8,7 +8,7 @@ use crate::state::AppState;
 use crate::logging::LOGGING_CONFIG;
 use crate::app_log;
 use std::collections::HashMap;
-use tauri::{AppHandle, Manager, State, Emitter};
+use tauri::{AppHandle, Manager, State, Emitter, WebviewUrl, WebviewWindowBuilder};
 
 // Additional Tauri command for sending vMix functions
 #[tauri::command]
@@ -124,6 +124,130 @@ pub async fn get_vmix_inputs(
     }).collect();
     
     Ok(inputs)
+}
+
+// Command to get vMix VideoList inputs
+#[tauri::command]
+pub async fn get_vmix_video_lists(
+    state: State<'_, AppState>, 
+    host: String, 
+    port: Option<u16>
+) -> Result<Vec<VmixVideoListInput>, String> {
+    // Find existing HTTP connection
+    let http_vmix = {
+        let http_connections = state.http_connections.lock().unwrap();
+        http_connections.iter().find(|c| c.host() == host).cloned()
+    };
+    
+    // For TCP connections, use cached data
+    let tcp_exists = {
+        let tcp_connections = state.tcp_connections.lock().unwrap();
+        tcp_connections.iter().any(|c| c.host() == host)
+    };
+    
+    if tcp_exists {
+        // TCP接続の場合はキャッシュから取得（今後実装）
+        let _cached_video_lists = {
+            let inputs_cache = state.inputs_cache.lock().unwrap();
+            inputs_cache.get(&host).cloned().unwrap_or_default()
+        };
+        
+        // For TCP connections, we need to get the actual vmix data to parse VideoList items
+        // This is a limitation of the current caching system
+        let video_lists: Vec<VmixVideoListInput> = Vec::new();
+        
+        return Ok(video_lists);
+    }
+    
+    // Get raw vmix-rs data directly instead of using our converted format
+    let vmix_state = match http_vmix {
+        Some(vmix) => vmix.get_raw_vmix_state().await.map_err(|e| e.to_string())?,
+        None => {
+            // Try to establish new HTTP connection
+            let port = port.unwrap_or(8088);
+            let vmix = VmixClientWrapper::new(&host, port);
+            vmix.get_raw_vmix_state().await.map_err(|e| e.to_string())?
+        }
+    };
+    
+    // Filter for VideoList type inputs and convert to VmixVideoListInput
+    let video_lists: Vec<VmixVideoListInput> = vmix_state.inputs.input.iter()
+        .filter(|input| input.input_type.to_lowercase() == "videolist")
+        .map(|input| {
+            let items: Vec<VmixVideoListItem> = if let Some(ref list) = input.list {
+                list.item.iter().enumerate().map(|(index, item)| {
+                    let item_text = item.text.as_ref().unwrap_or(&"Unknown".to_string()).clone();
+                    
+                    VmixVideoListItem {
+                        key: format!("{}_{}", input.key, index),
+                        number: 0, // VideoList items don't have input numbers
+                        title: item_text,
+                        input_type: "VideoListItem".to_string(),
+                        state: "Available".to_string(),
+                        selected: item.selected.as_ref().map_or(false, |s| s == "true"),
+                        enabled: item.enabled.as_ref().map_or(true, |s| s != "false"),
+                    }
+                }).collect()
+            } else {
+                Vec::new()
+            };
+
+            VmixVideoListInput {
+                key: input.key.clone(),
+                number: input.number.parse().unwrap_or(0),
+                title: input.title.clone(),
+                input_type: input.input_type.clone(),
+                state: "Running".to_string(), // Default state for VideoList
+                items,
+                selected_index: input.selected_index.as_ref().and_then(|s| s.parse().ok()),
+            }
+        })
+        .collect();
+    
+    Ok(video_lists)
+}
+
+// Command to set VideoList item enabled state
+#[tauri::command]
+pub async fn set_video_list_item_enabled(
+    state: State<'_, AppState>,
+    host: String,
+    input_number: i32,
+    item_index: i32,
+    enabled: bool
+) -> Result<(), String> {
+    let function_name = if enabled {
+        "ListAdd"
+    } else {
+        "ListRemove"
+    };
+    
+    let params = vec![
+        ("Input".to_string(), input_number.to_string()),
+        ("Value".to_string(), (item_index + 1).to_string()), // Convert to 1-based index for vMix
+    ].into_iter().collect();
+    
+    app_log!(info, "Setting VideoList item {} to enabled={} using function: {}", item_index + 1, enabled, function_name);
+    
+    // Use existing function sending mechanism
+    send_vmix_function(state, host, None, function_name.to_string(), Some(params)).await.map(|_| ())
+}
+
+// Command to select VideoList item
+#[tauri::command]
+pub async fn select_video_list_item(
+    state: State<'_, AppState>,
+    host: String,
+    input_number: i32,
+    item_index: i32
+) -> Result<(), String> {
+    let params = vec![
+        ("Input".to_string(), input_number.to_string()),
+        ("Value".to_string(), (item_index + 1).to_string()), // Convert to 1-based index for vMix
+    ].into_iter().collect();
+    
+    // Use the SelectIndex function to select item
+    send_vmix_function(state, host, None, "SelectIndex".to_string(), Some(params)).await.map(|_| ())
 }
 
 #[tauri::command]
@@ -609,6 +733,90 @@ pub async fn open_logs_directory(app_handle: AppHandle) -> Result<(), String> {
     println!("Opened logs directory: {:?}", logs_dir);
     
     Ok(())
+}
+
+// Command to open List Manager in a popup window
+#[tauri::command]
+pub async fn open_list_manager_window(app_handle: AppHandle) -> Result<(), String> {
+    app_log!(info, "Opening List Manager popup window");
+    
+    // Check if window already exists
+    if let Some(_) = app_handle.get_webview_window("list-manager") {
+        app_log!(info, "List Manager window already exists, focusing it");
+        // Focus existing window
+        if let Some(window) = app_handle.get_webview_window("list-manager") {
+            let _ = window.set_focus();
+        }
+        return Ok(());
+    }
+    
+    // Create new List Manager window
+    let webview_url = WebviewUrl::App("/list-manager".into());
+    
+    match WebviewWindowBuilder::new(&app_handle, "list-manager", webview_url)
+        .title("List Manager")
+        .inner_size(800.0, 600.0)
+        .min_inner_size(600.0, 400.0)
+        .resizable(true)
+        .build()
+    {
+        Ok(_) => {
+            app_log!(info, "List Manager popup window created successfully");
+            Ok(())
+        }
+        Err(e) => {
+            app_log!(error, "Failed to create List Manager popup window: {}", e);
+            Err(format!("Failed to create popup window: {}", e))
+        }
+    }
+}
+
+// Command to open individual VideoList in a popup window
+#[tauri::command]
+pub async fn open_video_list_window(
+    app_handle: AppHandle,
+    host: String,
+    list_key: String,
+    list_title: String
+) -> Result<(), String> {
+    app_log!(info, "Opening VideoList popup window for list: {}", list_title);
+    
+    let window_id = format!("video-list-{}", list_key);
+    
+    // Check if window already exists
+    if let Some(_) = app_handle.get_webview_window(&window_id) {
+        app_log!(info, "VideoList window already exists, focusing it");
+        // Focus existing window
+        if let Some(window) = app_handle.get_webview_window(&window_id) {
+            let _ = window.set_focus();
+        }
+        return Ok(());
+    }
+    
+    // Create URL with query parameters
+    let webview_url = WebviewUrl::App(format!("/list-manager?host={}&listKey={}", 
+        urlencoding::encode(&host), 
+        urlencoding::encode(&list_key)
+    ).into());
+    
+    let window_title = format!("VideoList: {}", list_title);
+    
+    match WebviewWindowBuilder::new(&app_handle, &window_id, webview_url)
+        .title(&window_title)
+        .inner_size(600.0, 500.0)
+        .min_inner_size(400.0, 300.0)
+        .resizable(true)
+        .build()
+    {
+        Ok(_) => {
+            app_log!(info, "VideoList popup window created successfully: {}", window_title);
+            Ok(())
+        }
+        Err(e) => {
+            app_log!(error, "Failed to create VideoList popup window: {}", e);
+            Err(format!("Failed to create popup window: {}", e))
+        }
+    }
 }
 
 #[tauri::command]

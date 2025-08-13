@@ -21,6 +21,7 @@ import LinkIcon from '@mui/icons-material/Link';
 import ShortcutIcon from '@mui/icons-material/Shortcut';
 import CreateIcon from '@mui/icons-material/Create';
 import ViewListIcon from '@mui/icons-material/ViewList';
+import PlaylistPlayIcon from '@mui/icons-material/PlaylistPlay';
 import SettingsIcon from '@mui/icons-material/Settings';
 import CodeIcon from '@mui/icons-material/Code';
 
@@ -28,6 +29,7 @@ import Connections from '../pages/Connections';
 import ShortcutGenerator from '../pages/ShortcutGenerator';
 import BlankGenerator from '../pages/BlankGenerator';
 import InputManager from '../pages/InputManager';
+import ListManager from '../pages/ListManager';
 import Settings from '../pages/Settings';
 import Developer from '../pages/Developer';
 
@@ -75,6 +77,11 @@ const Layout = () => {
       text: 'Input Manager', 
       icon: <ViewListIcon />, 
       component: <InputManager /> 
+    },
+    { 
+      text: 'List Manager', 
+      icon: <PlaylistPlayIcon />, 
+      component: <ListManager /> 
     },
     { 
       text: 'Settings', 

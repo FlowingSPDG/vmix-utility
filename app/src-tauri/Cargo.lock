@@ -123,7 +123,7 @@ dependencies = [
  "log",
  "once_cell",
  "quick-xml",
- "reqwest 0.12.22",
+ "reqwest 0.12.23",
  "serde",
  "serde_json",
  "tauri",
@@ -135,6 +135,7 @@ dependencies = [
  "tauri-plugin-updater",
  "tokio",
  "url",
+ "urlencoding",
  "vmix_rs",
 ]
 
@@ -3547,9 +3548,9 @@ dependencies = [
 
 [[package]]
 name = "reqwest"
-version = "0.12.22"
+version = "0.12.23"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cbc931937e6ca3a06e3b6c0aa7841849b160a90351d6ab467a8b9b9959767531"
+checksum = "d429f34c8092b2d42c7c93cec323bb4adeb7c67698f70839adec842ec10c7ceb"
 dependencies = [
  "base64 0.22.1",
  "bytes",
@@ -3832,9 +3833,9 @@ dependencies = [
 
 [[package]]
 name = "serde-untagged"
-version = "0.1.7"
+version = "0.1.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "299d9c19d7d466db4ab10addd5703e4c615dec2a5a16dbbafe191045e87ee66e"
+checksum = "34836a629bcbc6f1afdf0907a744870039b1e14c0561cb26094fa683b158eff3"
 dependencies = [
  "erased-serde",
  "serde",
@@ -4427,7 +4428,7 @@ dependencies = [
  "percent-encoding",
  "plist",
  "raw-window-handle",
- "reqwest 0.12.22",
+ "reqwest 0.12.23",
  "serde",
  "serde_json",
  "serde_repr",
@@ -4553,9 +4554,9 @@ dependencies = [
 
 [[package]]
 name = "tauri-plugin-prevent-default"
-version = "3.0.0"
+version = "3.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d3e21b19e45d433e2c8e47d680bac17491829a6e6d98a87b3ca1e76d439237d0"
+checksum = "3fa8b5502f6bfe3289acfdfd29ef2c2e09fcf35e5aeb5fec6fb40e4699671d21"
 dependencies = [
  "bitflags 2.9.1",
  "itertools",
@@ -4617,7 +4618,7 @@ dependencies = [
  "minisign-verify",
  "osakit",
  "percent-encoding",
- "reqwest 0.12.22",
+ "reqwest 0.12.23",
  "semver",
  "serde",
  "serde_json",
@@ -5283,7 +5284,7 @@ checksum = "0b928f33d975fc6ad9f86c8f283853ad26bdd5b10b7f1542aa2fa15e2289105a"
 [[package]]
 name = "vmix_rs"
 version = "0.1.0"
-source = "git+https://github.com/FlowingSPDG/vmix-rs.git#913efc4aa7f7a50100d60df048264b079515c807"
+source = "git+https://github.com/FlowingSPDG/vmix-rs.git?branch=feature%2Fvideo-list#f439ab7ff37d849befc2ca2b601074f5aed01e2a"
 dependencies = [
  "anyhow",
  "async-trait",
