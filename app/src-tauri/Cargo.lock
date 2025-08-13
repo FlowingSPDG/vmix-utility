@@ -5284,7 +5284,7 @@ checksum = "0b928f33d975fc6ad9f86c8f283853ad26bdd5b10b7f1542aa2fa15e2289105a"
 [[package]]
 name = "vmix_rs"
 version = "0.1.0"
-source = "git+https://github.com/FlowingSPDG/vmix-rs.git?branch=feature%2Fvideo-list#f439ab7ff37d849befc2ca2b601074f5aed01e2a"
+source = "git+https://github.com/FlowingSPDG/vmix-rs.git#a56390d8d88507dc5e881139d39ae7baf4c70dde"
 dependencies = [
  "anyhow",
  "async-trait",
