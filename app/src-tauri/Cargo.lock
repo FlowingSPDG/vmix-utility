@@ -5282,7 +5282,7 @@ checksum = "0b928f33d975fc6ad9f86c8f283853ad26bdd5b10b7f1542aa2fa15e2289105a"
 [[package]]
 name = "vmix_rs"
 version = "0.1.0"
-source = "git+https://github.com/FlowingSPDG/vmix-rs.git?branch=fix%2Fxml-attribute-parsing#d6ee8d870779f2ea761b528c0178fb2e3a425d41"
+source = "git+https://github.com/FlowingSPDG/vmix-rs.git?branch=fix%2Fxml-attribute-parsing#1f26ab4a88f7da3fec4fdaf992048fcf8fc1f495"
 dependencies = [
  "anyhow",
  "async-trait",

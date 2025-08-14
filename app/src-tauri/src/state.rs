@@ -400,7 +400,8 @@ impl AppState {
                                                 // Use shared builder function for consistent VideoList parsing
                                                 let video_lists = crate::commands::build_video_lists_from_vmix(&vmix_state);
                                                 
-                                                // Emit VideoLists update event
+                                                // For now, just reduce log level without caching
+                                                // TODO: Implement VideoLists caching properly
                                                 let payload = serde_json::json!({
                                                     "host": host_clone,
                                                     "videoLists": video_lists
@@ -409,7 +410,7 @@ impl AppState {
                                                 if let Err(e) = app_handle_clone.emit("vmix-videolists-updated", payload) {
                                                     app_log!(error, "Failed to emit VideoLists update: {}", e);
                                                 } else {
-                                                    app_log!(info, "VideoLists auto-refresh completed for {} with {} lists", host_clone, video_lists.len());
+                                                    app_log!(debug, "VideoLists auto-refresh completed for {} with {} lists", host_clone, video_lists.len());
                                                 }
                                             }
                                             Err(e) => {

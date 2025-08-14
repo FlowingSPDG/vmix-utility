@@ -59,7 +59,11 @@ impl VmixClientWrapper {
                     number: input.number.to_string(),
                     title: input.title.clone(),
                     input_type: Some(input.input_type),
-                    state: Some("Unknown".to_string()), // TODO: Convert State enum properly
+                    state: Some(match input.state {
+                        vmix_rs::models::State::Running => "Running".to_string(),
+                        vmix_rs::models::State::Paused => "Paused".to_string(),
+                        vmix_rs::models::State::Completed => "Completed".to_string(),
+                    }),
                 }).collect(),
             },
             active: Some(vmix_state.active),
