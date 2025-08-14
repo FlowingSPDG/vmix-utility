@@ -25,12 +25,14 @@ import {
   DialogTitle,
   DialogContent,
   DialogContentText,
-  DialogActions
+  DialogActions,
+  Snackbar
 } from '@mui/material';
 import DeleteIcon from '@mui/icons-material/Delete';
 import EditIcon from '@mui/icons-material/Edit';
 import SaveIcon from '@mui/icons-material/Save';
 import CancelIcon from '@mui/icons-material/Cancel';
+import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 
 interface Input {
   number: number;
@@ -52,6 +54,13 @@ interface InputRowProps {
   onCancelClick: (key: string) => void;
   onDeleteClick: (key: string) => void;
   onTitleChange: (key: string, value: string) => void;
+  onCopyKey: (key: string) => void;
+}
+
+interface ToastState {
+  open: boolean;
+  message: string;
+  severity: 'success' | 'error' | 'info';
 }
 
 
@@ -73,7 +82,8 @@ const OptimizedInputRow = memo(({
   onSaveClick, 
   onCancelClick, 
   onDeleteClick, 
-  onTitleChange 
+  onTitleChange,
+  onCopyKey
 }: InputRowProps) => {
   return (
     <TableRow key={input.key}>
@@ -124,9 +134,14 @@ const OptimizedInputRow = memo(({
         />
       </TableCell>
       <TableCell>
-        <Typography variant="caption" color="textSecondary">
-          {input.key.substring(0, 8)}...
-        </Typography>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+          <Typography variant="caption" color="textSecondary">
+            {input.key.substring(0, 8)}...
+          </Typography>
+          <IconButton size="small" onClick={() => onCopyKey(input.key)}>
+            <ContentCopyIcon fontSize="small" />
+          </IconButton>
+        </Box>
       </TableCell>
       <TableCell>
         <IconButton
@@ -149,6 +164,7 @@ const InputManager = () => {
   const [inputs, setInputs] = useState<Input[]>([]);
   const [selectedConnection, setSelectedConnection] = useState<string>('');
   const [error, setError] = useState<string | null>(null);
+  const [toast, setToast] = useState<ToastState>({ open: false, message: '', severity: 'info' });
   
   // Single editing state to minimize re-renders
   const [editingData, setEditingData] = useState<{[key: string]: string}>({});
@@ -275,6 +291,11 @@ const InputManager = () => {
     setDeleteDialogOpen(false);
     setInputToDelete(null);
   };
+
+  const handleCopyKey = useCallback((key: string) => {
+    navigator.clipboard.writeText(key);
+    setToast({ open: true, message: 'Key copied to clipboard!', severity: 'success' });
+  }, []);
 
   const handleRequestSort = (property: OrderBy) => {
     const isAsc = orderBy === property && order === 'asc';
@@ -406,6 +427,7 @@ const InputManager = () => {
                   onCancelClick={handleCancelClick}
                   onDeleteClick={handleDeleteClick}
                   onTitleChange={handleTitleChange}
+                  onCopyKey={handleCopyKey}
                 />
               ))
             )}
@@ -413,6 +435,21 @@ const InputManager = () => {
         </Table>
       </TableContainer>
       
+      {/* Toast Notification */}
+      <Snackbar 
+        open={toast.open} 
+        autoHideDuration={3000} 
+        onClose={() => setToast(prev => ({ ...prev, open: false }))}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+      >
+        <Alert 
+          severity={toast.severity} 
+          sx={{ width: '100%' }}
+          variant="filled"
+        >
+          {toast.message}
+        </Alert>
+      </Snackbar>
       <Box sx={{ mt: 2, display: 'flex', justifyContent: 'flex-end' }}>
         <Button
           variant="contained"
