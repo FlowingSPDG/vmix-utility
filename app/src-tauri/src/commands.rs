@@ -256,7 +256,7 @@ pub async fn get_vmix_video_lists(
     });
     
     match app_handle.emit("vmix-videolists-updated", &event_payload) {
-        Ok(_) => app_log!(debug, "Successfully emitted vmix-videolists-updated event for host: {} with {} lists", host, video_lists.len()),
+        Ok(_) => app_log!(info, "Successfully emitted vmix-videolists-updated event for host: {} with {} lists", host, video_lists.len()),
         Err(e) => app_log!(error, "Failed to emit vmix-videolists-updated event for host: {} - {}", host, e),
     }
     
@@ -812,17 +812,18 @@ pub async fn open_video_list_window(
 ) -> Result<(), String> {
     app_log!(info, "Opening VideoList popup window for list: {}", list_title);
     
-    let window_id = format!("video-list-{}-{}", urlencoding::encode(&host), list_key);
+    // Use timestamp to ensure unique window IDs for multiple instances
+    let timestamp = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_millis();
     
-    // Check if window already exists
-    if let Some(_) = app_handle.get_webview_window(&window_id) {
-        app_log!(info, "VideoList window already exists, focusing it");
-        // Focus existing window
-        if let Some(window) = app_handle.get_webview_window(&window_id) {
-            let _ = window.set_focus();
-        }
-        return Ok(());
-    }
+    let window_id = format!("video-list-{}-{}-{}", 
+        urlencoding::encode(&host).replace("%", "").replace(".", "").replace(":", ""), 
+        list_key.replace(" ", "_").replace("(", "").replace(")", ""),
+        timestamp);
+    
+    app_log!(info, "Creating VideoList window with ID: {}", window_id);
     
     // Create URL with query parameters
     let webview_url = WebviewUrl::App(format!("/list-manager?host={}&listKey={}", 

@@ -8,6 +8,7 @@ import {
   CircularProgress
 } from '@mui/material';
 import { invoke } from '@tauri-apps/api/core';
+import { listen } from '@tauri-apps/api/event';
 import VideoListView from '../components/VideoListView';
 
 interface VmixVideoListItem {
@@ -44,11 +45,82 @@ const SingleVideoList: React.FC<SingleVideoListProps> = ({ host, listKey }) => {
   const urlParams = new URLSearchParams(window.location.search);
   const targetHost = host || urlParams.get('host') || '';
   const targetListKey = listKey || urlParams.get('listKey') || '';
+  
+  console.log('SingleVideoList component initialized');
+  console.log('URL:', window.location.href);
+  console.log('URL params:', Object.fromEntries(urlParams.entries()));
+  console.log('Props - host:', host, 'listKey:', listKey);
+  console.log('Resolved - targetHost:', targetHost, 'targetListKey:', targetListKey);
+  
+  // 開発モードでは自動的にdevtoolsを開く
+  useEffect(() => {
+    if (process.env.NODE_ENV === 'development') {
+      import('@tauri-apps/api/window').then(({ getCurrentWindow }) => {
+        getCurrentWindow().openDevtools();
+      });
+    }
+  }, []);
+
+  // ページタイトルにデバッグ情報を表示
+  useEffect(() => {
+    document.title = `VideoList: ${targetHost} - ${targetListKey}`;
+  }, [targetHost, targetListKey]);
 
   useEffect(() => {
     if (targetHost && targetListKey) {
       fetchVideoList();
     }
+  }, [targetHost, targetListKey]);
+
+  // Listen for VideoList updates
+  useEffect(() => {
+    if (!targetHost || !targetListKey) {
+      console.log('Skipping event listener setup - missing host or listKey');
+      return;
+    }
+
+    console.log('Setting up event listener for:', targetHost, targetListKey);
+    
+    // タイトルを更新して設定中であることを示す
+    document.title = `VideoList: ${targetHost} - SETTING UP LISTENER`;
+
+    const unlistenVideoListsUpdated = listen('vmix-videolists-updated', (event) => {
+      // タイトルを更新してイベント受信を示す
+      document.title = `VideoList: ${targetHost} - EVENT RECEIVED!`;
+      
+      const logMessage = `POPUP EVENT: ${JSON.stringify({
+        timestamp: new Date().toISOString(),
+        targetHost,
+        targetListKey,
+        eventHost: (event.payload as any).host,
+        eventLists: (event.payload as any).videoLists?.map((l: any) => l.key)
+      })}`;
+      console.log(logMessage);
+      
+      const payload = event.payload as any;
+      
+      if (payload.host === targetHost && payload.videoLists) {
+        const foundList = payload.videoLists.find((list: VmixVideoListInput) => list.key === targetListKey);
+        if (foundList) {
+          console.log('Found matching list, updating state:', foundList);
+          setVideoList(foundList);
+          document.title = `VideoList: ${targetHost} - UPDATED!`;
+        } else {
+          console.log('No matching list found for key:', targetListKey);
+          document.title = `VideoList: ${targetHost} - NO MATCH`;
+        }
+      }
+    });
+
+    // リスナー設定完了をタイトルで示す
+    unlistenVideoListsUpdated.then(() => {
+      document.title = `VideoList: ${targetHost} - LISTENING`;
+    });
+
+    return () => {
+      document.title = `VideoList: ${targetHost} - CLEANUP`;
+      unlistenVideoListsUpdated.then(fn => fn());
+    };
   }, [targetHost, targetListKey]);
 
   const fetchVideoList = async () => {

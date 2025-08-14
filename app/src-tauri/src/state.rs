@@ -418,7 +418,7 @@ impl AppState {
                                                 if let Err(e) = app_handle_clone.emit("vmix-videolists-updated", payload) {
                                                     app_log!(error, "Failed to emit VideoLists update: {}", e);
                                                 } else {
-                                                    app_log!(debug, "VideoLists auto-refresh completed for {}", host_clone);
+                                                    app_log!(info, "VideoLists auto-refresh completed for {} with {} lists", host_clone, video_lists.len());
                                                 }
                                             }
                                             Err(e) => {
