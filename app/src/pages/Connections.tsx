@@ -404,9 +404,53 @@ const Connections: React.FC = () => {
                         </Box>
                       );
                     })()}
-                    {connection.connectionType === 'Tcp' && (
+                    {connection.status === 'Connected' && connection.connectionType === 'Tcp' && (() => {
+                      const config = autoRefreshConfigs[connection.host] || { enabled: true, duration: 3 };
+                      return (
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                          <Switch
+                            checked={config.enabled}
+                            onChange={async (e) => {
+                              await setAutoRefreshConfig(connection.host, {
+                                ...config,
+                                enabled: e.target.checked
+                              });
+                            }}
+                            size="small"
+                          />
+                          {config.enabled && (
+                            <FormControl size="small" sx={{ minWidth: 70 }}>
+                              <Select
+                                value={config.duration}
+                                onChange={async (e) => {
+                                  await setAutoRefreshConfig(connection.host, {
+                                    ...config,
+                                    duration: Number(e.target.value)
+                                  });
+                                }}
+                              >
+                                <MenuItem value={1}>1s</MenuItem>
+                                <MenuItem value={3}>3s</MenuItem>
+                                <MenuItem value={5}>5s</MenuItem>
+                                <MenuItem value={10}>10s</MenuItem>
+                                <MenuItem value={30}>30s</MenuItem>
+                              </Select>
+                            </FormControl>
+                          )}
+                          <Typography variant="caption" color="textSecondary" sx={{ ml: 1 }}>
+                            XML
+                          </Typography>
+                        </Box>
+                      );
+                    })()}
+                    {connection.connectionType === 'Tcp' && connection.status !== 'Connected' && (
                       <Typography variant="body2" color="textSecondary">
-                        Real-time
+                        TCP Auto-refresh (Disconnected)
+                      </Typography>
+                    )}
+                    {connection.connectionType === 'Http' && connection.status !== 'Connected' && (
+                      <Typography variant="body2" color="textSecondary">
+                        Auto-refresh (Disconnected)
                       </Typography>
                     )}
                   </TableCell>
