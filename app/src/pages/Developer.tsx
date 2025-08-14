@@ -23,8 +23,10 @@ import {
   Star,
 } from '@mui/icons-material';
 import { openUrl } from '@tauri-apps/plugin-opener';
+import { useTheme } from '../hooks/useTheme';
 
 const Developer = () => {
+  const { resolvedTheme } = useTheme();
   const repositoryUrl = 'https://github.com/FlowingSPDG/vmix-utility';
   const developerGitHub = 'https://github.com/FlowingSPDG';
   const sponsorUrl = 'https://github.com/sponsors/FlowingSPDG';
@@ -188,7 +190,11 @@ const Developer = () => {
             
             <Divider sx={{ my: 2 }} />
             
-            <Box sx={{ bgcolor: 'grey.50', p: 2, borderRadius: 1 }}>
+            <Box sx={{ 
+              bgcolor: resolvedTheme === 'dark' ? 'grey.800' : 'grey.50', 
+              p: 2, 
+              borderRadius: 1 
+            }}>
               <Typography variant="body2" component="pre" sx={{ fontFamily: 'monospace', whiteSpace: 'pre-wrap' }}>
                 {`MIT License
 
