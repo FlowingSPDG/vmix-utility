@@ -59,12 +59,29 @@ impl VmixClientWrapper {
                     number: input.number.to_string(),
                     title: input.title.clone(),
                     input_type: Some(input.input_type),
-                    state: Some("Unknown".to_string()), // TODO: Convert State enum properly
+                    state: Some(match input.state {
+                        vmix_rs::models::State::Running => "Running".to_string(),
+                        vmix_rs::models::State::Paused => "Paused".to_string(),
+                        vmix_rs::models::State::Completed => "Completed".to_string(),
+                    }),
                 }).collect(),
             },
             active: Some(vmix_state.active),
             preview: Some(vmix_state.preview),
         })
+    }
+
+    // Get raw vmix-rs state for VideoList processing
+    pub async fn get_raw_vmix_state(&self) -> Result<vmix_rs::models::Vmix> {
+        self.client.get_xml_state().await
+    }
+
+    // Get raw XML string for debugging
+    pub async fn get_raw_xml(&self) -> Result<String> {
+        let url = format!("http://{}:{}/api", self.host, self.port);
+        let response = reqwest::get(&url).await?;
+        let xml_text = response.text().await?;
+        Ok(xml_text)
     }
 
     pub fn host(&self) -> &str {

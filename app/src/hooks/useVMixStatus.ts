@@ -27,17 +27,39 @@ interface VmixInput {
   state: string;
 }
 
+interface VmixVideoListItem {
+  key: string;
+  number: number;
+  title: string;
+  input_type: string;
+  state: string;
+  selected: boolean;
+  enabled: boolean;
+}
+
+interface VmixVideoListInput {
+  key: string;
+  number: number;
+  title: string;
+  input_type: string;
+  state: string;
+  items: VmixVideoListItem[];
+  selected_index: number | null;
+}
+
 interface VMixStatusContextType {
   connections: VmixConnection[];
   autoRefreshConfigs: Record<string, AutoRefreshConfig>;
   loading: boolean;
   inputs: Record<string, VmixInput[]>; // inputs by host
+  videoLists: Record<string, VmixVideoListInput[]>; // video lists by host
   connectVMix: (host: string, port?: number, connectionType?: 'Http' | 'Tcp') => Promise<VmixConnection>;
   disconnectVMix: (host: string) => Promise<void>;
   setAutoRefreshConfig: (host: string, config: AutoRefreshConfig) => Promise<void>;
   getAutoRefreshConfig: (host: string) => Promise<AutoRefreshConfig>;
   sendVMixFunction: (host: string, functionName: string, params?: Record<string, string>) => Promise<void>;
   getVMixInputs: (host: string) => Promise<VmixInput[]>;
+  getVMixVideoLists: (host: string) => Promise<VmixVideoListInput[]>;
   refreshConnections: () => Promise<void>;
 }
 
@@ -47,7 +69,11 @@ export const VMixStatusProvider = ({ children }: { children: React.ReactNode }) 
   const [connections, setConnections] = useState<VmixConnection[]>([]);
   const [autoRefreshConfigs, setAutoRefreshConfigs] = useState<Record<string, AutoRefreshConfig>>({});
   const [inputs, setInputs] = useState<Record<string, VmixInput[]>>({});
+  const [videoLists, setVideoLists] = useState<Record<string, VmixVideoListInput[]>>({});
   const [loading, setLoading] = useState(false);
+  
+  // Track optimistically removed connections to ignore status updates temporarily
+  const [optimisticallyRemovedHosts, setOptimisticallyRemovedHosts] = useState<Set<string>>(new Set());
 
   const fetchInputsForHost = useCallback(async (host: string) => {
     try {
@@ -61,16 +87,29 @@ export const VMixStatusProvider = ({ children }: { children: React.ReactNode }) 
     }
   }, []);
 
+  const fetchVideoListsForHost = useCallback(async (host: string) => {
+    try {
+      const vmixVideoLists = await invoke<VmixVideoListInput[]>('get_vmix_video_lists', { host });
+      setVideoLists(prev => ({
+        ...prev,
+        [host]: vmixVideoLists
+      }));
+    } catch (error) {
+      console.error(`Failed to fetch video lists for ${host}:`, error);
+    }
+  }, []);
+
   const loadConnections = useCallback(async () => {
     try {
       setLoading(true);
       const statuses = await invoke<VmixConnection[]>('get_vmix_statuses');
       setConnections(statuses);
       
-      // Fetch inputs for all connected hosts
+      // Fetch inputs and video lists for all connected hosts
       for (const connection of statuses) {
         if (connection.status === 'Connected') {
           await fetchInputsForHost(connection.host);
+          await fetchVideoListsForHost(connection.host);
         }
       }
     } catch (error) {
@@ -78,7 +117,7 @@ export const VMixStatusProvider = ({ children }: { children: React.ReactNode }) 
     } finally {
       setLoading(false);
     }
-  }, [fetchInputsForHost]);
+  }, [fetchInputsForHost, fetchVideoListsForHost]);
 
   const loadAutoRefreshConfigs = useCallback(async () => {
     try {
@@ -94,6 +133,12 @@ export const VMixStatusProvider = ({ children }: { children: React.ReactNode }) 
     const unlistenStatus = listen<VmixConnection>('vmix-status-updated', (event) => {
       console.log('vmix-status-updated event received:', event);
       const updatedConnection = event.payload;
+      
+      // Ignore status updates for optimistically removed hosts
+      if (optimisticallyRemovedHosts.has(updatedConnection.host)) {
+        console.log(`Ignoring status update for optimistically removed host: ${updatedConnection.host}`);
+        return;
+      }
       
       setConnections(prev => {
         const existingIndex = prev.findIndex(conn => conn.host === updatedConnection.host);
@@ -113,10 +158,17 @@ export const VMixStatusProvider = ({ children }: { children: React.ReactNode }) 
       // If connection is established, fetch inputs
       if (updatedConnection.status === 'Connected') {
         fetchInputsForHost(updatedConnection.host);
+        fetchVideoListsForHost(updatedConnection.host);
       } else if (updatedConnection.status === 'Disconnected') {
         // Clear inputs for disconnected hosts
         console.log(`Clearing inputs for disconnected host: ${updatedConnection.host}`);
         setInputs(prev => {
+          const updated = { ...prev };
+          delete updated[updatedConnection.host];
+          return updated;
+        });
+        // Clear video lists for disconnected hosts
+        setVideoLists(prev => {
           const updated = { ...prev };
           delete updated[updatedConnection.host];
           return updated;
@@ -127,13 +179,21 @@ export const VMixStatusProvider = ({ children }: { children: React.ReactNode }) 
     return () => {
       unlistenStatus.then(f => f());
     };
-  }, [fetchInputsForHost]);
+  }, [fetchInputsForHost, fetchVideoListsForHost, optimisticallyRemovedHosts]);
 
   // Listen for connection removal events
   useEffect(() => {
     const unlistenRemoval = listen<{host: string}>('vmix-connection-removed', (event) => {
       const { host } = event.payload;
       console.log('vmix-connection-removed event received for host:', host);
+      
+      // Remove from optimistically removed list since removal is now confirmed
+      setOptimisticallyRemovedHosts(prev => {
+        const updated = new Set(prev);
+        updated.delete(host);
+        console.log(`Removed ${host} from optimistically removed list`);
+        return updated;
+      });
       
       setConnections(prev => {
         const filtered = prev.filter(conn => conn.host !== host);
@@ -143,6 +203,13 @@ export const VMixStatusProvider = ({ children }: { children: React.ReactNode }) 
       
       // Also clear inputs for removed host
       setInputs(prev => {
+        const updated = { ...prev };
+        delete updated[host];
+        return updated;
+      });
+       
+      // Also clear video lists for removed host
+      setVideoLists(prev => {
         const updated = { ...prev };
         delete updated[host];
         return updated;
@@ -169,6 +236,40 @@ export const VMixStatusProvider = ({ children }: { children: React.ReactNode }) 
 
     return () => {
       unlistenInputs.then(f => f());
+    };
+  }, []);
+
+  // Listen for video lists updates
+  useEffect(() => {
+    console.log('Setting up vmix-videolists-updated listener');
+    const unlistenVideoLists = listen<{host: string, videoLists: VmixVideoListInput[]}>('vmix-videolists-updated', (event) => {
+      const { host, videoLists: updatedVideoLists } = event.payload;
+      
+      console.log(`VideoLists update event received for ${host}:`, updatedVideoLists);
+      
+      setVideoLists(prev => {
+        // Deep clone to ensure all object references are new
+        const deepClonedVideoLists = updatedVideoLists.map(list => ({
+          ...list,
+          items: list.items.map(item => ({
+            ...item // Create new reference for each item
+          }))
+        }));
+        
+        const updated = {
+          ...prev,
+          [host]: deepClonedVideoLists
+        };
+        
+        console.log('VideoLists state updated with deep clone:', updated);
+        console.log('Object references changed:', prev[host] !== updated[host]);
+        return updated;
+      });
+    });
+
+    return () => {
+      console.log('Cleaning up vmix-videolists-updated listener');
+      unlistenVideoLists.then(f => f());
     };
   }, []);
 
@@ -221,6 +322,7 @@ export const VMixStatusProvider = ({ children }: { children: React.ReactNode }) 
       // Fetch inputs if connected
       if (connection.status === 'Connected') {
         await fetchInputsForHost(host);
+        await fetchVideoListsForHost(host);
       }
       
       return connection;
@@ -233,6 +335,19 @@ export const VMixStatusProvider = ({ children }: { children: React.ReactNode }) 
   const disconnectVMix = async (host: string): Promise<void> => {
     try {
       console.log(`Disconnecting from vMix host: ${host}`);
+      
+      // Add to optimistically removed list to ignore status updates temporarily
+      setOptimisticallyRemovedHosts(prev => new Set([...prev, host]));
+      
+      // Auto-remove from optimistically removed list after timeout (5 seconds)
+      const timeoutId = setTimeout(() => {
+        setOptimisticallyRemovedHosts(prev => {
+          const updated = new Set(prev);
+          updated.delete(host);
+          console.log(`Auto-removed ${host} from optimistically removed list after timeout`);
+          return updated;
+        });
+      }, 5000);
       
       // Optimistically remove from UI immediately for better UX
       setConnections(prev => {
@@ -248,6 +363,13 @@ export const VMixStatusProvider = ({ children }: { children: React.ReactNode }) 
         return updated;
       });
       
+      // Clear video lists immediately
+      setVideoLists(prev => {
+        const updated = { ...prev };
+        delete updated[host];
+        return updated;
+      });
+      
       // Call backend to actually disconnect
       await invoke('disconnect_vmix', { host });
       
@@ -255,6 +377,14 @@ export const VMixStatusProvider = ({ children }: { children: React.ReactNode }) 
       
     } catch (error) {
       console.error('Failed to disconnect from vMix:', error);
+      
+      // Remove from optimistically removed list on error
+      setOptimisticallyRemovedHosts(prev => {
+        const updated = new Set(prev);
+        updated.delete(host);
+        return updated;
+      });
+      
       // Restore connection on error by refreshing
       loadConnections();
       throw error;
@@ -306,17 +436,33 @@ export const VMixStatusProvider = ({ children }: { children: React.ReactNode }) 
     }
   };
 
+  const getVMixVideoLists = async (host: string): Promise<VmixVideoListInput[]> => {
+    try {
+      const vmixVideoLists = await invoke<VmixVideoListInput[]>('get_vmix_video_lists', { host });
+      setVideoLists(prev => ({
+        ...prev,
+        [host]: vmixVideoLists
+      }));
+      return vmixVideoLists;
+    } catch (error) {
+      console.error('Failed to get vMix video lists:', error);
+      throw error;
+    }
+  };
+
   const contextValue: VMixStatusContextType = {
-    connections,
+    connections: connections.filter(conn => !optimisticallyRemovedHosts.has(conn.host)),
     autoRefreshConfigs,
     loading,
     inputs,
+    videoLists,
     connectVMix,
     disconnectVMix,
     setAutoRefreshConfig,
     getAutoRefreshConfig,
     sendVMixFunction,
     getVMixInputs,
+    getVMixVideoLists,
     refreshConnections: loadConnections,
   };
 

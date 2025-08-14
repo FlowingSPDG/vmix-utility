@@ -1,4 +1,4 @@
-use crate::types::{VmixXml, VmixInput, VmixConnection, ConnectionType};
+use crate::types::{VmixXml, VmixInput, VmixConnection, ConnectionType, VmixVideoListInput};
 use crate::state::AppState;
 use crate::app_log;
 use anyhow::Result;
@@ -56,15 +56,18 @@ impl TcpVmixManager {
         let port = self.port;
         let last_xml_request = Arc::clone(&self.last_xml_request);
         let shutdown_signal = Arc::clone(&self.shutdown_signal);
+        let auto_refresh_configs = Arc::clone(&state.auto_refresh_configs);
         
         // XMLコマンドの定期送信タスク
         let xml_sender_client: Arc<TcpVmixClient> = Arc::clone(&client);
         let xml_sender_shutdown = Arc::clone(&shutdown_signal);
         let xml_last_request = Arc::clone(&last_xml_request);
         let xml_sender_host = host.clone();
+        let xml_configs = Arc::clone(&auto_refresh_configs);
         tokio::spawn(async move {
-            let mut interval = tokio::time::interval(Duration::from_secs(3));
+            let mut interval = tokio::time::interval(Duration::from_secs(1)); // Check config every second
             let mut consecutive_failures = 0;
+            let mut last_send_time = Instant::now();
             
             while !xml_sender_shutdown.load(std::sync::atomic::Ordering::Relaxed) {
                 interval.tick().await;
@@ -75,20 +78,37 @@ impl TcpVmixManager {
                     break;
                 }
                 
-                match xml_sender_client.send_command(SendCommand::XML) {
-                    Ok(_) => {
-                        let mut last_req = xml_last_request.lock().unwrap();
-                        *last_req = Instant::now();
-                        consecutive_failures = 0; // Reset failure counter on success
-                    },
-                    Err(e) => {
-                        consecutive_failures += 1;
-                        app_log!(error, "Failed to send XML command to {} (attempt {}): {}", xml_sender_host, consecutive_failures, e);
-                        
-                        // Stop after 3 consecutive failures to avoid endless error spam
-                        if consecutive_failures >= 3 {
-                            app_log!(error, "Too many consecutive failures for {}, stopping XML sender task", xml_sender_host);
-                            break;
+                // Get current auto-refresh config
+                let refresh_config = {
+                    let configs = xml_configs.lock().unwrap();
+                    configs.get(&xml_sender_host).cloned()
+                };
+                
+                // Use config or default
+                let config = refresh_config.unwrap_or_else(|| crate::types::AutoRefreshConfig {
+                    enabled: true,
+                    duration: 3,
+                });
+                
+                // Only send XML if auto-refresh is enabled and enough time has passed
+                if config.enabled && last_send_time.elapsed() >= Duration::from_secs(config.duration) {
+                    match xml_sender_client.send_command(SendCommand::XML) {
+                        Ok(_) => {
+                            let mut last_req = xml_last_request.lock().unwrap();
+                            *last_req = Instant::now();
+                            last_send_time = Instant::now();
+                            consecutive_failures = 0; // Reset failure counter on success
+                            app_log!(debug, "TCP: Sent XML command to {} (interval: {}s)", xml_sender_host, config.duration);
+                        },
+                        Err(e) => {
+                            consecutive_failures += 1;
+                            app_log!(error, "Failed to send XML command to {} (attempt {}): {}", xml_sender_host, consecutive_failures, e);
+                            
+                            // Stop after 3 consecutive failures to avoid endless error spam
+                            if consecutive_failures >= 3 {
+                                app_log!(error, "Too many consecutive failures for {}, stopping XML sender task", xml_sender_host);
+                                break;
+                            }
                         }
                     }
                 }
@@ -101,6 +121,7 @@ impl TcpVmixManager {
         let response_shutdown = Arc::clone(&shutdown_signal);
         let response_host = host.clone();
         let inputs_cache = Arc::clone(&state.inputs_cache);
+        let video_lists_cache = Arc::clone(&state.video_lists_cache);
         let last_status_cache = Arc::clone(&state.last_status_cache);
         
         tokio::spawn(async move {
@@ -116,8 +137,8 @@ impl TcpVmixManager {
                                         key: input.key.clone(),
                                         number: input.number.parse().unwrap_or(0),
                                         title: input.title.clone(),
-                                        input_type: input.input_type.clone().unwrap_or_default(),
-                                        state: input.state.clone().unwrap_or_default(),
+                                        input_type: input.input_type.clone().unwrap_or_else(|| "Unknown".to_string()),
+                                        state: input.state.clone().unwrap_or_else(|| "Unknown".to_string()),
                                     }).collect();
                                     
                                     // Compare with cached inputs and emit if changed
@@ -132,6 +153,55 @@ impl TcpVmixManager {
                                             "host": response_host,
                                             "inputs": new_inputs
                                         }));
+                                    }
+                                    
+                                    // Parse and process VideoLists from XML as well
+                                    let vmix_state = match Self::build_vmix_state_from_xml(&xml_response.body) {
+                                        Ok(state) => state,
+                                        Err(e) => {
+                                            app_log!(warn, "Failed to parse vmix state for VideoLists from TCP XML: {}", e);
+                                            return; // Skip VideoLists processing if parsing fails
+                                        }
+                                    };
+                                    
+                                    // Build VideoLists using the shared function
+                                    let video_lists = crate::commands::build_video_lists_from_vmix(&vmix_state);
+                                    
+                                    // Check if VideoLists data has changed using cache comparison
+                                    let video_lists_changed = {
+                                        let mut video_cache = video_lists_cache.lock().unwrap();
+                                        let has_changed = video_cache.get(&response_host)
+                                            .map(|cached_video_lists| {
+                                                let changed = cached_video_lists != &video_lists;
+                                                app_log!(debug, "TCP VideoLists comparison for {}: cached={}, new={}, changed={}", 
+                                                    response_host, cached_video_lists.len(), video_lists.len(), changed);
+                                                changed
+                                            })
+                                            .unwrap_or_else(|| {
+                                                app_log!(debug, "No cached VideoLists for {} in TCP, treating as changed", response_host);
+                                                true
+                                            });
+                                        
+                                        // Update cache with new data
+                                        video_cache.insert(response_host.clone(), video_lists.clone());
+                                        app_log!(debug, "TCP updated VideoLists cache for {} with {} items", response_host, video_lists.len());
+                                        has_changed
+                                    };
+                                    
+                                    // Only emit frontend event if VideoLists data actually changed
+                                    if video_lists_changed {
+                                        let payload = serde_json::json!({
+                                            "host": response_host,
+                                            "videoLists": video_lists
+                                        });
+                                        
+                                        if let Err(e) = app_handle.emit("vmix-videolists-updated", payload) {
+                                            app_log!(error, "TCP: Failed to emit VideoLists update: {}", e);
+                                        } else {
+                                            app_log!(debug, "TCP: VideoLists updated for {} with {} lists (data changed)", response_host, video_lists.len());
+                                        }
+                                    } else {
+                                        app_log!(debug, "TCP: VideoLists for {} - no changes detected", response_host);
                                     }
                                     
                                     // Update status cache with active/preview inputs from XML
@@ -356,6 +426,11 @@ impl TcpVmixManager {
     fn parse_xml_response(xml: &str) -> Result<VmixXml> {
         quick_xml::de::from_str(xml)
             .map_err(|e| anyhow::anyhow!("TCP XML parse error: {}", e))
+    }
+
+    fn build_vmix_state_from_xml(xml: &str) -> Result<vmix_rs::models::Vmix> {
+        quick_xml::de::from_str(xml)
+            .map_err(|e| anyhow::anyhow!("Failed to parse vmix state from XML: {}", e))
     }
     
     pub fn host(&self) -> &str {

@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useCallback, memo } from 'react';
+import { useState, useMemo, useCallback, memo } from 'react';
 import { useVMixStatus } from '../hooks/useVMixStatus';
 import {
   Box,
@@ -18,7 +18,6 @@ import {
   InputLabel,
   Select,
   MenuItem,
-  CircularProgress,
   Alert,
   Chip,
   Dialog,
@@ -26,7 +25,8 @@ import {
   DialogContent,
   DialogContentText,
   DialogActions,
-  Snackbar
+  Snackbar,
+  Skeleton
 } from '@mui/material';
 import DeleteIcon from '@mui/icons-material/Delete';
 import EditIcon from '@mui/icons-material/Edit';
@@ -160,9 +160,7 @@ const InputRow = OptimizedInputRow;
 
 
 const InputManager = () => {
-  const { connections, inputs: globalInputs, sendVMixFunction, loading: globalLoading } = useVMixStatus();
-  const [inputs, setInputs] = useState<Input[]>([]);
-  const [selectedConnection, setSelectedConnection] = useState<string>('');
+  const { connections, inputs: globalInputs, sendVMixFunction } = useVMixStatus();
   const [error, setError] = useState<string | null>(null);
   const [toast, setToast] = useState<ToastState>({ open: false, message: '', severity: 'info' });
   
@@ -180,31 +178,29 @@ const InputManager = () => {
     [connections]
   );
 
-  useEffect(() => {
-    if (connectedConnections.length > 0 && selectedConnection === '') {
-      const firstConnection = connectedConnections[0].host;
-      setSelectedConnection(firstConnection);
-    }
-  }, [connectedConnections, selectedConnection]);
-
-  // Update inputs when global inputs change or selected connection changes
-  useEffect(() => {
+  // Derive selected connection directly from connected connections
+  const selectedConnection = connectedConnections.length > 0 ? connectedConnections[0].host : '';
+  
+  // Derive inputs directly from globalInputs without useState
+  const inputs = useMemo(() => {
     if (selectedConnection && globalInputs[selectedConnection]) {
-      const vmixInputs = globalInputs[selectedConnection];
-      setInputs(vmixInputs.map((input, _index) => ({
+      return globalInputs[selectedConnection].map((input) => ({
         number: input.number,
         title: input.title,
         type: input.input_type,
         key: input.key,
         state: input.state,
-      })));
-    } else {
-      setInputs([]);
+      }));
     }
+    return [];
   }, [selectedConnection, globalInputs]);
 
-  const handleConnectionChange = (host: string) => {
-    setSelectedConnection(host);
+  // Show loading if no connections or no data yet
+  const isLoading = connections.length === 0 || (selectedConnection && !globalInputs[selectedConnection]);
+
+  const handleConnectionChange = (_host: string) => {
+    // Connection change will be handled by re-rendering since we derive selectedConnection
+    // This is for manual selection if we add a dropdown later
   };
 
   const handleEditClick = useCallback((input: Input) => {
@@ -212,39 +208,29 @@ const InputManager = () => {
   }, []);
 
   const handleSaveClick = useCallback(async (key: string) => {
-    setEditingData(currentEditingData => {
-      const newTitle = currentEditingData[key];
-      
-      setInputs(currentInputs => {
-        const input = currentInputs.find(inp => inp.key === key);
-        
-        if (input && selectedConnection && newTitle !== undefined) {
-          (async () => {
-            try {
-              await sendVMixFunction(selectedConnection, 'SetInputName', {
-                Input: input.number.toString(),
-                Value: newTitle
-              });
+    const newTitle = editingData[key];
+    const input = inputs.find((inp: Input) => inp.key === key);
+    
+    if (input && selectedConnection && newTitle !== undefined) {
+      try {
+        await sendVMixFunction(selectedConnection, 'SetInputName', {
+          Input: input.number.toString(),
+          Value: newTitle
+        });
 
-              setInputs(prevInputs =>
-                prevInputs.map(inp =>
-                  inp.key === key ? { ...inp, title: newTitle } : inp
-                )
-              );
-            } catch (error) {
-              console.error('Failed to update input title:', error);
-              setError(`Failed to update input title: ${error}`);
-            }
-          })();
-        }
+        setToast({ open: true, message: 'Input title updated successfully', severity: 'success' });
         
-        return currentInputs;
-      });
-      
-      const { [key]: _, ...rest } = currentEditingData;
-      return rest;
-    });
-  }, [selectedConnection, sendVMixFunction]);
+        // Remove from editing data
+        setEditingData(currentEditingData => {
+          const { [key]: _, ...rest } = currentEditingData;
+          return rest;
+        });
+      } catch (error) {
+        console.error('Failed to update input title:', error);
+        setToast({ open: true, message: 'Failed to update input title', severity: 'error' });
+      }
+    }
+  }, [editingData, inputs, selectedConnection, sendVMixFunction]);
 
   const handleTitleChange = useCallback((key: string, value: string) => {
     setEditingData(prev => ({ ...prev, [key]: value }));
@@ -258,15 +244,12 @@ const InputManager = () => {
   }, []);
 
   const handleDeleteClick = useCallback((key: string) => {
-    setInputs(currentInputs => {
-      const input = currentInputs.find(inp => inp.key === key);
-      if (input) {
-        setInputToDelete(input);
-        setDeleteDialogOpen(true);
-      }
-      return currentInputs;
-    });
-  }, []);
+    const input = inputs.find((inp: Input) => inp.key === key);
+    if (input) {
+      setInputToDelete(input);
+      setDeleteDialogOpen(true);
+    }
+  }, [inputs]);
 
   const handleDeleteConfirm = async () => {
     if (inputToDelete && selectedConnection) {
@@ -276,11 +259,11 @@ const InputManager = () => {
           Input: inputToDelete.key
         });
 
-        // update local state
-        setInputs(prevInputs => prevInputs.filter(input => input.key !== inputToDelete.key));
+        setToast({ open: true, message: 'Input deleted successfully', severity: 'success' });
       } catch (error) {
         console.error('Failed to delete input:', error);
         setError(`Failed to delete input: ${error}`);
+        setToast({ open: true, message: 'Failed to delete input', severity: 'error' });
       }
     }
     setDeleteDialogOpen(false);
@@ -326,6 +309,44 @@ const InputManager = () => {
       };
     });
   }, [sortedInputs, editingData]);
+
+  // Show skeleton loading state while loading
+  if (isLoading) {
+    return (
+      <Box sx={{ p: 3 }}>
+        <Skeleton variant="text" height={60} width={200} sx={{ mb: 3 }} />
+        
+        <Paper sx={{ p: 2, mb: 3 }}>
+          <Skeleton variant="rectangular" height={56} sx={{ mb: 2 }} />
+        </Paper>
+        
+        <TableContainer component={Paper}>
+          <Table>
+            <TableHead>
+              <TableRow>
+                {Array.from({ length: 6 }).map((_, index) => (
+                  <TableCell key={index}>
+                    <Skeleton variant="text" height={32} />
+                  </TableCell>
+                ))}
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {Array.from({ length: 5 }).map((_, rowIndex) => (
+                <TableRow key={rowIndex}>
+                  {Array.from({ length: 6 }).map((_, cellIndex) => (
+                    <TableCell key={cellIndex}>
+                      <Skeleton variant="text" height={24} />
+                    </TableCell>
+                  ))}
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </TableContainer>
+      </Box>
+    );
+  }
 
   return (
     <Box sx={{ p: 3 }}>
@@ -398,16 +419,7 @@ const InputManager = () => {
             </TableRow>
           </TableHead>
           <TableBody>
-            {globalLoading ? (
-              <TableRow>
-                <TableCell colSpan={6} align="center">
-                  <CircularProgress />
-                  <Typography variant="body2" sx={{ mt: 1 }}>
-                    Loading inputs...
-                  </Typography>
-                </TableCell>
-              </TableRow>
-            ) : inputs.length === 0 ? (
+            {inputs.length === 0 ? (
               <TableRow>
                 <TableCell colSpan={6} align="center">
                   <Typography color="textSecondary">

@@ -1,5 +1,5 @@
 [tools]
-bun = "1.2"
+bun = "latest"
 go = "1.24"
 # Rust is experimental
 # rust = "1.89"
