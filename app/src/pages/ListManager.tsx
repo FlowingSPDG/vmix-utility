@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useMemo } from 'react';
 import {
   Box,
   Card,
@@ -10,7 +10,7 @@ import {
   ListItemSecondaryAction,
   Chip,
   Alert,
-  CircularProgress,
+  Skeleton,
   FormControl,
   InputLabel,
   Select,
@@ -47,75 +47,27 @@ interface VmixVideoListInput {
 
 const ListManager: React.FC = () => {
   const { connections, videoLists: contextVideoLists, getVMixVideoLists } = useVMixStatus();
-  const [selectedHost, setSelectedHost] = useState<string>('');
-  const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [expandedLists, setExpandedLists] = useState<Set<string>>(new Set());
   
-  // Get video lists for selected host from context
-  const videoLists = selectedHost ? (contextVideoLists[selectedHost] || []) : [];
-  
-  // Enhanced debugging for re-renders and object references
-  const prevVideoListsRef = useRef(videoLists);
-  useEffect(() => {
-    const prevVideoLists = prevVideoListsRef.current;
-    const referenceChanged = prevVideoLists !== videoLists;
-    const lengthChanged = prevVideoLists.length !== videoLists.length;
-    
-    console.log('ListManager: videoLists update detected:', {
-      host: selectedHost,
-      referenceChanged,
-      lengthChanged,
-      prevLength: prevVideoLists.length,
-      newLength: videoLists.length,
-      videoLists
-    });
-    
-    if (videoLists.length > 0) {
-      const firstList = videoLists[0];
-      console.log('First VideoList details:', {
-        key: firstList.key,
-        itemsCount: firstList.items.length,
-        selectedItems: firstList.items.filter(i => i.selected).map((item, idx) => ({ index: idx, title: item.title })),
-        itemKeys: firstList.items.map((item, idx) => generateItemKey(item, idx))
-      });
-    }
-    
-    prevVideoListsRef.current = videoLists;
-  }, [videoLists, selectedHost]);
-
   // Get connected hosts
-  const connectedHosts = connections.filter(conn => conn.status === 'Connected');
+  const connectedHosts = useMemo(() => 
+    connections.filter(conn => conn.status === 'Connected'), 
+    [connections]
+  );
 
-  // Set default host when connections change
-  useEffect(() => {
-    if (connectedHosts.length > 0 && !selectedHost) {
-      setSelectedHost(connectedHosts[0].host);
-    }
-  }, [connectedHosts, selectedHost]);
+  // Derive selected host directly
+  const selectedHost = connectedHosts.length > 0 ? connectedHosts[0].host : '';
+  
+  // Get video lists for selected host from context
+  const videoLists = useMemo(() => 
+    selectedHost ? (contextVideoLists[selectedHost] || []) : [],
+    [selectedHost, contextVideoLists]
+  );
 
-  // Fetch video lists when host changes
-  useEffect(() => {
-    if (selectedHost) {
-      fetchVideoLists();
-    }
-  }, [selectedHost]);
+  // Show loading if no connections or no data yet
+  const isLoading = connections.length === 0 || (selectedHost && !contextVideoLists[selectedHost]);
 
-  const fetchVideoLists = async () => {
-    if (!selectedHost) return;
-
-    setLoading(true);
-    setError(null);
-    
-    try {
-      await getVMixVideoLists(selectedHost);
-    } catch (err) {
-      setError(err as string);
-      console.error('Failed to fetch video lists:', err);
-    } finally {
-      setLoading(false);
-    }
-  };
 
 
   const handleVideoListPopout = async (videoList: VmixVideoListInput) => {
@@ -226,7 +178,7 @@ const ListManager: React.FC = () => {
           <Select
             value={selectedHost}
             label="vMix Connection"
-            onChange={(e) => setSelectedHost(e.target.value)}
+            onChange={() => {/* Host selection handled automatically */}}
             sx={{
               '& .MuiSelect-select': {
                 display: 'flex',
@@ -263,9 +215,11 @@ const ListManager: React.FC = () => {
         </Alert>
       )}
 
-      {loading ? (
-        <Box display="flex" justifyContent="center" p={4}>
-          <CircularProgress />
+      {isLoading ? (
+        <Box sx={{ p: 2 }}>
+          <Skeleton variant="rectangular" height={200} sx={{ mb: 2 }} />
+          <Skeleton variant="text" height={40} />
+          <Skeleton variant="text" height={40} />
         </Box>
       ) : videoLists.length === 0 ? (
         <Alert severity="info">

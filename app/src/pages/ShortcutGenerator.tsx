@@ -309,9 +309,19 @@ const ShortcutGenerator = () => {
       shortcut.Name.toLowerCase().includes(searchTerm.toLowerCase())
     );
   };
-  const { connections, inputs: vmixStatusInputs, loading: globalLoading } = useVMixStatus();
-  const [selectedConnection, setSelectedConnection] = useState<string>('');
-  const [vmixInputs, setVmixInputs] = useState<VmixInput[]>([]);
+  const { connections, inputs: vmixStatusInputs } = useVMixStatus();
+  
+  // Derive selected connection directly
+  const connectedConnections = useMemo(() => 
+    connections.filter(conn => conn.status === 'Connected'), 
+    [connections]
+  );
+  const selectedConnection = connectedConnections.length > 0 ? connectedConnections[0].host : '';
+  
+  // Derive vmixInputs directly from context
+  const vmixInputs = useMemo(() => {
+    return selectedConnection ? (vmixStatusInputs[selectedConnection] || []) : [];
+  }, [selectedConnection, vmixStatusInputs]);
   const [toast, setToast] = useState<{open: boolean, message: string, severity: 'success' | 'error' | 'info'}>(
     {open: false, message: '', severity: 'info'}
   );
@@ -333,24 +343,16 @@ const ShortcutGenerator = () => {
   useEffect(() => {
     const connectedConnections = connections.filter(conn => conn.status === 'Connected');
     
-    // Auto-select first available connection if none selected
-    if (connectedConnections.length > 0 && !selectedConnection) {
-      const firstConnection = connectedConnections[0].host;
-      setSelectedConnection(firstConnection);
-    }
-  }, [connections, selectedConnection]);
+    // Connection selection handled automatically through useMemo
+  }, [connections]);
 
-  // Update vmixInputs when vmixStatusInputs changes for selected connection
+  // vmixInputs are now derived from useMemo above, reset filter when connection changes
   useEffect(() => {
-    if (selectedConnection && vmixStatusInputs[selectedConnection]) {
-      const inputs = vmixStatusInputs[selectedConnection];
-      setVmixInputs(inputs);
-      setInputTypeFilter('All');
-    } else {
-      setVmixInputs([]);
+    setInputTypeFilter('All');
+    if (!selectedConnection) {
       setInputs([]);
     }
-  }, [selectedConnection, vmixStatusInputs]);
+  }, [selectedConnection]);
 
   // Generate shortcuts separately using useMemo for performance
   const generatedInputs = useMemo(() => {
@@ -413,8 +415,8 @@ const ShortcutGenerator = () => {
     setInputs(generatedInputs);
   }, [generatedInputs]);
 
-  const handleConnectionChange = (host: string) => {
-    setSelectedConnection(host);
+  const handleConnectionChange = () => {
+    // Connection change handled automatically through useMemo
   };
   
   // State for new query param
@@ -538,7 +540,7 @@ const ShortcutGenerator = () => {
               labelId="vmix-select-label"
               value={selectedConnection}
               label="Select vMix Connection"
-              onChange={(e) => handleConnectionChange(e.target.value as string)}
+              onChange={() => handleConnectionChange()}
               size="small"
             >
               <MenuItem value="">
@@ -575,7 +577,7 @@ const ShortcutGenerator = () => {
           )}
         </Box>
 
-        {globalLoading && (
+        {vmixInputs.length === 0 && selectedConnection && (
           <Typography variant="body2" color="text.secondary">
             Loading inputs...
           </Typography>
