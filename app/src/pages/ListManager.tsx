@@ -20,7 +20,6 @@ import {
   Collapse
 } from '@mui/material';
 import LaunchIcon from '@mui/icons-material/Launch';
-import RefreshIcon from '@mui/icons-material/Refresh';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import ExpandLessIcon from '@mui/icons-material/ExpandLess';
 import { invoke } from '@tauri-apps/api/core';

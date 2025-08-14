@@ -2,8 +2,6 @@ use crate::types::{
     AppInfo, AppSettings, AutoRefreshConfig, ConnectionType, LoggingConfig,
     UpdateInfo, VmixConnection, VmixInput, VmixVideoListInput, VmixVideoListItem,
 };
-use quick_xml::Reader;
-use quick_xml::events::Event;
 use crate::http_client::VmixClientWrapper;
 use crate::tcp_manager::TcpVmixManager;
 use crate::state::AppState;
@@ -11,6 +9,87 @@ use crate::logging::LOGGING_CONFIG;
 use crate::app_log;
 use std::collections::HashMap;
 use tauri::{AppHandle, Manager, State, Emitter, WebviewUrl, WebviewWindowBuilder};
+
+// Shared builder function to build VideoList inputs from vmix-rs model
+pub fn build_video_lists_from_vmix(vmix_state: &vmix_rs::models::Vmix) -> Vec<VmixVideoListInput> {
+    vmix_state.inputs.input.iter()
+        .filter(|input| input.input_type.to_lowercase() == "videolist")
+        .map(|input| {
+            // Get the selected index from the input level (if available)
+            let input_selected_index = input.selected_index.as_ref()
+                .and_then(|s| s.parse::<i32>().ok())
+                .map(|i| if i > 0 { i - 1 } else { 0 }); // Convert from 1-based to 0-based
+            
+            // Extract items from the list if available
+            let items: Vec<VmixVideoListItem> = if let Some(ref list) = input.list {
+                list.item.iter().enumerate().map(|(index, item)| {
+                    // Parse enabled: Handle vmix-rs quirks - None, empty, or anything except "false" → true
+                    let enabled = match item.enabled.as_ref() {
+                        Some(s) => {
+                            let trimmed = s.trim().to_lowercase();
+                            // Handle empty strings as None (vmix-rs might return empty instead of None)
+                            if trimmed.is_empty() {
+                                true  // Default to enabled if empty
+                            } else {
+                                trimmed != "false"
+                            }
+                        },
+                        None => true, // Default to enabled if enabled attribute is not present
+                    };
+                    
+                    // For selected state, prioritize item-level selected attribute over input-level selected_index
+                    let selected = match item.selected.as_ref() {
+                        Some(s) => s.trim().to_lowercase() == "true",
+                        None => {
+                            // Fall back to input-level selected_index if item-level is not specified
+                            if let Some(selected_idx) = input_selected_index {
+                                index == selected_idx as usize
+                            } else {
+                                false
+                            }
+                        }
+                    };
+                    
+                    app_log!(debug, "VideoList item {}: text='{}', enabled_attr={:?} -> {}, selected_attr={:?}, input_selected_index={:?}, final_selected={}", 
+                        index, 
+                        item.text.as_deref().unwrap_or(""), 
+                        item.enabled.as_deref(), enabled,
+                        item.selected.as_deref(),
+                        input_selected_index,
+                        selected
+                    );
+                    
+                    VmixVideoListItem {
+                        key: format!("{}_{}", input.key, index),
+                        number: 0, // VideoList items don't have input numbers
+                        title: item.text.clone().unwrap_or_default(),
+                        input_type: "VideoListItem".to_string(),
+                        state: "Available".to_string(),
+                        selected,
+                        enabled,
+                    }
+                }).collect()
+            } else {
+                Vec::new()
+            };
+            
+            // Find the final selected index (0-based) for the VmixVideoListInput
+            let selected_index = items.iter()
+                .position(|item| item.selected)
+                .map(|pos| pos as i32);
+            
+            VmixVideoListInput {
+                key: input.key.clone(),
+                number: input.number.parse().unwrap_or(0),
+                title: input.title.clone(),
+                input_type: input.input_type.clone(),
+                state: "Running".to_string(), // Default state for VideoList
+                items,
+                selected_index,
+            }
+        })
+        .collect()
+}
 
 // Additional Tauri command for sending vMix functions
 #[tauri::command]
@@ -150,151 +229,25 @@ pub async fn get_vmix_video_lists(
     
     if tcp_exists {
         // TCP接続の場合はキャッシュから取得（今後実装）
-        let _cached_video_lists = {
-            let inputs_cache = state.inputs_cache.lock().unwrap();
-            inputs_cache.get(&host).cloned().unwrap_or_default()
-        };
-        
-        // For TCP connections, we need to get the actual vmix data to parse VideoList items
-        // This is a limitation of the current caching system
-        let video_lists: Vec<VmixVideoListInput> = Vec::new();
-        
-        return Ok(video_lists);
+        app_log!(debug, "TCP connection detected for {}, returning empty VideoList for now", host);
+        return Ok(Vec::new());
     }
     
-    // Get both raw XML and parsed state for comparison
-    let (vmix_state, raw_xml) = match http_vmix {
+    // Get raw vmix-rs state and use shared builder function
+    let vmix_state = match http_vmix {
         Some(vmix) => {
-            let state = vmix.get_raw_vmix_state().await.map_err(|e| e.to_string())?;
-            let xml = vmix.get_raw_xml().await.map_err(|e| e.to_string())?;
-            app_log!(info, "Raw vMix state retrieved for VideoList parsing");
-            (state, xml)
+            vmix.get_raw_vmix_state().await.map_err(|e| e.to_string())?
         },
         None => {
             // Try to establish new HTTP connection
             let port = port.unwrap_or(8088);
             let vmix = VmixClientWrapper::new(&host, port);
-            let state = vmix.get_raw_vmix_state().await.map_err(|e| e.to_string())?;
-            let xml = vmix.get_raw_xml().await.map_err(|e| e.to_string())?;
-            app_log!(info, "Raw vMix state retrieved from new connection for VideoList parsing");
-            (state, xml)
+            vmix.get_raw_vmix_state().await.map_err(|e| e.to_string())?
         }
     };
 
-    // Helper function to parse VideoList items from raw XML
-    fn parse_videolist_items_from_xml_inner(xml: &str, input_key: &str) -> Vec<(String, bool, bool)> {
-        let mut items = Vec::new();
-        let mut reader = Reader::from_str(xml);
-        let mut buf = Vec::new();
-        let mut in_target_input = false;
-        let mut in_list = false;
-        
-        loop {
-            match reader.read_event_into(&mut buf) {
-                Ok(Event::Start(ref e)) => {
-                    if e.name().as_ref() == b"input" {
-                        // Check if this is our target input
-                        if let Some(key_attr) = e.attributes().find(|attr| {
-                            attr.as_ref().map(|a| a.key.as_ref() == b"key").unwrap_or(false)
-                        }) {
-                            if let Ok(attr) = key_attr {
-                                if let Ok(value) = attr.unescape_value() {
-                                    if value == input_key {
-                                        in_target_input = true;
-                                    }
-                                }
-                            }
-                        }
-                    } else if e.name().as_ref() == b"list" && in_target_input {
-                        in_list = true;
-                    } else if e.name().as_ref() == b"item" && in_list {
-                        let mut text = String::new();
-                        let mut selected = false;
-                        let mut enabled = true; // Default to true
-                        
-                        // Parse attributes
-                        for attr_result in e.attributes() {
-                            if let Ok(attr) = attr_result {
-                                match attr.key.as_ref() {
-                                    b"selected" => {
-                                        if let Ok(value) = attr.unescape_value() {
-                                            selected = value == "true";
-                                        }
-                                    }
-                                    b"enabled" => {
-                                        if let Ok(value) = attr.unescape_value() {
-                                            enabled = value == "true";
-                                            app_log!(info, "Found enabled attribute: '{}' -> {}", value, enabled);
-                                        }
-                                    }
-                                    _ => {}
-                                }
-                            }
-                        }
-                        
-                        // Get text content
-                        buf.clear();
-                        if let Ok(Event::Text(e)) = reader.read_event_into(&mut buf) {
-                            text = std::str::from_utf8(e.as_ref()).unwrap_or("").to_string();
-                        }
-                        
-                        app_log!(info, "Parsed VideoList item: text='{}', selected={}, enabled={}", text, selected, enabled);
-                        items.push((text, selected, enabled));
-                    }
-                }
-                Ok(Event::End(ref e)) => {
-                    if e.name().as_ref() == b"input" {
-                        in_target_input = false;
-                    } else if e.name().as_ref() == b"list" {
-                        in_list = false;
-                    }
-                }
-                Ok(Event::Eof) => break,
-                Err(e) => {
-                    app_log!(error, "Error parsing XML: {}", e);
-                    break;
-                }
-                _ => {}
-            }
-            buf.clear();
-        }
-        
-        items
-    }
-    
-    // Filter for VideoList type inputs and convert to VmixVideoListInput
-    let video_lists: Vec<VmixVideoListInput> = vmix_state.inputs.input.iter()
-        .filter(|input| input.input_type.to_lowercase() == "videolist")
-        .map(|input| {
-            // Use manual XML parsing to get correct enabled/selected values
-            let parsed_items = parse_videolist_items_from_xml_inner(&raw_xml, &input.key);
-            
-            let items: Vec<VmixVideoListItem> = parsed_items.into_iter().enumerate().map(|(index, (text, selected, enabled))| {
-                app_log!(info, "Creating VideoList item {} - text: '{}', selected: {}, enabled: {}", 
-                    index, text, selected, enabled);
-                
-                VmixVideoListItem {
-                    key: format!("{}_{}", input.key, index),
-                    number: 0, // VideoList items don't have input numbers
-                    title: text,
-                    input_type: "VideoListItem".to_string(),
-                    state: "Available".to_string(),
-                    selected,
-                    enabled,
-                }
-            }).collect();
-
-            VmixVideoListInput {
-                key: input.key.clone(),
-                number: input.number.parse().unwrap_or(0),
-                title: input.title.clone(),
-                input_type: input.input_type.clone(),
-                state: "Running".to_string(), // Default state for VideoList
-                items,
-                selected_index: input.selected_index.as_ref().and_then(|s| s.parse().ok()),
-            }
-        })
-        .collect();
+    // Use shared builder function
+    let video_lists = build_video_lists_from_vmix(&vmix_state);
     
     // Emit update event to frontend
     let event_payload = serde_json::json!({
@@ -303,7 +256,7 @@ pub async fn get_vmix_video_lists(
     });
     
     match app_handle.emit("vmix-videolists-updated", &event_payload) {
-        Ok(_) => app_log!(info, "Successfully emitted vmix-videolists-updated event for host: {} with {} lists", host, video_lists.len()),
+        Ok(_) => app_log!(debug, "Successfully emitted vmix-videolists-updated event for host: {} with {} lists", host, video_lists.len()),
         Err(e) => app_log!(error, "Failed to emit vmix-videolists-updated event for host: {} - {}", host, e),
     }
     

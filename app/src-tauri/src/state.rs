@@ -403,36 +403,11 @@ impl AppState {
                                     };
                                     
                                     if let Some(client) = vmix_client {
-                                        // Get both parsed data and raw XML for VideoList parsing
-                                        match tokio::try_join!(client.get_vmix_data(), client.get_raw_xml()) {
-                                            Ok((data, raw_xml)) => {
-                                                // Parse video lists from the XML data
-                                                let video_lists = data.inputs.input.into_iter()
-                                                    .filter(|input| input.input_type.as_deref() == Some("VideoList"))
-                                                    .map(|input| {
-                                                        let items = crate::commands::parse_videolist_items_from_xml(&raw_xml, &input.key);
-                                                        
-                                                        crate::types::VmixVideoListInput {
-                                                            key: input.key.clone(),
-                                                            number: input.number.parse().unwrap_or(0),
-                                                            title: input.title,
-                                                            input_type: input.input_type.unwrap_or_default(),
-                                                            state: input.state.unwrap_or_default(),
-                                                            items: items.into_iter().map(|(title, enabled, selected)| {
-                                                                crate::types::VmixVideoListItem {
-                                                                    key: format!("{}_{}", input.key, title),
-                                                                    number: 0,
-                                                                    title,
-                                                                    input_type: "VideoListItem".to_string(),
-                                                                    state: "".to_string(),
-                                                                    selected,
-                                                                    enabled,
-                                                                }
-                                                            }).collect(),
-                                                            selected_index: None,
-                                                        }
-                                                    })
-                                                    .collect::<Vec<_>>();
+                                        // Get raw vmix-rs state and use shared builder function
+                                        match client.get_raw_vmix_state().await {
+                                            Ok(vmix_state) => {
+                                                // Use shared builder function for consistent VideoList parsing
+                                                let video_lists = crate::commands::build_video_lists_from_vmix(&vmix_state);
                                                 
                                                 // Emit VideoLists update event
                                                 let payload = serde_json::json!({
