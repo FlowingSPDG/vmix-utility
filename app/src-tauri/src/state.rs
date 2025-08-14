@@ -1,6 +1,6 @@
 use crate::types::{
     AppConfig, AppSettings, AutoRefreshConfig, ConnectionConfig, ConnectionType,
-    VmixConnection, VmixInput,
+    VmixConnection, VmixInput, VmixVideoListInput,
 };
 use crate::http_client::VmixClientWrapper;
 use crate::tcp_manager::TcpVmixManager;
@@ -19,6 +19,7 @@ pub struct AppState {
     pub auto_refresh_configs: Arc<Mutex<HashMap<String, AutoRefreshConfig>>>,
     pub last_status_cache: Arc<Mutex<HashMap<String, VmixConnection>>>,
     pub inputs_cache: Arc<Mutex<HashMap<String, Vec<VmixInput>>>>,
+    pub video_lists_cache: Arc<Mutex<HashMap<String, Vec<VmixVideoListInput>>>>,
     pub connection_labels: Arc<Mutex<HashMap<String, String>>>,
     pub app_settings: Arc<Mutex<AppSettings>>,
 }
@@ -31,6 +32,7 @@ impl AppState {
             auto_refresh_configs: Arc::new(Mutex::new(HashMap::new())),
             last_status_cache: Arc::new(Mutex::new(HashMap::new())),
             inputs_cache: Arc::new(Mutex::new(HashMap::new())),
+            video_lists_cache: Arc::new(Mutex::new(HashMap::new())),
             connection_labels: Arc::new(Mutex::new(HashMap::new())),
             app_settings: Arc::new(Mutex::new(AppSettings::default())),
         }
@@ -221,6 +223,7 @@ impl AppState {
         let configs = Arc::clone(&self.auto_refresh_configs);
         let cache = Arc::clone(&self.last_status_cache);
         let inputs_cache = Arc::clone(&self.inputs_cache);
+        let video_lists_cache = Arc::clone(&self.video_lists_cache);
         let labels = Arc::clone(&self.connection_labels);
 
         tokio::spawn(async move {
@@ -385,6 +388,7 @@ impl AppState {
                                 let app_handle_clone = app_handle.clone();
                                 let host_clone = host.clone();
                                 let http_connections_clone = Arc::clone(&http_connections);
+                                let video_lists_cache_clone = Arc::clone(&video_lists_cache);
                                 
                                 tokio::spawn(async move {
                                     // Get vMix HTTP client for this host
@@ -400,17 +404,43 @@ impl AppState {
                                                 // Use shared builder function for consistent VideoList parsing
                                                 let video_lists = crate::commands::build_video_lists_from_vmix(&vmix_state);
                                                 
-                                                // For now, just reduce log level without caching
-                                                // TODO: Implement VideoLists caching properly
-                                                let payload = serde_json::json!({
-                                                    "host": host_clone,
-                                                    "videoLists": video_lists
-                                                });
+                                                app_log!(debug, "Auto-refresh retrieved {} VideoLists for host: {}", video_lists.len(), host_clone);
                                                 
-                                                if let Err(e) = app_handle_clone.emit("vmix-videolists-updated", payload) {
-                                                    app_log!(error, "Failed to emit VideoLists update: {}", e);
+                                                // Check if VideoLists data has changed using cache comparison
+                                                let video_lists_changed = {
+                                                    let mut cache_guard = video_lists_cache_clone.lock().unwrap();
+                                                    let has_changed = cache_guard.get(&host_clone)
+                                                        .map(|cached_video_lists| {
+                                                            let changed = cached_video_lists != &video_lists;
+                                                            app_log!(debug, "Auto-refresh VideoLists comparison for {}: cached={}, new={}, changed={}", 
+                                                                host_clone, cached_video_lists.len(), video_lists.len(), changed);
+                                                            changed
+                                                        })
+                                                        .unwrap_or_else(|| {
+                                                            app_log!(debug, "No cached VideoLists for {} in auto-refresh, treating as changed", host_clone);
+                                                            true
+                                                        });
+                                                    
+                                                    // Update cache with new data
+                                                    cache_guard.insert(host_clone.clone(), video_lists.clone());
+                                                    app_log!(debug, "Auto-refresh updated VideoLists cache for {} with {} items", host_clone, video_lists.len());
+                                                    has_changed
+                                                };
+                                                
+                                                // Only emit frontend event if data actually changed (for auto-refresh)
+                                                if video_lists_changed {
+                                                    let payload = serde_json::json!({
+                                                        "host": host_clone,
+                                                        "videoLists": video_lists
+                                                    });
+                                                    
+                                                    if let Err(e) = app_handle_clone.emit("vmix-videolists-updated", payload) {
+                                                        app_log!(error, "Failed to emit VideoLists update: {}", e);
+                                                    } else {
+                                                        app_log!(debug, "VideoLists auto-refresh completed for {} with {} lists (data changed)", host_clone, video_lists.len());
+                                                    }
                                                 } else {
-                                                    app_log!(debug, "VideoLists auto-refresh completed for {} with {} lists", host_clone, video_lists.len());
+                                                    app_log!(debug, "VideoLists auto-refresh completed for {} - no changes detected", host_clone);
                                                 }
                                             }
                                             Err(e) => {

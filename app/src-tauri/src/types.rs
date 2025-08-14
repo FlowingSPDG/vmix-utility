@@ -176,7 +176,7 @@ pub struct VmixVideoListItem {
     pub enabled: bool,  // True if this item is enabled in the list
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct VmixVideoListInput {
     pub key: String,
     pub number: i32,

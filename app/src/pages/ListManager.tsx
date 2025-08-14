@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import {
   Box,
   Card,
@@ -68,6 +68,15 @@ const ListManager: React.FC = () => {
   // Show loading if no connections or no data yet
   const isLoading = connections.length === 0 || (selectedHost && !contextVideoLists[selectedHost]);
 
+  // Auto-fetch VideoLists when selectedHost changes
+  useEffect(() => {
+    if (selectedHost && !contextVideoLists[selectedHost]) {
+      console.log(`Auto-fetching VideoLists for host: ${selectedHost}`);
+      getVMixVideoLists(selectedHost).catch(error => {
+        console.error(`Failed to auto-fetch VideoLists for ${selectedHost}:`, error);
+      });
+    }
+  }, [selectedHost, contextVideoLists, getVMixVideoLists]);
 
 
   const handleVideoListPopout = async (videoList: VmixVideoListInput) => {

@@ -84,16 +84,29 @@ export const VMixStatusProvider = ({ children }: { children: React.ReactNode }) 
     }
   }, []);
 
+  const fetchVideoListsForHost = useCallback(async (host: string) => {
+    try {
+      const vmixVideoLists = await invoke<VmixVideoListInput[]>('get_vmix_video_lists', { host });
+      setVideoLists(prev => ({
+        ...prev,
+        [host]: vmixVideoLists
+      }));
+    } catch (error) {
+      console.error(`Failed to fetch video lists for ${host}:`, error);
+    }
+  }, []);
+
   const loadConnections = useCallback(async () => {
     try {
       setLoading(true);
       const statuses = await invoke<VmixConnection[]>('get_vmix_statuses');
       setConnections(statuses);
       
-      // Fetch inputs for all connected hosts
+      // Fetch inputs and video lists for all connected hosts
       for (const connection of statuses) {
         if (connection.status === 'Connected') {
           await fetchInputsForHost(connection.host);
+          await fetchVideoListsForHost(connection.host);
         }
       }
     } catch (error) {
@@ -101,7 +114,7 @@ export const VMixStatusProvider = ({ children }: { children: React.ReactNode }) 
     } finally {
       setLoading(false);
     }
-  }, [fetchInputsForHost]);
+  }, [fetchInputsForHost, fetchVideoListsForHost]);
 
   const loadAutoRefreshConfigs = useCallback(async () => {
     try {
@@ -136,10 +149,17 @@ export const VMixStatusProvider = ({ children }: { children: React.ReactNode }) 
       // If connection is established, fetch inputs
       if (updatedConnection.status === 'Connected') {
         fetchInputsForHost(updatedConnection.host);
+        fetchVideoListsForHost(updatedConnection.host);
       } else if (updatedConnection.status === 'Disconnected') {
         // Clear inputs for disconnected hosts
         console.log(`Clearing inputs for disconnected host: ${updatedConnection.host}`);
         setInputs(prev => {
+          const updated = { ...prev };
+          delete updated[updatedConnection.host];
+          return updated;
+        });
+        // Clear video lists for disconnected hosts
+        setVideoLists(prev => {
           const updated = { ...prev };
           delete updated[updatedConnection.host];
           return updated;
@@ -150,7 +170,7 @@ export const VMixStatusProvider = ({ children }: { children: React.ReactNode }) 
     return () => {
       unlistenStatus.then(f => f());
     };
-  }, [fetchInputsForHost]);
+  }, [fetchInputsForHost, fetchVideoListsForHost]);
 
   // Listen for connection removal events
   useEffect(() => {
@@ -166,6 +186,13 @@ export const VMixStatusProvider = ({ children }: { children: React.ReactNode }) 
       
       // Also clear inputs for removed host
       setInputs(prev => {
+        const updated = { ...prev };
+        delete updated[host];
+        return updated;
+      });
+      
+      // Also clear video lists for removed host
+      setVideoLists(prev => {
         const updated = { ...prev };
         delete updated[host];
         return updated;
@@ -278,6 +305,7 @@ export const VMixStatusProvider = ({ children }: { children: React.ReactNode }) 
       // Fetch inputs if connected
       if (connection.status === 'Connected') {
         await fetchInputsForHost(host);
+        await fetchVideoListsForHost(host);
       }
       
       return connection;
@@ -300,6 +328,13 @@ export const VMixStatusProvider = ({ children }: { children: React.ReactNode }) 
       
       // Clear inputs immediately
       setInputs(prev => {
+        const updated = { ...prev };
+        delete updated[host];
+        return updated;
+      });
+      
+      // Clear video lists immediately
+      setVideoLists(prev => {
         const updated = { ...prev };
         delete updated[host];
         return updated;

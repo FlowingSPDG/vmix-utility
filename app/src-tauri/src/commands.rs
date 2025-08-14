@@ -249,14 +249,38 @@ pub async fn get_vmix_video_lists(
     // Use shared builder function
     let video_lists = build_video_lists_from_vmix(&vmix_state);
     
-    // Emit update event to frontend
+    app_log!(debug, "Retrieved {} VideoLists for host: {}", video_lists.len(), host);
+    
+    // Check if VideoLists data has changed using cache comparison
+    let video_lists_changed = {
+        let mut cache_guard = state.video_lists_cache.lock().unwrap();
+        let has_changed = cache_guard.get(&host)
+            .map(|cached_video_lists| {
+                let changed = cached_video_lists != &video_lists;
+                app_log!(debug, "VideoLists comparison for {}: cached={}, new={}, changed={}", 
+                    host, cached_video_lists.len(), video_lists.len(), changed);
+                changed
+            })
+            .unwrap_or_else(|| {
+                app_log!(debug, "No cached VideoLists for {}, treating as changed", host);
+                true
+            }); // If no cache exists, consider it as changed
+        
+        // Update cache with new data
+        cache_guard.insert(host.clone(), video_lists.clone());
+        app_log!(debug, "Updated VideoLists cache for {} with {} items", host, video_lists.len());
+        has_changed
+    };
+    
+    // Always emit update event to frontend for VideoLists (unlike inputs, VideoLists are always requested explicitly)
     let event_payload = serde_json::json!({
         "host": host,
         "videoLists": video_lists
     });
     
     match app_handle.emit("vmix-videolists-updated", &event_payload) {
-        Ok(_) => app_log!(info, "Successfully emitted vmix-videolists-updated event for host: {} with {} lists", host, video_lists.len()),
+        Ok(_) => app_log!(info, "Successfully emitted vmix-videolists-updated event for host: {} with {} lists (changed: {})", 
+            host, video_lists.len(), video_lists_changed),
         Err(e) => app_log!(error, "Failed to emit vmix-videolists-updated event for host: {} - {}", host, e),
     }
     
