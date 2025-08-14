@@ -74,16 +74,26 @@ jobs:
           if [[ $TAG_NAME == *"alpha"* ]]; then
             echo "PRERELEASE_TYPE=Alpha" >> $GITHUB_ENV
             echo "PRERELEASE_EMOJI=🚧" >> $GITHUB_ENV
+            echo "TAG_PREFIX=alpha" >> $GITHUB_ENV
           elif [[ $TAG_NAME == *"beta"* ]]; then
             echo "PRERELEASE_TYPE=Beta" >> $GITHUB_ENV
             echo "PRERELEASE_EMOJI=🧪" >> $GITHUB_ENV
+            echo "TAG_PREFIX=beta" >> $GITHUB_ENV
           elif [[ $TAG_NAME == *"rc"* ]]; then
             echo "PRERELEASE_TYPE=Release Candidate" >> $GITHUB_ENV
             echo "PRERELEASE_EMOJI=🎯" >> $GITHUB_ENV
+            echo "TAG_PREFIX=rc" >> $GITHUB_ENV
           else
             echo "PRERELEASE_TYPE=Pre-Release" >> $GITHUB_ENV
             echo "PRERELEASE_EMOJI=⚠️" >> $GITHUB_ENV
+            echo "TAG_PREFIX=pre" >> $GITHUB_ENV
           fi
+          
+          # Extract version number from tag (e.g., v1.0.0-alpha.1 -> 1.0.0 and 1)
+          BASE_VERSION=$(echo $TAG_NAME | sed -E 's/v([0-9]+\.[0-9]+\.[0-9]+)-.*/\1/')
+          PRERELEASE_NUMBER=$(echo $TAG_NAME | sed -E 's/.*\.(.*)/\1/')
+          echo "BASE_VERSION=$BASE_VERSION" >> $GITHUB_ENV
+          echo "PRERELEASE_NUMBER=$PRERELEASE_NUMBER" >> $GITHUB_ENV
 
       - name: Build Tauri App
         uses: tauri-apps/tauri-action@v0
@@ -96,8 +106,8 @@ jobs:
           BUILD_TIMESTAMP: ${{ env.BUILD_TIMESTAMP }}
         with:
           projectPath: './app'
-          tagName: v__VERSION__
-          releaseName: '${{ env.PRERELEASE_EMOJI }} vmix-utility v__VERSION__ (${{ env.PRERELEASE_TYPE }})'
+          tagName: ${{ env.TAG_PREFIX }}-v__VERSION__
+          releaseName: '${{ env.PRERELEASE_EMOJI }} vmix-utility v${{ env.BASE_VERSION }} ${{ env.PRERELEASE_TYPE }} ${{ env.PRERELEASE_NUMBER }}'
           releaseBody: |
             ## ${{ env.PRERELEASE_EMOJI }} Pre-Release: ${{ env.PRERELEASE_TYPE }}
             
