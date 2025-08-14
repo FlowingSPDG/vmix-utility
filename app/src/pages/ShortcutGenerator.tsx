@@ -634,7 +634,7 @@ const ShortcutGenerator = () => {
             <Typography variant="caption" color="text.secondary" sx={{ mr: 1 }}>
               Quick:
             </Typography>
-            {['PreviewInput','Cut', 'Fade', 'Merge', 'Stinger1', 'Stinger2'].map((funcName) => (
+            {['PreviewInput','Cut', 'Fade', 'Merge', 'Stinger1', 'Stinger2', 'OverlayInput1', 'OverlayInput2', 'OverlayInput3', 'OverlayInput4'].map((funcName) => (
               <Chip
                 key={funcName}
                 label={funcName}
