@@ -19,9 +19,9 @@ import {
   Tooltip,
   Collapse
 } from '@mui/material';
-import LaunchIcon from '@mui/icons-material/Launch';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import ExpandLessIcon from '@mui/icons-material/ExpandLess';
+import OpenInNewIcon from '@mui/icons-material/OpenInNew';
 import { invoke } from '@tauri-apps/api/core';
 import { useVMixStatus } from '../hooks/useVMixStatus';
 
@@ -117,13 +117,6 @@ const ListManager: React.FC = () => {
     }
   };
 
-  const handlePopout = async () => {
-    try {
-      await invoke('open_list_manager_window');
-    } catch (err) {
-      console.error('Failed to open popup window:', err);
-    }
-  };
 
   const handleVideoListPopout = async (videoList: VmixVideoListInput) => {
     if (!selectedHost) return;
@@ -222,22 +215,6 @@ const ListManager: React.FC = () => {
         <Typography variant="h4" gutterBottom>
           List Manager
         </Typography>
-        <Box display="flex" gap={1}>
-          <Tooltip title="Open in external window">
-            <IconButton 
-              onClick={handlePopout}
-              sx={{
-                bgcolor: 'primary.main',
-                color: 'white',
-                '&:hover': {
-                  bgcolor: 'primary.dark',
-                },
-              }}
-            >
-              <LaunchIcon />
-            </IconButton>
-          </Tooltip>
-        </Box>
       </Box>
 
       <Card sx={{ mb: 3, p: 2 }}>
@@ -354,7 +331,7 @@ const ListManager: React.FC = () => {
                             mr: 1
                           }}
                         >
-                          <LaunchIcon fontSize="small" />
+                          <OpenInNewIcon fontSize="small" />
                         </IconButton>
                       </Tooltip>
                       <Chip
