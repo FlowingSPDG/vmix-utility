@@ -1,0 +1,135 @@
+name: 'Publish Pre-Release'
+
+on:
+  push:
+    tags:
+      - 'v*-beta*'
+      - 'v*-alpha*'
+      - 'v*-rc*'
+
+jobs:
+  publish-tauri-prerelease:
+    permissions:
+      contents: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: 'macos-latest'
+            args: '--target aarch64-apple-darwin'
+          - platform: 'macos-latest'
+            args: '--target x86_64-apple-darwin'
+          - platform: 'ubuntu-22.04'
+            args: ''
+          - platform: 'windows-latest'
+            args: '--target x86_64-pc-windows-msvc'
+
+    runs-on: ${{ matrix.platform }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install dependencies (ubuntu only)
+        if: matrix.platform == 'ubuntu-22.04'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.0-dev libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.platform == 'macos-latest' && 'aarch64-apple-darwin,x86_64-apple-darwin' || '' }}
+
+      - name: Rust cache
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: './app/src-tauri -> target'
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install frontend dependencies
+        run: |
+          cd app
+          bun install
+
+      - name: Set build environment variables
+        shell: bash
+        run: |
+          echo "GIT_COMMIT_HASH=$(git rev-parse --short HEAD)" >> $GITHUB_ENV
+          echo "GIT_BRANCH=${GITHUB_REF_NAME}" >> $GITHUB_ENV
+          echo "BUILD_TIMESTAMP=$(date -u +"%Y-%m-%d %H:%M:%S UTC")" >> $GITHUB_ENV
+
+      - name: Determine pre-release type
+        shell: bash
+        run: |
+          TAG_NAME=${GITHUB_REF_NAME}
+          if [[ $TAG_NAME == *"alpha"* ]]; then
+            echo "PRERELEASE_TYPE=Alpha" >> $GITHUB_ENV
+            echo "PRERELEASE_EMOJI=🚧" >> $GITHUB_ENV
+          elif [[ $TAG_NAME == *"beta"* ]]; then
+            echo "PRERELEASE_TYPE=Beta" >> $GITHUB_ENV
+            echo "PRERELEASE_EMOJI=🧪" >> $GITHUB_ENV
+          elif [[ $TAG_NAME == *"rc"* ]]; then
+            echo "PRERELEASE_TYPE=Release Candidate" >> $GITHUB_ENV
+            echo "PRERELEASE_EMOJI=🎯" >> $GITHUB_ENV
+          else
+            echo "PRERELEASE_TYPE=Pre-Release" >> $GITHUB_ENV
+            echo "PRERELEASE_EMOJI=⚠️" >> $GITHUB_ENV
+          fi
+
+      - name: Build Tauri App
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          GIT_COMMIT_HASH: ${{ env.GIT_COMMIT_HASH }}
+          GIT_BRANCH: ${{ env.GIT_BRANCH }}
+          BUILD_TIMESTAMP: ${{ env.BUILD_TIMESTAMP }}
+        with:
+          projectPath: './app'
+          tagName: v__VERSION__
+          releaseName: '${{ env.PRERELEASE_EMOJI }} vmix-utility v__VERSION__ (${{ env.PRERELEASE_TYPE }})'
+          releaseBody: |
+            ## ${{ env.PRERELEASE_EMOJI }} Pre-Release: ${{ env.PRERELEASE_TYPE }}
+            
+            **⚠️ This is a pre-release version intended for testing purposes.**
+            
+            ### What's New in This Pre-Release
+            - Auto-generated pre-release from GitHub Actions
+            - Built from commit: ${{ env.GIT_COMMIT_HASH }}
+            - Branch: ${{ env.GIT_BRANCH }}
+            - Build time: ${{ env.BUILD_TIMESTAMP }}
+            
+            ### Important Notes
+            - ⚠️ **Use at your own risk**: This version may contain bugs or unstable features
+            - 🧪 **For testing only**: Not recommended for production use
+            - 📝 **Feedback welcome**: Please report issues on GitHub
+            - 🔄 **Auto-update**: This version supports automatic updates to newer pre-releases and stable releases
+            
+            ### Download Instructions
+            Select the appropriate installer for your platform:
+            - **Windows**: `.msi` file
+            - **macOS**: `.dmg` file  
+            - **Linux**: `.AppImage` file
+            
+            ### How to Help
+            1. Download and test this pre-release
+            2. Report any issues you encounter
+            3. Provide feedback on new features
+            4. Help us make the stable release better!
+            
+            ---
+            📋 **Full changelog and stable releases**: [View all releases](https://github.com/${{ github.repository }}/releases)
+          releaseDraft: false
+          prerelease: true
+          includeUpdaterJson: true
+          args: ${{ matrix.args }} 
