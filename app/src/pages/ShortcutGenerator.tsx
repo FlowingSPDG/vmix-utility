@@ -130,6 +130,15 @@ const VirtualizedInputItem = memo(({ index, style, data }: {
     onTryCommand(input);
   }, [input, onTryCommand]);
 
+  const handleCopyKey = useCallback(() => {
+    if (!vmixInput?.key) {
+      showToast('Input key not found', 'error');
+      return;
+    }
+    navigator.clipboard.writeText(vmixInput.key);
+    showToast('Input key copied to clipboard!');
+  }, [vmixInput, showToast]);
+
   return (
     <Box style={style}>
       <Box sx={{ 
@@ -258,8 +267,17 @@ const VirtualizedInputItem = memo(({ index, style, data }: {
                 startIcon={<OpenInBrowserIcon fontSize="small" />}
                 onClick={() => openTallyInBrowser(input)}
                 size="small"
+                disabled={isSpecialInput}
               >
                 TALLY
+              </Button>
+              <Button
+                startIcon={<ContentCopyIcon fontSize="small" />}
+                onClick={handleCopyKey}
+                size="small"
+                disabled={isSpecialInput}
+              >
+                KEY
               </Button>
               <Button
                 startIcon={<PlayArrowIcon fontSize="small" />}
