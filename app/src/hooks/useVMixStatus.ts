@@ -71,6 +71,9 @@ export const VMixStatusProvider = ({ children }: { children: React.ReactNode }) 
   const [inputs, setInputs] = useState<Record<string, VmixInput[]>>({});
   const [videoLists, setVideoLists] = useState<Record<string, VmixVideoListInput[]>>({});
   const [loading, setLoading] = useState(false);
+  
+  // Track optimistically removed connections to ignore status updates temporarily
+  const [optimisticallyRemovedHosts, setOptimisticallyRemovedHosts] = useState<Set<string>>(new Set());
 
   const fetchInputsForHost = useCallback(async (host: string) => {
     try {
@@ -131,6 +134,12 @@ export const VMixStatusProvider = ({ children }: { children: React.ReactNode }) 
       console.log('vmix-status-updated event received:', event);
       const updatedConnection = event.payload;
       
+      // Ignore status updates for optimistically removed hosts
+      if (optimisticallyRemovedHosts.has(updatedConnection.host)) {
+        console.log(`Ignoring status update for optimistically removed host: ${updatedConnection.host}`);
+        return;
+      }
+      
       setConnections(prev => {
         const existingIndex = prev.findIndex(conn => conn.host === updatedConnection.host);
         if (existingIndex >= 0) {
@@ -170,13 +179,21 @@ export const VMixStatusProvider = ({ children }: { children: React.ReactNode }) 
     return () => {
       unlistenStatus.then(f => f());
     };
-  }, [fetchInputsForHost, fetchVideoListsForHost]);
+  }, [fetchInputsForHost, fetchVideoListsForHost, optimisticallyRemovedHosts]);
 
   // Listen for connection removal events
   useEffect(() => {
     const unlistenRemoval = listen<{host: string}>('vmix-connection-removed', (event) => {
       const { host } = event.payload;
       console.log('vmix-connection-removed event received for host:', host);
+      
+      // Remove from optimistically removed list since removal is now confirmed
+      setOptimisticallyRemovedHosts(prev => {
+        const updated = new Set(prev);
+        updated.delete(host);
+        console.log(`Removed ${host} from optimistically removed list`);
+        return updated;
+      });
       
       setConnections(prev => {
         const filtered = prev.filter(conn => conn.host !== host);
@@ -190,7 +207,7 @@ export const VMixStatusProvider = ({ children }: { children: React.ReactNode }) 
         delete updated[host];
         return updated;
       });
-      
+       
       // Also clear video lists for removed host
       setVideoLists(prev => {
         const updated = { ...prev };
@@ -319,6 +336,19 @@ export const VMixStatusProvider = ({ children }: { children: React.ReactNode }) 
     try {
       console.log(`Disconnecting from vMix host: ${host}`);
       
+      // Add to optimistically removed list to ignore status updates temporarily
+      setOptimisticallyRemovedHosts(prev => new Set([...prev, host]));
+      
+      // Auto-remove from optimistically removed list after timeout (5 seconds)
+      const timeoutId = setTimeout(() => {
+        setOptimisticallyRemovedHosts(prev => {
+          const updated = new Set(prev);
+          updated.delete(host);
+          console.log(`Auto-removed ${host} from optimistically removed list after timeout`);
+          return updated;
+        });
+      }, 5000);
+      
       // Optimistically remove from UI immediately for better UX
       setConnections(prev => {
         const filtered = prev.filter(conn => conn.host !== host);
@@ -347,6 +377,14 @@ export const VMixStatusProvider = ({ children }: { children: React.ReactNode }) 
       
     } catch (error) {
       console.error('Failed to disconnect from vMix:', error);
+      
+      // Remove from optimistically removed list on error
+      setOptimisticallyRemovedHosts(prev => {
+        const updated = new Set(prev);
+        updated.delete(host);
+        return updated;
+      });
+      
       // Restore connection on error by refreshing
       loadConnections();
       throw error;
@@ -413,7 +451,7 @@ export const VMixStatusProvider = ({ children }: { children: React.ReactNode }) 
   };
 
   const contextValue: VMixStatusContextType = {
-    connections,
+    connections: connections.filter(conn => !optimisticallyRemovedHosts.has(conn.host)),
     autoRefreshConfigs,
     loading,
     inputs,
