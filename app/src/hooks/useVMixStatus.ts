@@ -339,16 +339,6 @@ export const VMixStatusProvider = ({ children }: { children: React.ReactNode }) 
       // Add to optimistically removed list to ignore status updates temporarily
       setOptimisticallyRemovedHosts(prev => new Set([...prev, host]));
       
-      // Auto-remove from optimistically removed list after timeout (5 seconds)
-      const timeoutId = setTimeout(() => {
-        setOptimisticallyRemovedHosts(prev => {
-          const updated = new Set(prev);
-          updated.delete(host);
-          console.log(`Auto-removed ${host} from optimistically removed list after timeout`);
-          return updated;
-        });
-      }, 5000);
-      
       // Optimistically remove from UI immediately for better UX
       setConnections(prev => {
         const filtered = prev.filter(conn => conn.host !== host);
