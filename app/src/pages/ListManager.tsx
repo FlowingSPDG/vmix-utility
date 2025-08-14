@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   Box,
   Card,
@@ -17,9 +17,7 @@ import {
   MenuItem,
   IconButton,
   Tooltip,
-  Collapse,
-  Switch,
-  FormControlLabel
+  Collapse
 } from '@mui/material';
 import LaunchIcon from '@mui/icons-material/Launch';
 import RefreshIcon from '@mui/icons-material/Refresh';
@@ -49,12 +47,43 @@ interface VmixVideoListInput {
 }
 
 const ListManager: React.FC = () => {
-  const { connections } = useVMixStatus();
+  const { connections, videoLists: contextVideoLists, getVMixVideoLists } = useVMixStatus();
   const [selectedHost, setSelectedHost] = useState<string>('');
-  const [videoLists, setVideoLists] = useState<VmixVideoListInput[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [expandedLists, setExpandedLists] = useState<Set<string>>(new Set());
+  
+  // Get video lists for selected host from context
+  const videoLists = selectedHost ? (contextVideoLists[selectedHost] || []) : [];
+  
+  // Enhanced debugging for re-renders and object references
+  const prevVideoListsRef = useRef(videoLists);
+  useEffect(() => {
+    const prevVideoLists = prevVideoListsRef.current;
+    const referenceChanged = prevVideoLists !== videoLists;
+    const lengthChanged = prevVideoLists.length !== videoLists.length;
+    
+    console.log('ListManager: videoLists update detected:', {
+      host: selectedHost,
+      referenceChanged,
+      lengthChanged,
+      prevLength: prevVideoLists.length,
+      newLength: videoLists.length,
+      videoLists
+    });
+    
+    if (videoLists.length > 0) {
+      const firstList = videoLists[0];
+      console.log('First VideoList details:', {
+        key: firstList.key,
+        itemsCount: firstList.items.length,
+        selectedItems: firstList.items.filter(i => i.selected).map((item, idx) => ({ index: idx, title: item.title })),
+        itemKeys: firstList.items.map((item, idx) => generateItemKey(item, idx))
+      });
+    }
+    
+    prevVideoListsRef.current = videoLists;
+  }, [videoLists, selectedHost]);
 
   // Get connected hosts
   const connectedHosts = connections.filter(conn => conn.status === 'Connected');
@@ -80,10 +109,7 @@ const ListManager: React.FC = () => {
     setError(null);
     
     try {
-      const lists = await invoke<VmixVideoListInput[]>('get_vmix_video_lists', {
-        host: selectedHost
-      });
-      setVideoLists(lists);
+      await getVMixVideoLists(selectedHost);
     } catch (err) {
       setError(err as string);
       console.error('Failed to fetch video lists:', err);
@@ -130,26 +156,16 @@ const ListManager: React.FC = () => {
     return filePath.split(/[\\\/]/).pop() || 'Unknown File';
   };
 
-  const handleItemEnabledToggle = async (listKey: string, itemIndex: number, enabled: boolean) => {
-    if (!selectedHost) return;
-    
-    try {
-      // Find the video list to get its input number
-      const videoList = videoLists.find(list => list.key === listKey);
-      if (!videoList) return;
-      
-      await invoke('set_video_list_item_enabled', {
-        host: selectedHost,
-        inputNumber: videoList.number,
-        itemIndex,
-        enabled
-      });
-      
-      // Refresh the video lists to show updated state
-      await fetchVideoLists();
-    } catch (err) {
-      console.error('Failed to toggle item enabled state:', err);
-    }
+  // Generate stable key based on data content
+  const generateItemKey = (item: VmixVideoListItem, index: number) => {
+    return `${item.key}-${index}-${item.selected ? 'sel' : 'unsel'}-${item.enabled ? 'en' : 'dis'}`;
+  };
+
+  // Generate stable key for video list
+  const generateListKey = (videoList: VmixVideoListInput) => {
+    const selectedCount = videoList.items.filter(i => i.selected).length;
+    const enabledCount = videoList.items.filter(i => i.enabled).length;
+    return `${videoList.key}-items${videoList.items.length}-sel${selectedCount}-en${enabledCount}`;
   };
 
   const handleItemSelected = async (listKey: string, itemIndex: number) => {
@@ -160,18 +176,23 @@ const ListManager: React.FC = () => {
       const videoList = videoLists.find(list => list.key === listKey);
       if (!videoList) return;
       
+      console.log('Selecting item:', itemIndex, 'for list:', listKey);
+      
       await invoke('select_video_list_item', {
         host: selectedHost,
         inputNumber: videoList.number,
         itemIndex
       });
       
-      // Refresh the video lists to show updated state
-      await fetchVideoLists();
+      // Wait a moment for vMix to update, then refresh
+      await new Promise(resolve => setTimeout(resolve, 200));
+      console.log('Refreshing VideoLists after selection...');
+      await getVMixVideoLists(selectedHost);
     } catch (err) {
       console.error('Failed to select item:', err);
     }
   };
+
 
   const getStateChipColor = (state: string) => {
     switch (state.toLowerCase()) {
@@ -275,11 +296,11 @@ const ListManager: React.FC = () => {
           No VideoList inputs found for the selected vMix connection.
         </Alert>
       ) : (
-        <Box>
+        <Box key={`videolists-${selectedHost}-${videoLists.length}`}>
           {videoLists.map((videoList) => {
             const isExpanded = expandedLists.has(videoList.key);
             return (
-              <Card key={videoList.key} sx={{ mb: 2 }}>
+              <Card key={generateListKey(videoList)} sx={{ mb: 2 }}>
                 <CardContent sx={{ pb: isExpanded ? 2 : 1 }}>
                   <Box 
                     display="flex" 
@@ -357,36 +378,50 @@ const ListManager: React.FC = () => {
                         No items in this video list
                       </Typography>
                     ) : (
-                      <Box>
+                      <Box key={`items-${generateListKey(videoList)}`}>
                         <Typography variant="subtitle2" gutterBottom>
                           VideoList Items:
                         </Typography>
                         <List dense>
-                          {videoList.items.map((item, index) => (
-                            <ListItem 
-                              key={item.key} 
-                              divider
-                              component="div"
-                              sx={{
-                                bgcolor: item.selected ? 'primary.light' : 'transparent',
-                                pl: 1,
-                                pr: 1,
-                              }}
-                            >
+                          {videoList.items.map((item, index) => {
+                            const itemKey = generateItemKey(item, index);
+                            console.log('Rendering ListItem:', { itemKey, selected: item.selected, enabled: item.enabled, title: item.title });
+                            return (
+                              <ListItem 
+                                key={itemKey} 
+                                divider
+                                component="div"
+                                sx={{
+                                  pl: 1,
+                                  pr: 1,
+                                }}
+                              >
                               <ListItemText
                                 primary={
-                                  <Box display="flex" alignItems="center" gap={1}>
-                                    <Typography variant="body2" fontWeight={item.selected ? 'bold' : 'normal'}>
+                                  <Box display="flex" alignItems="center" gap={1} key={`text-${itemKey}`}>
+                                    <Typography 
+                                      key={`title-${itemKey}-${item.selected ? 'bold' : 'normal'}`}
+                                      variant="body2" 
+                                      fontWeight={item.selected ? 'bold' : 'normal'}
+                                    >
                                       {getFileName(item.title)}
                                     </Typography>
                                     {item.selected && (
                                       <Chip
+                                        key={`selected-chip-${itemKey}`}
                                         label="Selected"
                                         color="primary"
                                         size="small"
                                         sx={{ height: 20, fontSize: '0.7rem' }}
                                       />
                                     )}
+                                    <Chip
+                                      key={`enabled-chip-${itemKey}-${item.enabled ? 'en' : 'dis'}`}
+                                      label={item.enabled ? "Enabled" : "Disabled"}
+                                      color={item.enabled ? "success" : "default"}
+                                      size="small"
+                                      sx={{ height: 20, fontSize: '0.7rem' }}
+                                    />
                                   </Box>
                                 }
                                 secondary={
@@ -397,45 +432,38 @@ const ListManager: React.FC = () => {
                               />
                               <ListItemSecondaryAction>
                                 <Box display="flex" gap={1} alignItems="center">
-                                  <Tooltip title="Select this item">
-                                    <IconButton
-                                      size="small"
-                                      onClick={() => handleItemSelected(videoList.key, index)}
-                                      sx={{
-                                        bgcolor: item.selected ? 'primary.main' : 'grey.300',
-                                        color: item.selected ? 'white' : 'grey.700',
-                                        '&:hover': {
-                                          bgcolor: item.selected ? 'primary.dark' : 'grey.400',
-                                        },
-                                        mr: 1
-                                      }}
-                                    >
-                                      {item.selected ? '✓' : '○'}
-                                    </IconButton>
-                                  </Tooltip>
-                                  <FormControlLabel
-                                    control={
-                                      <Switch
-                                        checked={item.enabled}
-                                        onChange={(e) => {
-                                          e.stopPropagation();
-                                          handleItemEnabledToggle(videoList.key, index, e.target.checked);
-                                        }}
+                                  <Tooltip title={item.enabled ? "Select this item" : "Item is disabled"}>
+                                    <span key={`button-span-${itemKey}`}>
+                                      <IconButton
+                                        key={`button-${itemKey}-${item.selected ? 'sel' : 'unsel'}-${item.enabled ? 'en' : 'dis'}`}
                                         size="small"
-                                        color="success"
-                                      />
-                                    }
-                                    label={
-                                      <Typography variant="caption" sx={{ fontSize: '0.75rem' }}>
-                                        Enabled
-                                      </Typography>
-                                    }
-                                    sx={{ mr: 0 }}
-                                  />
+                                        onClick={() => item.enabled && handleItemSelected(videoList.key, index)}
+                                        disabled={!item.enabled}
+                                        sx={{
+                                          bgcolor: item.selected ? 'primary.main' : 'grey.300',
+                                          color: item.selected ? 'white' : 'grey.700',
+                                          '&:hover': {
+                                            bgcolor: item.selected ? 'primary.dark' : 'grey.400',
+                                          },
+                                          '&:disabled': {
+                                            bgcolor: 'grey.100',
+                                            color: 'grey.400',
+                                          },
+                                          mr: 1,
+                                          width: 32,
+                                          height: 32,
+                                          borderRadius: '4px'
+                                        }}
+                                      >
+                                        {item.selected ? '✓' : '○'}
+                                      </IconButton>
+                                    </span>
+                                  </Tooltip>
                                 </Box>
                               </ListItemSecondaryAction>
                             </ListItem>
-                          ))}
+                            );
+                          })}
                         </List>
                       </Box>
                     )}

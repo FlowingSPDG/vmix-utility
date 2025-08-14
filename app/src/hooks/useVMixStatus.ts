@@ -27,17 +27,39 @@ interface VmixInput {
   state: string;
 }
 
+interface VmixVideoListItem {
+  key: string;
+  number: number;
+  title: string;
+  input_type: string;
+  state: string;
+  selected: boolean;
+  enabled: boolean;
+}
+
+interface VmixVideoListInput {
+  key: string;
+  number: number;
+  title: string;
+  input_type: string;
+  state: string;
+  items: VmixVideoListItem[];
+  selected_index: number | null;
+}
+
 interface VMixStatusContextType {
   connections: VmixConnection[];
   autoRefreshConfigs: Record<string, AutoRefreshConfig>;
   loading: boolean;
   inputs: Record<string, VmixInput[]>; // inputs by host
+  videoLists: Record<string, VmixVideoListInput[]>; // video lists by host
   connectVMix: (host: string, port?: number, connectionType?: 'Http' | 'Tcp') => Promise<VmixConnection>;
   disconnectVMix: (host: string) => Promise<void>;
   setAutoRefreshConfig: (host: string, config: AutoRefreshConfig) => Promise<void>;
   getAutoRefreshConfig: (host: string) => Promise<AutoRefreshConfig>;
   sendVMixFunction: (host: string, functionName: string, params?: Record<string, string>) => Promise<void>;
   getVMixInputs: (host: string) => Promise<VmixInput[]>;
+  getVMixVideoLists: (host: string) => Promise<VmixVideoListInput[]>;
   refreshConnections: () => Promise<void>;
 }
 
@@ -47,6 +69,7 @@ export const VMixStatusProvider = ({ children }: { children: React.ReactNode }) 
   const [connections, setConnections] = useState<VmixConnection[]>([]);
   const [autoRefreshConfigs, setAutoRefreshConfigs] = useState<Record<string, AutoRefreshConfig>>({});
   const [inputs, setInputs] = useState<Record<string, VmixInput[]>>({});
+  const [videoLists, setVideoLists] = useState<Record<string, VmixVideoListInput[]>>({});
   const [loading, setLoading] = useState(false);
 
   const fetchInputsForHost = useCallback(async (host: string) => {
@@ -169,6 +192,40 @@ export const VMixStatusProvider = ({ children }: { children: React.ReactNode }) 
 
     return () => {
       unlistenInputs.then(f => f());
+    };
+  }, []);
+
+  // Listen for video lists updates
+  useEffect(() => {
+    console.log('Setting up vmix-videolists-updated listener');
+    const unlistenVideoLists = listen<{host: string, videoLists: VmixVideoListInput[]}>('vmix-videolists-updated', (event) => {
+      const { host, videoLists: updatedVideoLists } = event.payload;
+      
+      console.log(`VideoLists update event received for ${host}:`, updatedVideoLists);
+      
+      setVideoLists(prev => {
+        // Deep clone to ensure all object references are new
+        const deepClonedVideoLists = updatedVideoLists.map(list => ({
+          ...list,
+          items: list.items.map(item => ({
+            ...item // Create new reference for each item
+          }))
+        }));
+        
+        const updated = {
+          ...prev,
+          [host]: deepClonedVideoLists
+        };
+        
+        console.log('VideoLists state updated with deep clone:', updated);
+        console.log('Object references changed:', prev[host] !== updated[host]);
+        return updated;
+      });
+    });
+
+    return () => {
+      console.log('Cleaning up vmix-videolists-updated listener');
+      unlistenVideoLists.then(f => f());
     };
   }, []);
 
@@ -306,17 +363,33 @@ export const VMixStatusProvider = ({ children }: { children: React.ReactNode }) 
     }
   };
 
+  const getVMixVideoLists = async (host: string): Promise<VmixVideoListInput[]> => {
+    try {
+      const vmixVideoLists = await invoke<VmixVideoListInput[]>('get_vmix_video_lists', { host });
+      setVideoLists(prev => ({
+        ...prev,
+        [host]: vmixVideoLists
+      }));
+      return vmixVideoLists;
+    } catch (error) {
+      console.error('Failed to get vMix video lists:', error);
+      throw error;
+    }
+  };
+
   const contextValue: VMixStatusContextType = {
     connections,
     autoRefreshConfigs,
     loading,
     inputs,
+    videoLists,
     connectVMix,
     disconnectVMix,
     setAutoRefreshConfig,
     getAutoRefreshConfig,
     sendVMixFunction,
     getVMixInputs,
+    getVMixVideoLists,
     refreshConnections: loadConnections,
   };
 

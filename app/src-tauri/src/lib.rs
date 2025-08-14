@@ -215,7 +215,6 @@ pub fn run() {
             send_vmix_function,
             get_vmix_inputs,
             get_vmix_video_lists,
-            set_video_list_item_enabled,
             select_video_list_item,
             open_list_manager_window,
             open_video_list_window,

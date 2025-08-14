@@ -222,6 +222,15 @@ impl AppState {
         let cache = Arc::clone(&self.last_status_cache);
         let inputs_cache = Arc::clone(&self.inputs_cache);
         let labels = Arc::clone(&self.connection_labels);
+        let state_clone = Arc::new(AppState {
+            http_connections: Arc::clone(&self.http_connections),
+            tcp_connections: Arc::clone(&self.tcp_connections),
+            auto_refresh_configs: Arc::clone(&self.auto_refresh_configs),
+            last_status_cache: Arc::clone(&self.last_status_cache),
+            inputs_cache: Arc::clone(&self.inputs_cache),
+            connection_labels: Arc::clone(&self.connection_labels),
+            app_settings: Arc::clone(&self.app_settings),
+        });
 
         tokio::spawn(async move {
             let mut interval = interval(Duration::from_secs(1));
@@ -378,6 +387,71 @@ impl AppState {
                             // Always emit event for connection updates
                             if status_changed {
                                 let _ = app_handle.emit("vmix-status-updated", &new_connection);
+                            }
+
+                            // Also check and emit VideoLists updates
+                            if new_connection.status == "Connected" {
+                                let app_handle_clone = app_handle.clone();
+                                let host_clone = host.clone();
+                                let http_connections_clone = Arc::clone(&http_connections);
+                                
+                                tokio::spawn(async move {
+                                    // Get vMix HTTP client for this host
+                                    let vmix_client = {
+                                        let guard = http_connections_clone.lock().unwrap();
+                                        guard.iter().find(|c| c.host() == host_clone).cloned()
+                                    };
+                                    
+                                    if let Some(client) = vmix_client {
+                                        // Get both parsed data and raw XML for VideoList parsing
+                                        match tokio::try_join!(client.get_vmix_data(), client.get_raw_xml()) {
+                                            Ok((data, raw_xml)) => {
+                                                // Parse video lists from the XML data
+                                                let video_lists = data.inputs.input.into_iter()
+                                                    .filter(|input| input.input_type.as_deref() == Some("VideoList"))
+                                                    .map(|input| {
+                                                        let items = crate::commands::parse_videolist_items_from_xml(&raw_xml, &input.key);
+                                                        
+                                                        crate::types::VmixVideoListInput {
+                                                            key: input.key.clone(),
+                                                            number: input.number.parse().unwrap_or(0),
+                                                            title: input.title,
+                                                            input_type: input.input_type.unwrap_or_default(),
+                                                            state: input.state.unwrap_or_default(),
+                                                            items: items.into_iter().map(|(title, enabled, selected)| {
+                                                                crate::types::VmixVideoListItem {
+                                                                    key: format!("{}_{}", input.key, title),
+                                                                    number: 0,
+                                                                    title,
+                                                                    input_type: "VideoListItem".to_string(),
+                                                                    state: "".to_string(),
+                                                                    selected,
+                                                                    enabled,
+                                                                }
+                                                            }).collect(),
+                                                            selected_index: None,
+                                                        }
+                                                    })
+                                                    .collect::<Vec<_>>();
+                                                
+                                                // Emit VideoLists update event
+                                                let payload = serde_json::json!({
+                                                    "host": host_clone,
+                                                    "videoLists": video_lists
+                                                });
+                                                
+                                                if let Err(e) = app_handle_clone.emit("vmix-videolists-updated", payload) {
+                                                    app_log!(error, "Failed to emit VideoLists update: {}", e);
+                                                } else {
+                                                    app_log!(debug, "VideoLists auto-refresh completed for {}", host_clone);
+                                                }
+                                            }
+                                            Err(e) => {
+                                                app_log!(error, "Failed to refresh VideoLists in auto-refresh for {}: {}", host_clone, e);
+                                            }
+                                        }
+                                    }
+                                });
                             }
 
                             // Schedule next refresh (shorter interval if reconnecting)

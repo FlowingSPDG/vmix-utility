@@ -72,6 +72,14 @@ impl VmixClientWrapper {
         self.client.get_xml_state().await
     }
 
+    // Get raw XML string for debugging
+    pub async fn get_raw_xml(&self) -> Result<String> {
+        let url = format!("http://{}:{}/api", self.host, self.port);
+        let response = reqwest::get(&url).await?;
+        let xml_text = response.text().await?;
+        Ok(xml_text)
+    }
+
     pub fn host(&self) -> &str {
         &self.host
     }
