@@ -1,4 +1,4 @@
-use crate::types::{VmixXml, VmixInput, VmixConnection, ConnectionType, VmixVideoListInput};
+use crate::types::{VmixXml, VmixInput, VmixConnection, ConnectionType};
 use crate::state::AppState;
 use crate::app_log;
 use anyhow::Result;
