@@ -54,9 +54,14 @@ const SingleVideoList: React.FC<SingleVideoListProps> = ({ host, listKey }) => {
   
   // 開発モードでは自動的にdevtoolsを開く
   useEffect(() => {
-    if (process.env.NODE_ENV === 'development') {
+    if (import.meta.env.DEV) {
       import('@tauri-apps/api/window').then(({ getCurrentWindow }) => {
-        getCurrentWindow().openDevtools();
+        const currentWindow = getCurrentWindow();
+        if ('openDevtools' in currentWindow && typeof currentWindow.openDevtools === 'function') {
+          currentWindow.openDevtools().catch((error: unknown) => {
+            console.warn('Failed to open devtools:', error);
+          });
+        }
       });
     }
   }, []);

@@ -47,7 +47,7 @@ interface VmixVideoListInput {
 
 const ListManager: React.FC = () => {
   const { connections, videoLists: contextVideoLists, getVMixVideoLists } = useVMixStatus();
-  const [error, setError] = useState<string | null>(null);
+  const [_error, _setError] = useState<string | null>(null);
   const [expandedLists, setExpandedLists] = useState<Set<string>>(new Set());
   
   // Get connected hosts
@@ -209,9 +209,9 @@ const ListManager: React.FC = () => {
         </FormControl>
       </Card>
 
-      {error && (
+      {_error && (
         <Alert severity="error" sx={{ mb: 2 }}>
-          {error}
+          {_error}
         </Alert>
       )}
 

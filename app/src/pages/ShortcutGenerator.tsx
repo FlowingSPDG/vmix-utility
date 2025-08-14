@@ -341,8 +341,6 @@ const ShortcutGenerator = () => {
 
   // Auto-select first available connection and update inputs when connections change
   useEffect(() => {
-    const connectedConnections = connections.filter(conn => conn.status === 'Connected');
-    
     // Connection selection handled automatically through useMemo
   }, [connections]);
 

@@ -222,15 +222,6 @@ impl AppState {
         let cache = Arc::clone(&self.last_status_cache);
         let inputs_cache = Arc::clone(&self.inputs_cache);
         let labels = Arc::clone(&self.connection_labels);
-        let state_clone = Arc::new(AppState {
-            http_connections: Arc::clone(&self.http_connections),
-            tcp_connections: Arc::clone(&self.tcp_connections),
-            auto_refresh_configs: Arc::clone(&self.auto_refresh_configs),
-            last_status_cache: Arc::clone(&self.last_status_cache),
-            inputs_cache: Arc::clone(&self.inputs_cache),
-            connection_labels: Arc::clone(&self.connection_labels),
-            app_settings: Arc::clone(&self.app_settings),
-        });
 
         tokio::spawn(async move {
             let mut interval = interval(Duration::from_secs(1));

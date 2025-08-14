@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useCallback, memo } from 'react';
+import { useState, useMemo, useCallback, memo } from 'react';
 import { useVMixStatus } from '../hooks/useVMixStatus';
 import {
   Box,
@@ -198,7 +198,7 @@ const InputManager = () => {
   // Show loading if no connections or no data yet
   const isLoading = connections.length === 0 || (selectedConnection && !globalInputs[selectedConnection]);
 
-  const handleConnectionChange = (host: string) => {
+  const handleConnectionChange = (_host: string) => {
     // Connection change will be handled by re-rendering since we derive selectedConnection
     // This is for manual selection if we add a dropdown later
   };
@@ -208,39 +208,29 @@ const InputManager = () => {
   }, []);
 
   const handleSaveClick = useCallback(async (key: string) => {
-    setEditingData(currentEditingData => {
-      const newTitle = currentEditingData[key];
-      
-      setInputs(currentInputs => {
-        const input = currentInputs.find(inp => inp.key === key);
-        
-        if (input && selectedConnection && newTitle !== undefined) {
-          (async () => {
-            try {
-              await sendVMixFunction(selectedConnection, 'SetInputName', {
-                Input: input.number.toString(),
-                Value: newTitle
-              });
+    const newTitle = editingData[key];
+    const input = inputs.find((inp: Input) => inp.key === key);
+    
+    if (input && selectedConnection && newTitle !== undefined) {
+      try {
+        await sendVMixFunction(selectedConnection, 'SetInputName', {
+          Input: input.number.toString(),
+          Value: newTitle
+        });
 
-              setInputs(prevInputs =>
-                prevInputs.map(inp =>
-                  inp.key === key ? { ...inp, title: newTitle } : inp
-                )
-              );
-            } catch (error) {
-              console.error('Failed to update input title:', error);
-              setError(`Failed to update input title: ${error}`);
-            }
-          })();
-        }
+        setToast({ open: true, message: 'Input title updated successfully', severity: 'success' });
         
-        return currentInputs;
-      });
-      
-      const { [key]: _, ...rest } = currentEditingData;
-      return rest;
-    });
-  }, [selectedConnection, sendVMixFunction]);
+        // Remove from editing data
+        setEditingData(currentEditingData => {
+          const { [key]: _, ...rest } = currentEditingData;
+          return rest;
+        });
+      } catch (error) {
+        console.error('Failed to update input title:', error);
+        setToast({ open: true, message: 'Failed to update input title', severity: 'error' });
+      }
+    }
+  }, [editingData, inputs, selectedConnection, sendVMixFunction]);
 
   const handleTitleChange = useCallback((key: string, value: string) => {
     setEditingData(prev => ({ ...prev, [key]: value }));
@@ -254,15 +244,12 @@ const InputManager = () => {
   }, []);
 
   const handleDeleteClick = useCallback((key: string) => {
-    setInputs(currentInputs => {
-      const input = currentInputs.find(inp => inp.key === key);
-      if (input) {
-        setInputToDelete(input);
-        setDeleteDialogOpen(true);
-      }
-      return currentInputs;
-    });
-  }, []);
+    const input = inputs.find((inp: Input) => inp.key === key);
+    if (input) {
+      setInputToDelete(input);
+      setDeleteDialogOpen(true);
+    }
+  }, [inputs]);
 
   const handleDeleteConfirm = async () => {
     if (inputToDelete && selectedConnection) {
@@ -272,11 +259,11 @@ const InputManager = () => {
           Input: inputToDelete.key
         });
 
-        // update local state
-        setInputs(prevInputs => prevInputs.filter(input => input.key !== inputToDelete.key));
+        setToast({ open: true, message: 'Input deleted successfully', severity: 'success' });
       } catch (error) {
         console.error('Failed to delete input:', error);
         setError(`Failed to delete input: ${error}`);
+        setToast({ open: true, message: 'Failed to delete input', severity: 'error' });
       }
     }
     setDeleteDialogOpen(false);

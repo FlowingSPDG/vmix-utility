@@ -812,18 +812,27 @@ pub async fn open_video_list_window(
 ) -> Result<(), String> {
     app_log!(info, "Opening VideoList popup window for list: {}", list_title);
     
-    // Use timestamp to ensure unique window IDs for multiple instances
-    let timestamp = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap()
-        .as_millis();
-    
-    let window_id = format!("video-list-{}-{}-{}", 
+    // Create deterministic window ID based on host and list_key (without timestamp to prevent duplicates)
+    let window_id = format!("video-list-{}-{}", 
         urlencoding::encode(&host).replace("%", "").replace(".", "").replace(":", ""), 
-        list_key.replace(" ", "_").replace("(", "").replace(")", ""),
-        timestamp);
+        list_key.replace(" ", "_").replace("(", "").replace(")", ""));
     
-    app_log!(info, "Creating VideoList window with ID: {}", window_id);
+    app_log!(info, "Window ID for VideoList: {}", window_id);
+    
+    // Check if window already exists
+    if let Some(existing_window) = app_handle.get_webview_window(&window_id) {
+        app_log!(info, "VideoList window already exists, focusing existing window: {}", window_id);
+        // Focus on existing window instead of creating a new one
+        if let Err(e) = existing_window.set_focus() {
+            app_log!(warn, "Failed to focus existing VideoList window: {}", e);
+        }
+        if let Err(e) = existing_window.unminimize() {
+            app_log!(warn, "Failed to unminimize existing VideoList window: {}", e);
+        }
+        return Ok(());
+    }
+    
+    app_log!(info, "Creating new VideoList window with ID: {}", window_id);
     
     // Create URL with query parameters
     let webview_url = WebviewUrl::App(format!("/list-manager?host={}&listKey={}", 
