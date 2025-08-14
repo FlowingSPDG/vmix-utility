@@ -156,12 +156,12 @@ const VirtualizedInputItem = memo(({ index, style, data }: {
     <Box style={style}>
       <Box 
         sx={{ 
-          p: 1.5, 
+          p: 1, 
           display: 'flex', 
           alignItems: 'center', 
-          gap: 1.5,
+          gap: 1,
           flexWrap: 'wrap',
-          minHeight: '70px',
+          minHeight: '50px',
           bgcolor: isHighlighted ? 'action.selected' : 'transparent',
           cursor: 'pointer',
           transition: 'background-color 0.2s ease'
@@ -795,7 +795,7 @@ const ShortcutGenerator = () => {
             width={"100%"}
             height={600}
             itemCount={filteredInputs.length}
-            itemSize={100}
+            itemSize={70}
             itemData={{
               filteredInputs,
               vmixInputs,
