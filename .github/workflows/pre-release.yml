@@ -106,8 +106,8 @@ jobs:
           BUILD_TIMESTAMP: ${{ env.BUILD_TIMESTAMP }}
         with:
           projectPath: './app'
-          tagName: ${{ env.TAG_PREFIX }}-v__VERSION__
-          releaseName: '${{ env.PRERELEASE_EMOJI }} vmix-utility v${{ env.BASE_VERSION }} ${{ env.PRERELEASE_TYPE }} ${{ env.PRERELEASE_NUMBER }}'
+          tagName: ${{ github.ref_name }}
+          releaseName: '${{ env.PRERELEASE_EMOJI }} vmix-utility ${{ github.ref_name }}'
           releaseBody: |
             ## ${{ env.PRERELEASE_EMOJI }} Pre-Release: ${{ env.PRERELEASE_TYPE }}
             
