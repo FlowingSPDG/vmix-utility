@@ -19,7 +19,8 @@ pub use logging::{init_logging, LOGGING_CONFIG};
 // Import all commands
 use commands::*;
 
-#[cfg(debug_assertions)]
+// #[cfg(debug_assertions)]
+/*
 fn prevent_default() -> tauri::plugin::TauriPlugin<tauri::Wry> {
   use tauri_plugin_prevent_default::Flags;
 
@@ -27,8 +28,9 @@ fn prevent_default() -> tauri::plugin::TauriPlugin<tauri::Wry> {
     .with_flags(Flags::all().difference(Flags::DEV_TOOLS | Flags::RELOAD))
     .build()
 }
+*/
 
-#[cfg(not(debug_assertions))]
+// #[cfg(not(debug_assertions))]
 fn prevent_default() -> tauri::plugin::TauriPlugin<tauri::Wry> {
   tauri_plugin_prevent_default::init()
 }
