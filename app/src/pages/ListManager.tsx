@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react';
+import ConnectionSelector from '../components/ConnectionSelector';
 import {
   Box,
   Card,
@@ -11,10 +12,6 @@ import {
   Chip,
   Alert,
   Skeleton,
-  FormControl,
-  InputLabel,
-  Select,
-  MenuItem,
   IconButton,
   Tooltip,
   Collapse
@@ -49,6 +46,7 @@ const ListManager: React.FC = () => {
   const { connections, videoLists: contextVideoLists, getVMixVideoLists } = useVMixStatus();
   const [_error, _setError] = useState<string | null>(null);
   const [expandedLists, setExpandedLists] = useState<Set<string>>(new Set());
+  const [selectedConnection, setSelectedConnection] = useState<string>('');
   
   // Get connected hosts
   const connectedHosts = useMemo(() => 
@@ -56,8 +54,20 @@ const ListManager: React.FC = () => {
     [connections]
   );
 
-  // Derive selected host directly
-  const selectedHost = connectedHosts.length > 0 ? connectedHosts[0].host : '';
+  // Auto-select first available connection when connections change
+  useEffect(() => {
+    if (connectedHosts.length > 0 && !selectedConnection) {
+      setSelectedConnection(connectedHosts[0].host);
+    } else if (connectedHosts.length === 0) {
+      setSelectedConnection('');
+    } else if (selectedConnection && !connectedHosts.find(conn => conn.host === selectedConnection)) {
+      // If current selection is no longer connected, switch to first available
+      setSelectedConnection(connectedHosts[0].host);
+    }
+  }, [connectedHosts, selectedConnection]);
+
+  // Use selectedConnection instead of selectedHost
+  const selectedHost = selectedConnection;
   
   // Get video lists for selected host from context
   const videoLists = useMemo(() => 
@@ -179,40 +189,11 @@ const ListManager: React.FC = () => {
         <Typography variant="h6" gutterBottom>
           Connection Settings
         </Typography>
-        <FormControl fullWidth>
-          <InputLabel>vMix Connection</InputLabel>
-          <Select
-            value={selectedHost}
-            label="vMix Connection"
-            onChange={() => {/* Host selection handled automatically */}}
-            sx={{
-              '& .MuiSelect-select': {
-                display: 'flex',
-                alignItems: 'center',
-                gap: 1,
-              },
-            }}
-          >
-            {connectedHosts.map((conn) => (
-              <MenuItem key={conn.host} value={conn.host}>
-                <Box display="flex" alignItems="center" gap={1}>
-                  <Chip
-                    label={conn.connection_type}
-                    size="small"
-                    color={conn.connection_type === 'Tcp' ? 'success' : 'info'}
-                    sx={{ minWidth: 50 }}
-                  />
-                  <Typography>
-                    {conn.label}
-                  </Typography>
-                  <Typography variant="body2" color="text.secondary">
-                    ({conn.host}:{conn.port})
-                  </Typography>
-                </Box>
-              </MenuItem>
-            ))}
-          </Select>
-        </FormControl>
+        <ConnectionSelector
+          selectedConnection={selectedConnection}
+          onConnectionChange={setSelectedConnection}
+          label="vMix Connection"
+        />
       </Card>
 
       {_error && (

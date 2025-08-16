@@ -1,7 +1,7 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { useVMixStatus } from '../hooks/useVMixStatus';
-import type { SelectChangeEvent } from '@mui/material';
+import ConnectionSelector from '../components/ConnectionSelector';
 import {
   Box,
   Typography,
@@ -11,10 +11,6 @@ import {
   FormControlLabel,
   Slider,
   Alert,
-  Select,
-  MenuItem,
-  FormControl,
-  InputLabel,
   Dialog,
   DialogActions,
   DialogContent,
@@ -24,19 +20,11 @@ import {
   Snackbar
 } from '@mui/material';
 
-interface Connection {
-  id: number;
-  host: string;
-  label: string;
-  status: 'Connected' | 'Disconnected';
-}
-
 const BlankGenerator = () => {
-  const { connections: vmixConnections, getVMixInputs } = useVMixStatus();
+  const { connections, getVMixInputs } = useVMixStatus();
   const [transparent, setTransparent] = useState(false);
   const [count, setCount] = useState(1);
-  const [selectedConnection, setSelectedConnection] = useState<number | ''>('');
-  const [connections, setConnections] = useState<Connection[]>([]);
+  const [selectedConnection, setSelectedConnection] = useState<string>('');
   const [showConfirmDialog, setShowConfirmDialog] = useState(false);
   const [generating, setGenerating] = useState(false);
   
@@ -45,22 +33,22 @@ const BlankGenerator = () => {
   const [toastMessage, setToastMessage] = useState('');
   const [toastSeverity, setToastSeverity] = useState<'success' | 'error'>('success');
 
-  // Transform connections from useVMixStatus
+  const connectedConnections = useMemo(() => 
+    connections.filter(conn => conn.status === 'Connected'), 
+    [connections]
+  );
+  
+  // Auto-select first available connection when connections change
   useEffect(() => {
-    const mappedConnections = vmixConnections.map((conn, index) => ({
-      id: index + 1,
-      host: conn.host,
-      label: conn.label,
-      status: conn.status as 'Connected' | 'Disconnected',
-    }));
-    setConnections(mappedConnections);
-    
-    // Auto-select first available connection
-    const connectedConnections = mappedConnections.filter(conn => conn.status === 'Connected');
-    if (connectedConnections.length > 0 && selectedConnection === '') {
-      setSelectedConnection(connectedConnections[0].id);
+    if (connectedConnections.length > 0 && !selectedConnection) {
+      setSelectedConnection(connectedConnections[0].host);
+    } else if (connectedConnections.length === 0) {
+      setSelectedConnection('');
+    } else if (selectedConnection && !connectedConnections.find(conn => conn.host === selectedConnection)) {
+      // If current selection is no longer connected, switch to first available
+      setSelectedConnection(connectedConnections[0].host);
     }
-  }, [vmixConnections, selectedConnection]);
+  }, [connectedConnections, selectedConnection]);
 
   const handleTransparentChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     setTransparent(event.target.checked);
@@ -68,10 +56,6 @@ const BlankGenerator = () => {
 
   const handleCountChange = (_event: Event, newValue: number | number[]) => {
     setCount(newValue as number);
-  };
-
-  const handleConnectionChange = (event: SelectChangeEvent<number | ''>) => {
-    setSelectedConnection(event.target.value as number);
   };
 
   const handleGenerate = () => {
@@ -82,8 +66,7 @@ const BlankGenerator = () => {
   };
 
   const handleConfirmGenerate = async () => {
-    const connection = connections.find(c => c.id === selectedConnection);
-    if (!connection) {
+    if (!selectedConnection) {
       return;
     }
 
@@ -98,16 +81,16 @@ const BlankGenerator = () => {
           : { Value: 'Colour|Black'};
         
         await invoke('send_vmix_function', {
-          host: connection.host,
+          host: selectedConnection,
           functionName: 'AddInput',
           params: params
         });
       }
 
       // Refresh inputs to get latest XML data
-      await getVMixInputs(connection.host);
+      await getVMixInputs(selectedConnection);
 
-      console.log(`Generated ${count} blank${count !== 1 ? 's' : ''} with transparent=${transparent} on ${connection.host}`);
+      console.log(`Generated ${count} blank${count !== 1 ? 's' : ''} with transparent=${transparent} on ${selectedConnection}`);
       
       setToastMessage(`Successfully generated ${count} blank${count !== 1 ? 's' : ''} with ${transparent ? 'transparent' : 'black'} background!`);
       setToastSeverity('success');
@@ -139,26 +122,11 @@ const BlankGenerator = () => {
         </Typography>
 
         <Box sx={{ mb: 3 }}>
-          <FormControl fullWidth>
-            <InputLabel id="vmix-connection-label">vMix Connection</InputLabel>
-            <Select
-              labelId="vmix-connection-label"
-              id="vmix-connection"
-              value={selectedConnection}
-              label="vMix Connection"
-              onChange={handleConnectionChange}
-            >
-              {connections.filter(conn => conn.status === 'Connected').map((connection) => (
-                <MenuItem
-                  key={connection.id}
-                  value={connection.id}
-                  disabled={connection.status === 'Disconnected'}
-                >
-                  {connection.label} ({connection.host})
-                </MenuItem>
-              ))}
-            </Select>
-          </FormControl>
+          <ConnectionSelector
+            selectedConnection={selectedConnection}
+            onConnectionChange={setSelectedConnection}
+            label="vMix Connection"
+          />
         </Box>
 
         <Box sx={{ mb: 3 }}>

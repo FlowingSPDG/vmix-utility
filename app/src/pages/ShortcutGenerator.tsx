@@ -3,6 +3,7 @@ import { invoke } from '@tauri-apps/api/core';
 import { openUrl } from '@tauri-apps/plugin-opener';
 import { useVMixStatus } from '../hooks/useVMixStatus';
 import { FixedSizeList as List } from 'react-window';
+import ConnectionSelector from '../components/ConnectionSelector';
 import {
   Box,
   Typography,
@@ -10,17 +11,17 @@ import {
   Button,
   TextField,
   IconButton,
-  Select,
-  MenuItem,
-  FormControl,
-  InputLabel,
   Divider,
   ButtonGroup,
   Snackbar,
   Alert,
   Autocomplete,
   Chip,
-  Collapse
+  Collapse,
+  FormControl,
+  InputLabel,
+  Select,
+  MenuItem
 } from '@mui/material';
 import CodeIcon from '@mui/icons-material/Code';
 import PlayArrowIcon from '@mui/icons-material/PlayArrow';
@@ -447,9 +448,6 @@ const ShortcutGenerator = () => {
     setInputs(generatedInputs);
   }, [generatedInputs]);
 
-  const handleConnectionChange = (event: any) => {
-    setSelectedConnection(event.target.value);
-  };
   
   // State for new query param
   const [newParamKey, setNewParamKey] = useState('');
@@ -567,25 +565,12 @@ const ShortcutGenerator = () => {
       <Paper sx={{ p: 2, mb: 2 }}>
         {/* Connection and Filter Row */}
         <Box sx={{ display: 'flex', gap: 2, alignItems: 'flex-start', flexWrap: 'wrap', mb: 2 }}>
-          <FormControl sx={{ flex: 1, minWidth: 250 }}>
-            <InputLabel id="vmix-select-label">Select vMix Connection</InputLabel>
-            <Select
-              labelId="vmix-select-label"
-              value={selectedConnection}
-              label="Select vMix Connection"
-              onChange={handleConnectionChange}
-              size="small"
-            >
-              <MenuItem value="">
-                <em>Select a vMix connection</em>
-              </MenuItem>
-              {connections.filter(conn => conn.status === 'Connected').map((conn) => (
-                <MenuItem key={conn.host} value={conn.host}>
-                  {conn.label} ({conn.host})
-                </MenuItem>
-              ))}
-            </Select>
-          </FormControl>
+          <ConnectionSelector
+            selectedConnection={selectedConnection}
+            onConnectionChange={setSelectedConnection}
+            label="Select vMix Connection"
+            sx={{ flex: 1, minWidth: 250 }}
+          />
 
           {vmixInputs.length > 0 && (
             <FormControl sx={{ minWidth: 200 }}>
