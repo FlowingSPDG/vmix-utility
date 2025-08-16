@@ -835,11 +835,20 @@ pub async fn open_list_manager_window(app_handle: AppHandle) -> Result<(), Strin
 #[tauri::command]
 pub async fn open_video_list_window(
     app_handle: AppHandle,
+    state: tauri::State<'_, crate::state::AppState>,
     host: String,
     list_key: String,
     list_title: String
 ) -> Result<(), String> {
-    app_log!(info, "Opening VideoList popup window for list: {}", list_title);
+    let start_time = std::time::Instant::now();
+    app_log!(info, "🚀 Opening VideoList popup window - Host: {}, List: {} ({})", host, list_key, list_title);
+    
+    // Log current window registry state for debugging
+    let current_windows = {
+        let windows = state.video_list_windows.lock().unwrap();
+        windows.len()
+    };
+    app_log!(debug, "📊 Current VideoList windows in registry: {}", current_windows);
     
     // Create base window ID based on host and list_key
     let base_window_id = format!("video-list-{}-{}", 
@@ -847,44 +856,135 @@ pub async fn open_video_list_window(
         list_key.replace(" ", "_").replace("(", "").replace(")", ""));
     
     let mut window_id = base_window_id.clone();
-    app_log!(info, "Base window ID for VideoList: {}", window_id);
+    app_log!(debug, "🆔 Generated base window ID: {}", window_id);
+    
+    // First cleanup any stale window entries in the registry
+    let cleanup_start = std::time::Instant::now();
+    state.cleanup_stale_video_list_windows(&app_handle);
+    app_log!(debug, "🧹 Registry cleanup completed in {:?}", cleanup_start.elapsed());
     
     // Check if window already exists and is valid
     if let Some(existing_window) = app_handle.get_webview_window(&window_id) {
-        // Verify the window is actually open by checking if it's visible and can be interacted with
-        let is_window_valid = existing_window.is_visible().unwrap_or(false) && 
-                             !existing_window.is_minimized().unwrap_or(true);
+        app_log!(debug, "🔍 Found existing window with ID: {}", window_id);
         
-        if is_window_valid {
-            match existing_window.set_focus() {
-                Ok(_) => {
-                    app_log!(info, "VideoList window already exists and is valid, focused existing window: {}", window_id);
-                    if let Err(e) = existing_window.unminimize() {
-                        app_log!(warn, "Failed to unminimize existing VideoList window: {}", e);
+        // Verify window is also registered in our state
+        let is_registered = state.get_video_list_window(&window_id).is_some();
+        app_log!(debug, "📋 Window {} registry status: {}", window_id, if is_registered { "✅ Registered" } else { "❌ Not registered" });
+        
+        // Enhanced window validity check with multiple validation methods
+        let is_window_accessible = {
+            // Check basic window state
+            let is_visible = existing_window.is_visible().unwrap_or(false);
+            let is_minimized = existing_window.is_minimized().unwrap_or(true);
+            let is_closable = existing_window.is_closable().unwrap_or(false);
+            let is_decorated = existing_window.is_decorated().unwrap_or(false);
+            
+            app_log!(debug, "🔍 Window state: visible={}, minimized={}, closable={}, decorated={}", 
+                is_visible, is_minimized, is_closable, is_decorated);
+            
+            // Initial state checks
+            let basic_state_valid = is_visible && !is_minimized && is_closable;
+            
+            if !basic_state_valid {
+                app_log!(debug, "Window failed basic state validation");
+                false
+            } else {
+                // Test actual window interaction to verify accessibility
+                match existing_window.set_focus() {
+                    Ok(_) => {
+                        app_log!(debug, "Window focus test successful - window is accessible");
+                        true
                     }
-                    return Ok(());
-                }
-                Err(e) => {
-                    app_log!(warn, "Failed to focus existing VideoList window: {}", e);
-                    // Continue to create new window since existing one can't be focused
+                    Err(e) => {
+                        app_log!(warn, "Window focus test failed - window may be stale: {}", e);
+                        false
+                    }
                 }
             }
-        } else {
-            app_log!(warn, "VideoList window {} exists in registry but is not valid (visible: {}, minimized: {})", 
-                window_id, 
-                existing_window.is_visible().unwrap_or(false),
-                existing_window.is_minimized().unwrap_or(true)
-            );
+        };
+        
+        if is_window_accessible {
+            // Window is valid and accessible - reuse it
+            let total_time = start_time.elapsed();
+            app_log!(info, "✅ VideoList window already exists and is accessible, reusing window: {} (completed in {:?})", window_id, total_time);
             
-            // Generate a new unique window ID to avoid conflict with stale window
-            use std::time::{SystemTime, UNIX_EPOCH};
-            let timestamp = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_millis();
-            window_id = format!("{}-{}", base_window_id, timestamp);
-            app_log!(info, "Generated new window ID to avoid stale window conflict: {}", window_id);
+            // Ensure window is properly visible and focused
+            if let Err(e) = existing_window.unminimize() {
+                app_log!(warn, "⚠️ Failed to unminimize existing VideoList window: {}", e);
+            }
+            if let Err(e) = existing_window.show() {
+                app_log!(warn, "⚠️ Failed to show existing VideoList window: {}", e);
+            }
+            
+            return Ok(());
+        } else {
+            // Window exists but is not accessible - try to clean it up
+            app_log!(warn, "VideoList window {} exists but is not accessible, attempting cleanup", window_id);
+            
+            // Attempt to close the stale window
+            if let Err(e) = existing_window.close() {
+                app_log!(warn, "Failed to close stale window {}: {}", window_id, e);
+            } else {
+                app_log!(info, "Successfully closed stale window: {}", window_id);
+            }
+            
+            // Small delay to ensure cleanup is complete
+            tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+            
+            // Check if window still exists after cleanup attempt with retry logic
+            let mut cleanup_attempts = 0;
+            let max_cleanup_attempts = 3;
+            
+            while cleanup_attempts < max_cleanup_attempts {
+                if app_handle.get_webview_window(&window_id).is_none() {
+                    app_log!(info, "Stale window cleanup successful after {} attempts, reusing original window ID: {}", cleanup_attempts + 1, window_id);
+                    break;
+                }
+                
+                cleanup_attempts += 1;
+                if cleanup_attempts < max_cleanup_attempts {
+                    app_log!(warn, "Stale window {} still exists after cleanup attempt {}, retrying...", window_id, cleanup_attempts);
+                    
+                    // Try more aggressive cleanup
+                    if let Some(stale_window) = app_handle.get_webview_window(&window_id) {
+                        // Try to destroy the window more aggressively
+                        let _ = stale_window.hide();
+                        let _ = stale_window.close();
+                    }
+                    
+                    // Increase delay between attempts
+                    tokio::time::sleep(std::time::Duration::from_millis(200 * cleanup_attempts as u64)).await;
+                } else {
+                    app_log!(error, "Failed to cleanup stale window {} after {} attempts, generating new window ID", window_id, max_cleanup_attempts);
+                    
+                    // Generate a more robust unique window ID
+                    use std::time::{SystemTime, UNIX_EPOCH};
+                    let timestamp = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_millis();
+                    let process_id = std::process::id();
+                    let thread_id = std::thread::current().id();
+                    let unique_suffix = format!("{:?}", thread_id).chars().filter(|c| c.is_alphanumeric()).take(4).collect::<String>();
+                    window_id = format!("{}-{}-{}-{}", base_window_id, timestamp, process_id, unique_suffix);
+                    app_log!(info, "Generated robust new window ID to avoid persistent stale window conflict: {}", window_id);
+                    
+                    // Also clean up the registry entry for the old window
+                    state.unregister_video_list_window(&base_window_id);
+                }
+            }
         }
+    } else {
+        app_log!(debug, "No existing window found with ID: {}", window_id);
     }
     
-    app_log!(info, "Creating new VideoList window with ID: {}", window_id);
+    // Final validation: ensure the window ID is truly available
+    if app_handle.get_webview_window(&window_id).is_some() {
+        app_log!(warn, "Window ID {} still exists despite cleanup, generating final fallback ID", window_id);
+        use std::time::{SystemTime, UNIX_EPOCH};
+        let timestamp = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_nanos();
+        window_id = format!("{}-fallback-{}", base_window_id, timestamp);
+    }
+    
+    let creation_start = std::time::Instant::now();
+    app_log!(info, "🏗️ Creating new VideoList window with ID: {}", window_id);
     
     // Create URL with query parameters
     let webview_url = WebviewUrl::App(format!("/list-manager?host={}&listKey={}", 
@@ -893,6 +993,7 @@ pub async fn open_video_list_window(
     ).into());
     
     let window_title = format!("VideoList: {}", list_title);
+    app_log!(debug, "🌐 Window URL: {:?}, Title: {}", webview_url, window_title);
     
     match WebviewWindowBuilder::new(&app_handle, &window_id, webview_url)
         .title(&window_title)
@@ -901,15 +1002,131 @@ pub async fn open_video_list_window(
         .resizable(true)
         .build()
     {
-        Ok(_) => {
-            app_log!(info, "VideoList popup window created successfully: {}", window_title);
+        Ok(window) => {
+            let creation_time = creation_start.elapsed();
+            let total_time = start_time.elapsed();
+            app_log!(info, "✅ VideoList popup window created successfully: {} (creation: {:?}, total: {:?})", window_title, creation_time, total_time);
+            
+            // Register the window in the state registry
+            state.register_video_list_window(
+                window_id.clone(),
+                host.clone(),
+                list_key.clone(),
+                list_title.clone()
+            );
+            app_log!(debug, "📝 Window registered in state registry");
+            
+            // Set up window close event handling
+            let app_handle_clone = app_handle.clone();
+            let window_id_clone = window_id.clone();
+            window.on_window_event(move |event| {
+                match event {
+                    tauri::WindowEvent::CloseRequested { .. } | tauri::WindowEvent::Destroyed => {
+                        app_log!(info, "🗑️ VideoList window closing/destroyed, unregistering: {}", window_id_clone);
+                        // Get state from app handle to avoid lifetime issues
+                        if let Some(state) = app_handle_clone.try_state::<crate::state::AppState>() {
+                            state.unregister_video_list_window(&window_id_clone);
+                        }
+                    }
+                    _ => {}
+                }
+            });
+            app_log!(debug, "🎭 Window event handlers set up");
+            
+            // Log final registry state
+            let final_windows = {
+                let windows = state.video_list_windows.lock().unwrap();
+                windows.len()
+            };
+            app_log!(debug, "📊 Final VideoList windows in registry: {}", final_windows);
+            
             Ok(())
         }
         Err(e) => {
-            app_log!(error, "Failed to create VideoList popup window: {}", e);
+            let total_time = start_time.elapsed();
+            app_log!(error, "❌ Failed to create VideoList popup window after {:?}: {}", total_time, e);
+            app_log!(debug, "🐛 Window creation failure details - ID: {}, Host: {}, ListKey: {}", window_id, host, list_key);
             Err(format!("Failed to create popup window: {}", e))
         }
     }
+}
+
+// Diagnostic command for VideoList window troubleshooting
+#[tauri::command]
+pub async fn get_video_list_windows_diagnostic(
+    app_handle: AppHandle,
+    state: tauri::State<'_, crate::state::AppState>,
+) -> Result<serde_json::Value, String> {
+    app_log!(info, "🔧 Generating VideoList windows diagnostic information");
+    
+    let mut diagnostic = serde_json::Map::new();
+    
+    // Get registry information
+    let registry_info = {
+        let windows = state.video_list_windows.lock().unwrap();
+        let mut reg_info = serde_json::Map::new();
+        
+        reg_info.insert("total_registered".to_string(), serde_json::Value::Number(windows.len().into()));
+        
+        let mut windows_list = Vec::new();
+        for (window_id, window_info) in windows.iter() {
+            let mut window_data = serde_json::Map::new();
+            window_data.insert("window_id".to_string(), serde_json::Value::String(window_id.clone()));
+            window_data.insert("host".to_string(), serde_json::Value::String(window_info.host.clone()));
+            window_data.insert("list_key".to_string(), serde_json::Value::String(window_info.list_key.clone()));
+            window_data.insert("list_title".to_string(), serde_json::Value::String(window_info.list_title.clone()));
+            window_data.insert("created_ago_ms".to_string(), 
+                serde_json::Value::Number((window_info.created_at.elapsed().as_millis() as u64).into()));
+            
+            // Check if window actually exists in Tauri
+            let tauri_exists = app_handle.get_webview_window(window_id).is_some();
+            window_data.insert("exists_in_tauri".to_string(), serde_json::Value::Bool(tauri_exists));
+            
+            if let Some(tauri_window) = app_handle.get_webview_window(window_id) {
+                let mut tauri_state = serde_json::Map::new();
+                tauri_state.insert("visible".to_string(), serde_json::Value::Bool(tauri_window.is_visible().unwrap_or(false)));
+                tauri_state.insert("minimized".to_string(), serde_json::Value::Bool(tauri_window.is_minimized().unwrap_or(false)));
+                tauri_state.insert("closable".to_string(), serde_json::Value::Bool(tauri_window.is_closable().unwrap_or(false)));
+                tauri_state.insert("decorated".to_string(), serde_json::Value::Bool(tauri_window.is_decorated().unwrap_or(false)));
+                window_data.insert("tauri_state".to_string(), serde_json::Value::Object(tauri_state));
+            }
+            
+            windows_list.push(serde_json::Value::Object(window_data));
+        }
+        
+        reg_info.insert("windows".to_string(), serde_json::Value::Array(windows_list));
+        reg_info
+    };
+    
+    diagnostic.insert("registry".to_string(), serde_json::Value::Object(registry_info));
+    
+    // Get all Tauri windows (to identify orphaned windows)
+    let tauri_windows: Vec<String> = app_handle.webview_windows()
+        .into_iter()
+        .filter_map(|(label, _)| {
+            if label.starts_with("video-list-") {
+                Some(label)
+            } else {
+                None
+            }
+        })
+        .collect();
+    
+    diagnostic.insert("tauri_video_list_windows".to_string(), serde_json::Value::Array(
+        tauri_windows.into_iter().map(|s| serde_json::Value::String(s)).collect()
+    ));
+    
+    // System information
+    let mut system_info = serde_json::Map::new();
+    system_info.insert("timestamp".to_string(), serde_json::Value::String(
+        chrono::Utc::now().to_rfc3339()
+    ));
+    system_info.insert("process_id".to_string(), serde_json::Value::Number(std::process::id().into()));
+    
+    diagnostic.insert("system".to_string(), serde_json::Value::Object(system_info));
+    
+    app_log!(debug, "🔧 VideoList diagnostic completed");
+    Ok(serde_json::Value::Object(diagnostic))
 }
 
 #[tauri::command]

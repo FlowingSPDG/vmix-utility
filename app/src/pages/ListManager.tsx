@@ -81,13 +81,17 @@ const ListManager: React.FC = () => {
     if (!selectedHost) return;
     
     try {
+      console.log(`🚀 Opening VideoList popup - Host: ${selectedHost}, Key: ${videoList.key}, Title: ${videoList.title}`);
       await invoke('open_video_list_window', {
         host: selectedHost,
         listKey: videoList.key,
         listTitle: videoList.title
       });
+      console.log(`✅ VideoList popup window request sent successfully`);
     } catch (err) {
-      console.error('Failed to open VideoList popup window:', err);
+      console.error('❌ Failed to open VideoList popup window:', err);
+      // You could add a toast notification here in the future
+      // For now, we'll rely on the backend's improved error handling
     }
   };
 

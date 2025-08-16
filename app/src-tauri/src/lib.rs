@@ -218,6 +218,7 @@ pub fn run() {
             select_video_list_item,
             open_list_manager_window,
             open_video_list_window,
+            get_video_list_windows_diagnostic,
             set_auto_refresh_config,
             get_auto_refresh_config,
             get_all_auto_refresh_configs,
