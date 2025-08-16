@@ -135,10 +135,9 @@ const ListManager: React.FC = () => {
         itemIndex
       });
       
-      // Wait a moment for vMix to update, then refresh
-      await new Promise(resolve => setTimeout(resolve, 200));
-      console.log('Refreshing VideoLists after selection...');
-      await getVMixVideoLists(selectedHost);
+      // No need to manually refresh - backend will emit vmix-videolists-updated event
+      // which will trigger the useVMixStatus hook to update the state automatically
+      console.log('VideoList item selection sent, waiting for backend event...');
     } catch (err) {
       console.error('Failed to select item:', err);
     }
