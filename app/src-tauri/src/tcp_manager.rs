@@ -137,6 +137,7 @@ impl TcpVmixManager {
                                         key: input.key.clone(),
                                         number: input.number.parse().unwrap_or(0),
                                         title: input.title.clone(),
+                                        short_title: input.short_title.clone(),
                                         input_type: input.input_type.clone().unwrap_or_else(|| "Unknown".to_string()),
                                         state: input.state.clone().unwrap_or_else(|| "Unknown".to_string()),
                                     }).collect();

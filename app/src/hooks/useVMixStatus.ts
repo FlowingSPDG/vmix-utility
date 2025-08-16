@@ -23,6 +23,7 @@ interface VmixInput {
   key: string;
   number: number;
   title: string;
+  short_title?: string;
   input_type: string;
   state: string;
 }

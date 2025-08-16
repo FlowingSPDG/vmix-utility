@@ -199,6 +199,7 @@ pub async fn get_vmix_inputs(
             key: input.key.clone(),
             number: input.number.parse().unwrap_or(0),
             title: input.title.clone(),
+            short_title: input.short_title.clone(),
             input_type: input.input_type.clone().unwrap_or_else(|| "Unknown".to_string()),
             state: input.state.clone().unwrap_or_else(|| "Unknown".to_string()),
         }
@@ -869,7 +870,7 @@ pub async fn open_video_list_window(
         
         // Verify window is also registered in our state
         let is_registered = state.get_video_list_window(&window_id).is_some();
-        app_log!(debug, "📋 Window {} registry status: {}", window_id, if is_registered { "✅ Registered" } else { "❌ Not registered" });
+        app_log!(debug, "�� Window {} registry status: {}", window_id, if is_registered { "✅ Registered" } else { "❌ Not registered" });
         
         // Enhanced window validity check with multiple validation methods
         let is_window_accessible = {
