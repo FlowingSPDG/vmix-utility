@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useConnectionSelection } from '../hooks/useConnectionSelection';
 import ConnectionSelector from '../components/ConnectionSelector';
 import {

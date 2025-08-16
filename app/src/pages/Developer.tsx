@@ -2,7 +2,7 @@ import {
   Box,
   Typography,
   Paper,
-  Grid,
+  Grid2,
   Card,
   CardContent,
   Button,
@@ -40,9 +40,9 @@ const Developer = () => {
   return (
     <Box sx={{ p: 3 }}>
 
-      <Grid container spacing={3}>
+      <Grid2 container spacing={3}>
         {/* Repository Information */}
-        <Grid item xs={12} md={6}>
+        <Grid2 size={{ xs: 12, md: 6 }}>
           <Card elevation={3} sx={{ height: '100%' }}>
             <CardContent>
               <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
@@ -81,10 +81,10 @@ const Developer = () => {
               </Button>
             </CardContent>
           </Card>
-        </Grid>
+        </Grid2>
 
         {/* Developer Information */}
-        <Grid item xs={12} md={6}>
+        <Grid2 size={{ xs: 12, md: 6 }}>
           <Card elevation={3} sx={{ height: '100%' }}>
             <CardContent>
               <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
@@ -116,10 +116,10 @@ const Developer = () => {
               </Button>
             </CardContent>
           </Card>
-        </Grid>
+        </Grid2>
 
         {/* Support & Donations */}
-        <Grid item xs={12}>
+        <Grid2 size={12}>
           <Card elevation={3}>
             <CardContent>
               <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
@@ -133,8 +133,8 @@ const Developer = () => {
                 If you find this project helpful, consider supporting its development!
               </Typography>
               
-              <Grid container spacing={2} sx={{ mt: 1 }}>
-                <Grid item xs={12} sm={4}>
+              <Grid2 container spacing={2} sx={{ mt: 1 }}>
+                <Grid2 size={{ xs: 12, sm: 4 }}>
                   <Button
                     variant="contained"
                     color="secondary"
@@ -144,8 +144,8 @@ const Developer = () => {
                   >
                     Star on GitHub
                   </Button>
-                </Grid>
-                <Grid item xs={12} sm={4}>
+                </Grid2>
+                <Grid2 size={{ xs: 12, sm: 4 }}>
                   <Button
                     variant="contained"
                     sx={{ 
@@ -158,8 +158,8 @@ const Developer = () => {
                   >
                     GitHub Sponsors
                   </Button>
-                </Grid>
-                <Grid item xs={12} sm={4}>
+                </Grid2>
+                <Grid2 size={{ xs: 12, sm: 4 }}>
                   <Button
                     variant="contained"
                     sx={{ 
@@ -172,14 +172,14 @@ const Developer = () => {
                   >
                     Support on FANBOX
                   </Button>
-                </Grid>
-              </Grid>
+                </Grid2>
+              </Grid2>
             </CardContent>
           </Card>
-        </Grid>
+        </Grid2>
 
         {/* License Information */}
-        <Grid item xs={12}>
+        <Grid2 size={12}>
           <Paper sx={{ p: 3 }}>
             <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
               <Description sx={{ mr: 1 }} />
@@ -188,7 +188,7 @@ const Developer = () => {
               </Typography>
             </Box>
             
-            <Typography variant="body2" color="text.secondary" paragraph>
+            <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
               This project is licensed under the MIT License.
             </Typography>
             
@@ -236,10 +236,10 @@ SOFTWARE.`}
               in the repository.
             </Typography>
           </Paper>
-        </Grid>
+        </Grid2>
 
         {/* Additional Links */}
-        <Grid item xs={12}>
+        <Grid2 size={12}>
           <Paper sx={{ p: 3 }}>
             <Typography variant="h6" gutterBottom>
               Useful Links
@@ -301,8 +301,8 @@ SOFTWARE.`}
               </ListItem>
             </List>
           </Paper>
-        </Grid>
-      </Grid>
+        </Grid2>
+      </Grid2>
     </Box>
   );
 };

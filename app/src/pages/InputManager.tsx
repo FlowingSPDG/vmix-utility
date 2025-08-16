@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useCallback, memo } from 'react';
+import { useState, useMemo, useCallback, memo } from 'react';
 import { useVMixStatus } from '../hooks/useVMixStatus';
 import { useConnectionSelection } from '../hooks/useConnectionSelection';
 import ConnectionSelector from '../components/ConnectionSelector';
