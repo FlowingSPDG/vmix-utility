@@ -164,9 +164,8 @@ const SingleVideoList: React.FC<SingleVideoListProps> = ({ host, listKey }) => {
         itemIndex
       });
       
-      // No need to manually refresh - backend will emit vmix-videolists-updated event
-      // which will trigger the event listener to update the state automatically
-      console.log('VideoList item selection sent, waiting for backend event...');
+      // Refresh the video list to show updated state
+      await fetchVideoList();
     } catch (err) {
       console.error('Failed to select item:', err);
     }
