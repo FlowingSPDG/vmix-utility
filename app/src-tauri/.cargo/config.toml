@@ -1,7 +1,4 @@
 [build]
-# sccacheを使用してキャッシュを有効化
-rustc-wrapper = "sccache"
-
 # 並列ビルドの設定
 jobs = 8
 
