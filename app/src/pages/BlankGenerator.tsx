@@ -132,9 +132,6 @@ const BlankGenerator = () => {
 
   return (
     <Box sx={{ p: 3 }}>
-      <Typography variant="h4" component="h1" gutterBottom>
-        Blank Generator
-      </Typography>
       
       <Paper sx={{ p: 3 }}>
         <Typography variant="h6" gutterBottom>

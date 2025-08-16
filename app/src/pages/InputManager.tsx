@@ -379,9 +379,6 @@ const InputManager = () => {
 
   return (
     <Box sx={{ p: 3 }}>
-        <Typography variant="h4" component="h1" gutterBottom>
-          Input Manager
-        </Typography>
 
       <Paper sx={{ p: 2, mb: 3 }}>
         <FormControl fullWidth sx={{ mb: 2 }}>

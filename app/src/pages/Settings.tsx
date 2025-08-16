@@ -154,10 +154,6 @@ const Settings = () => {
 
   return (
     <Box sx={{ p: 3 }}>
-      <Typography variant="h4" component="h1" gutterBottom>
-        Settings
-      </Typography>
-      
       <Paper sx={{ p: 3 }}>
         <Grid container spacing={3}>
           

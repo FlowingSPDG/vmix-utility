@@ -172,10 +172,7 @@ const ListManager: React.FC = () => {
 
   return (
     <Box>
-      <Box display="flex" justifyContent="space-between" alignItems="center" mb={2}>
-        <Typography variant="h4" gutterBottom>
-          List Manager
-        </Typography>
+      <Box display="flex" justifyContent="flex-end" alignItems="center" mb={2}>
       </Box>
 
       <Card sx={{ mb: 3, p: 2 }}>

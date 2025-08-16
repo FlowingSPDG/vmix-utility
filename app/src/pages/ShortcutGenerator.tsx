@@ -552,10 +552,6 @@ const ShortcutGenerator = () => {
 
   return (
     <Box sx={{ p: 3 }}>
-      <Typography variant="h4" component="h1" gutterBottom>
-        Shortcut Generator
-      </Typography>
-      
       <Paper sx={{ p: 2, mb: 2 }}>
         {/* Connection and Filter Row */}
         <Box sx={{ display: 'flex', gap: 2, alignItems: 'flex-start', flexWrap: 'wrap', mb: 2 }}>
