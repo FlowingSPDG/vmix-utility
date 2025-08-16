@@ -272,16 +272,21 @@ pub async fn get_vmix_video_lists(
         has_changed
     };
     
-    // Always emit update event to frontend for VideoLists (unlike inputs, VideoLists are always requested explicitly)
-    let event_payload = serde_json::json!({
-        "host": host,
-        "videoLists": video_lists
-    });
-    
-    match app_handle.emit("vmix-videolists-updated", &event_payload) {
-        Ok(_) => app_log!(info, "Successfully emitted vmix-videolists-updated event for host: {} with {} lists (changed: {})", 
-            host, video_lists.len(), video_lists_changed),
-        Err(e) => app_log!(error, "Failed to emit vmix-videolists-updated event for host: {} - {}", host, e),
+    // Only emit update event if VideoLists have actually changed
+    if video_lists_changed {
+        let event_payload = serde_json::json!({
+            "host": host,
+            "videoLists": video_lists
+        });
+        
+        match app_handle.emit("vmix-videolists-updated", &event_payload) {
+            Ok(_) => app_log!(info, "Successfully emitted vmix-videolists-updated event for host: {} with {} lists", 
+                host, video_lists.len()),
+            Err(e) => app_log!(error, "Failed to emit vmix-videolists-updated event for host: {} - {}", host, e),
+        }
+    } else {
+        app_log!(debug, "VideoLists unchanged for host: {} ({} lists), skipping event emission", 
+            host, video_lists.len());
     }
     
     Ok(video_lists)
