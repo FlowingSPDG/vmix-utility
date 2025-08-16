@@ -841,24 +841,47 @@ pub async fn open_video_list_window(
 ) -> Result<(), String> {
     app_log!(info, "Opening VideoList popup window for list: {}", list_title);
     
-    // Create deterministic window ID based on host and list_key (without timestamp to prevent duplicates)
-    let window_id = format!("video-list-{}-{}", 
+    // Create base window ID based on host and list_key
+    let base_window_id = format!("video-list-{}-{}", 
         urlencoding::encode(&host).replace("%", "").replace(".", "").replace(":", ""), 
         list_key.replace(" ", "_").replace("(", "").replace(")", ""));
     
-    app_log!(info, "Window ID for VideoList: {}", window_id);
+    let mut window_id = base_window_id.clone();
+    app_log!(info, "Base window ID for VideoList: {}", window_id);
     
-    // Check if window already exists
+    // Check if window already exists and is valid
     if let Some(existing_window) = app_handle.get_webview_window(&window_id) {
-        app_log!(info, "VideoList window already exists, focusing existing window: {}", window_id);
-        // Focus on existing window instead of creating a new one
-        if let Err(e) = existing_window.set_focus() {
-            app_log!(warn, "Failed to focus existing VideoList window: {}", e);
+        // Verify the window is actually open by checking if it's visible and can be interacted with
+        let is_window_valid = existing_window.is_visible().unwrap_or(false) && 
+                             !existing_window.is_minimized().unwrap_or(true);
+        
+        if is_window_valid {
+            match existing_window.set_focus() {
+                Ok(_) => {
+                    app_log!(info, "VideoList window already exists and is valid, focused existing window: {}", window_id);
+                    if let Err(e) = existing_window.unminimize() {
+                        app_log!(warn, "Failed to unminimize existing VideoList window: {}", e);
+                    }
+                    return Ok(());
+                }
+                Err(e) => {
+                    app_log!(warn, "Failed to focus existing VideoList window: {}", e);
+                    // Continue to create new window since existing one can't be focused
+                }
+            }
+        } else {
+            app_log!(warn, "VideoList window {} exists in registry but is not valid (visible: {}, minimized: {})", 
+                window_id, 
+                existing_window.is_visible().unwrap_or(false),
+                existing_window.is_minimized().unwrap_or(true)
+            );
+            
+            // Generate a new unique window ID to avoid conflict with stale window
+            use std::time::{SystemTime, UNIX_EPOCH};
+            let timestamp = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_millis();
+            window_id = format!("{}-{}", base_window_id, timestamp);
+            app_log!(info, "Generated new window ID to avoid stale window conflict: {}", window_id);
         }
-        if let Err(e) = existing_window.unminimize() {
-            app_log!(warn, "Failed to unminimize existing VideoList window: {}", e);
-        }
-        return Ok(());
     }
     
     app_log!(info, "Creating new VideoList window with ID: {}", window_id);
