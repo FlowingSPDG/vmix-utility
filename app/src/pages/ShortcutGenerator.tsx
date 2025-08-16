@@ -330,12 +330,24 @@ const ShortcutGenerator = () => {
   };
   const { connections, inputs: vmixStatusInputs } = useVMixStatus();
   
-  // Derive selected connection directly
+  // Connection state management
+  const [selectedConnection, setSelectedConnection] = useState<string>('');
   const connectedConnections = useMemo(() => 
     connections.filter(conn => conn.status === 'Connected'), 
     [connections]
   );
-  const selectedConnection = connectedConnections.length > 0 ? connectedConnections[0].host : '';
+  
+  // Auto-select first available connection when connections change
+  useEffect(() => {
+    if (connectedConnections.length > 0 && !selectedConnection) {
+      setSelectedConnection(connectedConnections[0].host);
+    } else if (connectedConnections.length === 0) {
+      setSelectedConnection('');
+    } else if (selectedConnection && !connectedConnections.find(conn => conn.host === selectedConnection)) {
+      // If current selection is no longer connected, switch to first available
+      setSelectedConnection(connectedConnections[0].host);
+    }
+  }, [connectedConnections, selectedConnection]);
   
   // Derive vmixInputs directly from context
   const vmixInputs = useMemo(() => {
@@ -435,8 +447,8 @@ const ShortcutGenerator = () => {
     setInputs(generatedInputs);
   }, [generatedInputs]);
 
-  const handleConnectionChange = () => {
-    // Connection change handled automatically through useMemo
+  const handleConnectionChange = (event: any) => {
+    setSelectedConnection(event.target.value);
   };
   
   // State for new query param
@@ -561,7 +573,7 @@ const ShortcutGenerator = () => {
               labelId="vmix-select-label"
               value={selectedConnection}
               label="Select vMix Connection"
-              onChange={() => handleConnectionChange()}
+              onChange={handleConnectionChange}
               size="small"
             >
               <MenuItem value="">

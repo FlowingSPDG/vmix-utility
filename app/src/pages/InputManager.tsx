@@ -182,13 +182,24 @@ const InputManager = () => {
   // Loading states for operations
   const [operationLoading, setOperationLoading] = useState<{[key: string]: boolean}>({});
 
+  // Connection state management
+  const [selectedConnection, setSelectedConnection] = useState<string>('');
   const connectedConnections = useMemo(() => 
     connections.filter(conn => conn.status === 'Connected'), 
     [connections]
   );
-
-  // Derive selected connection directly from connected connections
-  const selectedConnection = connectedConnections.length > 0 ? connectedConnections[0].host : '';
+  
+  // Auto-select first available connection when connections change
+  useEffect(() => {
+    if (connectedConnections.length > 0 && !selectedConnection) {
+      setSelectedConnection(connectedConnections[0].host);
+    } else if (connectedConnections.length === 0) {
+      setSelectedConnection('');
+    } else if (selectedConnection && !connectedConnections.find(conn => conn.host === selectedConnection)) {
+      // If current selection is no longer connected, switch to first available
+      setSelectedConnection(connectedConnections[0].host);
+    }
+  }, [connectedConnections, selectedConnection]);
   
   // Derive inputs directly from globalInputs without useState
   const inputs = useMemo(() => {
@@ -207,9 +218,8 @@ const InputManager = () => {
   // Show loading if no connections or no data yet
   const isLoading = connections.length === 0 || (selectedConnection && !globalInputs[selectedConnection]);
 
-  const handleConnectionChange = (_host: string) => {
-    // Connection change will be handled by re-rendering since we derive selectedConnection
-    // This is for manual selection if we add a dropdown later
+  const handleConnectionChange = (event: any) => {
+    setSelectedConnection(event.target.value);
   };
 
   const handleEditClick = useCallback((input: Input) => {
@@ -387,7 +397,7 @@ const InputManager = () => {
             labelId="connection-select-label"
             value={selectedConnection}
             label="vMix Connection"
-            onChange={(e) => handleConnectionChange(e.target.value as string)}
+            onChange={handleConnectionChange}
           >
             <MenuItem value="">
               <em>Select a vMix connection</em>

@@ -25,7 +25,8 @@
       "Bash(ls:*)",
       "Bash(grep:*)",
       "Bash(rg:*)",
-      "Bash(cargo:*)"
+      "Bash(cargo:*)",
+      "Bash(gh issue view:*)"
     ]
   },
   "enableAllProjectMcpServers": true,
