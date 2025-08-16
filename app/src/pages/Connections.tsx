@@ -259,10 +259,7 @@ const Connections: React.FC = () => {
     <Box sx={{ p: 3 }}>
       <LoadingScreen />
       
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
-        <Typography variant="h4" component="h1">
-          vMix Connections
-        </Typography>
+      <Box sx={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', mb: 3 }}>
         <Button 
           variant="contained" 
           startIcon={<AddIcon />}

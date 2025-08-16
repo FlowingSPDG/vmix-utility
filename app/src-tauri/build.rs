@@ -33,13 +33,31 @@ fn get_git_commit_hash() -> String {
 }
 
 fn get_git_branch() -> String {
+    // First check if environment variable is set (used by GitHub Actions)
+    if let Ok(branch) = std::env::var("GIT_BRANCH") {
+        return branch;
+    }
+    
+    // Fallback to git command
     match Command::new("git")
         .args(&["rev-parse", "--abbrev-ref", "HEAD"])
         .output()
     {
         Ok(output) => {
             if output.status.success() {
-                String::from_utf8_lossy(&output.stdout).trim().to_string()
+                let branch = String::from_utf8_lossy(&output.stdout).trim().to_string();
+                // If we get HEAD (detached state), try to get the tag name instead
+                if branch == "HEAD" {
+                    if let Ok(tag_output) = Command::new("git")
+                        .args(&["describe", "--tags", "--exact-match", "HEAD"])
+                        .output()
+                    {
+                        if tag_output.status.success() {
+                            return format!("tag: {}", String::from_utf8_lossy(&tag_output.stdout).trim());
+                        }
+                    }
+                }
+                branch
             } else {
                 "unknown".to_string()
             }

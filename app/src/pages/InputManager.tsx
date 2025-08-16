@@ -49,6 +49,7 @@ interface InputRowProps {
   input: Input;
   isEditing: boolean;
   editingValue: string;
+  isLoading: boolean;
   onEditClick: (input: Input) => void;
   onSaveClick: (key: string) => void;
   onCancelClick: (key: string) => void;
@@ -78,6 +79,7 @@ const OptimizedInputRow = memo(({
   input, 
   isEditing, 
   editingValue,
+  isLoading,
   onEditClick, 
   onSaveClick, 
   onCancelClick, 
@@ -94,7 +96,7 @@ const OptimizedInputRow = memo(({
             value={editingValue}
             onChange={isEditing ? (e) => onTitleChange(input.key, e.target.value) : undefined}
             size="small"
-            disabled={!isEditing}
+            disabled={!isEditing || isLoading}
             variant={isEditing ? "outlined" : "standard"}
             sx={textFieldSx}
           />
@@ -104,12 +106,14 @@ const OptimizedInputRow = memo(({
                 size="small"
                 color="primary"
                 onClick={() => onSaveClick(input.key)}
+                disabled={isLoading}
               >
                 <SaveIcon fontSize="small" />
               </IconButton>
               <IconButton
                 size="small"
                 onClick={() => onCancelClick(input.key)}
+                disabled={isLoading}
               >
                 <CancelIcon fontSize="small" />
               </IconButton>
@@ -118,6 +122,7 @@ const OptimizedInputRow = memo(({
             <IconButton
               size="small"
               onClick={() => onEditClick(input)}
+              disabled={isLoading}
             >
               <EditIcon fontSize="small" />
             </IconButton>
@@ -148,6 +153,7 @@ const OptimizedInputRow = memo(({
           color="error"
           size="small"
           onClick={() => onDeleteClick(input.key)}
+          disabled={isLoading}
         >
           <DeleteIcon />
         </IconButton>
@@ -160,7 +166,7 @@ const InputRow = OptimizedInputRow;
 
 
 const InputManager = () => {
-  const { connections, inputs: globalInputs, sendVMixFunction } = useVMixStatus();
+  const { connections, inputs: globalInputs, sendVMixFunction, getVMixInputs } = useVMixStatus();
   const [error, setError] = useState<string | null>(null);
   const [toast, setToast] = useState<ToastState>({ open: false, message: '', severity: 'info' });
   
@@ -172,6 +178,9 @@ const InputManager = () => {
   // Dialog state for deletion confirmation
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [inputToDelete, setInputToDelete] = useState<Input | null>(null);
+  
+  // Loading states for operations
+  const [operationLoading, setOperationLoading] = useState<{[key: string]: boolean}>({});
 
   const connectedConnections = useMemo(() => 
     connections.filter(conn => conn.status === 'Connected'), 
@@ -212,11 +221,15 @@ const InputManager = () => {
     const input = inputs.find((inp: Input) => inp.key === key);
     
     if (input && selectedConnection && newTitle !== undefined) {
+      setOperationLoading(prev => ({ ...prev, [key]: true }));
       try {
         await sendVMixFunction(selectedConnection, 'SetInputName', {
           Input: input.number.toString(),
           Value: newTitle
         });
+
+        // Refresh inputs to get latest XML data
+        await getVMixInputs(selectedConnection);
 
         setToast({ open: true, message: 'Input title updated successfully', severity: 'success' });
         
@@ -228,9 +241,14 @@ const InputManager = () => {
       } catch (error) {
         console.error('Failed to update input title:', error);
         setToast({ open: true, message: 'Failed to update input title', severity: 'error' });
+      } finally {
+        setOperationLoading(prev => {
+          const { [key]: _, ...rest } = prev;
+          return rest;
+        });
       }
     }
-  }, [editingData, inputs, selectedConnection, sendVMixFunction]);
+  }, [editingData, inputs, selectedConnection, sendVMixFunction, getVMixInputs]);
 
   const handleTitleChange = useCallback((key: string, value: string) => {
     setEditingData(prev => ({ ...prev, [key]: value }));
@@ -253,17 +271,26 @@ const InputManager = () => {
 
   const handleDeleteConfirm = async () => {
     if (inputToDelete && selectedConnection) {
+      setOperationLoading(prev => ({ ...prev, [`delete_${inputToDelete.key}`]: true }));
       try {
         // delete input from vMix using RemoveInput function
         await sendVMixFunction(selectedConnection, 'RemoveInput', {
           Input: inputToDelete.key
         });
 
+        // Refresh inputs to get latest XML data
+        await getVMixInputs(selectedConnection);
+
         setToast({ open: true, message: 'Input deleted successfully', severity: 'success' });
       } catch (error) {
         console.error('Failed to delete input:', error);
         setError(`Failed to delete input: ${error}`);
         setToast({ open: true, message: 'Failed to delete input', severity: 'error' });
+      } finally {
+        setOperationLoading(prev => {
+          const { [`delete_${inputToDelete.key}`]: _, ...rest } = prev;
+          return rest;
+        });
       }
     }
     setDeleteDialogOpen(false);
@@ -302,13 +329,15 @@ const InputManager = () => {
   const inputRowData = useMemo(() => {
     return sortedInputs.map(input => {
       const isEditing = input.key in editingData;
+      const isLoading = operationLoading[input.key] || false;
       return {
         input,
         isEditing,
-        editingValue: editingData[input.key] ?? input.title
+        editingValue: editingData[input.key] ?? input.title,
+        isLoading
       };
     });
-  }, [sortedInputs, editingData]);
+  }, [sortedInputs, editingData, operationLoading]);
 
   // Show skeleton loading state while loading
   if (isLoading) {
@@ -350,9 +379,6 @@ const InputManager = () => {
 
   return (
     <Box sx={{ p: 3 }}>
-        <Typography variant="h4" component="h1" gutterBottom>
-          Input Manager
-        </Typography>
 
       <Paper sx={{ p: 2, mb: 3 }}>
         <FormControl fullWidth sx={{ mb: 2 }}>
@@ -434,6 +460,7 @@ const InputManager = () => {
                   input={rowData.input}
                   isEditing={rowData.isEditing}
                   editingValue={rowData.editingValue}
+                  isLoading={rowData.isLoading}
                   onEditClick={handleEditClick}
                   onSaveClick={handleSaveClick}
                   onCancelClick={handleCancelClick}
@@ -494,11 +521,20 @@ const InputManager = () => {
           </DialogContentText>
         </DialogContent>
         <DialogActions>
-          <Button onClick={handleDeleteCancel} color="primary">
+          <Button 
+            onClick={handleDeleteCancel} 
+            color="primary"
+            disabled={inputToDelete ? operationLoading[`delete_${inputToDelete.key}`] : false}
+          >
             Cancel
           </Button>
-          <Button onClick={handleDeleteConfirm} color="error" variant="contained">
-            Delete
+          <Button 
+            onClick={handleDeleteConfirm} 
+            color="error" 
+            variant="contained"
+            disabled={inputToDelete ? operationLoading[`delete_${inputToDelete.key}`] : false}
+          >
+            {inputToDelete && operationLoading[`delete_${inputToDelete.key}`] ? 'Deleting...' : 'Delete'}
           </Button>
         </DialogActions>
       </Dialog>

@@ -32,7 +32,7 @@ interface Connection {
 }
 
 const BlankGenerator = () => {
-  const { connections: vmixConnections } = useVMixStatus();
+  const { connections: vmixConnections, getVMixInputs } = useVMixStatus();
   const [transparent, setTransparent] = useState(false);
   const [count, setCount] = useState(1);
   const [selectedConnection, setSelectedConnection] = useState<number | ''>('');
@@ -104,6 +104,9 @@ const BlankGenerator = () => {
         });
       }
 
+      // Refresh inputs to get latest XML data
+      await getVMixInputs(connection.host);
+
       console.log(`Generated ${count} blank${count !== 1 ? 's' : ''} with transparent=${transparent} on ${connection.host}`);
       
       setToastMessage(`Successfully generated ${count} blank${count !== 1 ? 's' : ''} with ${transparent ? 'transparent' : 'black'} background!`);
@@ -129,9 +132,6 @@ const BlankGenerator = () => {
 
   return (
     <Box sx={{ p: 3 }}>
-      <Typography variant="h4" component="h1" gutterBottom>
-        Blank Generator
-      </Typography>
       
       <Paper sx={{ p: 3 }}>
         <Typography variant="h6" gutterBottom>

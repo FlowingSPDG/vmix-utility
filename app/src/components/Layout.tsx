@@ -146,9 +146,6 @@ const Layout = () => {
           >
             <MenuIcon />
           </IconButton>
-          <Typography variant="h6" noWrap component="div">
-            {navItems[selectedIndex].text}
-          </Typography>
         </Toolbar>
       </AppBar>
       <Box

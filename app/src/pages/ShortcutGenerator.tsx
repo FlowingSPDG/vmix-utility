@@ -70,13 +70,16 @@ const VirtualizedInputItem = memo(({ index, style, data }: {
     selectedConnection: string;
     showToast: (message: string, severity?: 'success' | 'error' | 'info') => void;
     onTryCommand: (input: Input) => void;
+    lastClickedInputId: number | null;
+    onInputClick: (inputId: number) => void;
   };
 }) => {
-  const { filteredInputs, vmixInputs, selectedConnection, showToast, onTryCommand } = data;
+  const { filteredInputs, vmixInputs, selectedConnection, showToast, onTryCommand, lastClickedInputId, onInputClick } = data;
   const input = filteredInputs[index];
   const vmixInput = vmixInputs.find(vi => vi.number === input.number);
   const isLastItem = index === filteredInputs.length - 1;
   const isSpecialInput = input.id < 0;
+  const isHighlighted = lastClickedInputId === input.id;
   const generateUrl = useCallback((input: Input) => {
     if (!selectedConnection) return '';
     
@@ -101,7 +104,9 @@ const VirtualizedInputItem = memo(({ index, style, data }: {
     return script;
   }, []);
 
-  const openTallyInBrowser = useCallback(async (input: Input) => {
+  const openTallyInBrowser = useCallback(async (e: React.MouseEvent, input: Input) => {
+    e.stopPropagation();
+    onInputClick(input.id);
     try {
       const inputKey = input.queryParams.find(param => param.key === 'Input')?.value;
       if (!inputKey) {
@@ -114,41 +119,55 @@ const VirtualizedInputItem = memo(({ index, style, data }: {
       console.error('Failed to open tally URL:', error);
       showToast('Failed to open Tally URL in browser', 'error');
     }
-  }, [showToast, input]);
+  }, [showToast, selectedConnection, onInputClick]);
 
-  const handleCopyUrl = useCallback(() => {
+  const handleCopyUrl = useCallback((e: React.MouseEvent) => {
+    e.stopPropagation();
+    onInputClick(input.id);
     navigator.clipboard.writeText(generateUrl(input));
     showToast('Function URL copied to clipboard!');
-  }, [input, generateUrl, showToast]);
+  }, [input, generateUrl, showToast, onInputClick]);
 
-  const handleCopyScript = useCallback(() => {
+  const handleCopyScript = useCallback((e: React.MouseEvent) => {
+    e.stopPropagation();
+    onInputClick(input.id);
     navigator.clipboard.writeText(generateScript(input));
     showToast('Script API command copied to clipboard!');
-  }, [input, generateScript, showToast]);
+  }, [input, generateScript, showToast, onInputClick]);
 
-  const handleTryCommand = useCallback(() => {
+  const handleTryCommand = useCallback((e: React.MouseEvent) => {
+    e.stopPropagation();
+    onInputClick(input.id);
     onTryCommand(input);
-  }, [input, onTryCommand]);
+  }, [input, onTryCommand, onInputClick]);
 
-  const handleCopyKey = useCallback(() => {
+  const handleCopyKey = useCallback((e: React.MouseEvent) => {
+    e.stopPropagation();
+    onInputClick(input.id);
     if (!vmixInput?.key) {
       showToast('Input key not found', 'error');
       return;
     }
     navigator.clipboard.writeText(vmixInput.key);
     showToast('Input key copied to clipboard!');
-  }, [vmixInput, showToast]);
+  }, [vmixInput, showToast, onInputClick, input.id]);
 
   return (
     <Box style={style}>
-      <Box sx={{ 
-        p: 1.5, 
-        display: 'flex', 
-        alignItems: 'center', 
-        gap: 1.5,
-        flexWrap: 'wrap',
-        minHeight: '70px'
-      }}>
+      <Box 
+        sx={{ 
+          p: 1, 
+          display: 'flex', 
+          alignItems: 'center', 
+          gap: 1,
+          flexWrap: 'wrap',
+          minHeight: '50px',
+          bgcolor: isHighlighted ? 'action.selected' : 'transparent',
+          cursor: 'pointer',
+          transition: 'background-color 0.2s ease'
+        }}
+        onClick={() => onInputClick(input.id)}
+      >
         {/* Input Info */}
         <Box sx={{ 
           minWidth: '160px', 
@@ -236,7 +255,7 @@ const VirtualizedInputItem = memo(({ index, style, data }: {
               </Box>
               <IconButton
                 size="small"
-                onClick={handleCopyUrl}
+                onClick={(e) => handleCopyUrl(e)}
                 sx={{ p: 0.5, flexShrink: 0 }}
               >
                 <ContentCopyIcon fontSize="small" />
@@ -258,14 +277,14 @@ const VirtualizedInputItem = memo(({ index, style, data }: {
             >
               <Button
                 startIcon={<CodeIcon fontSize="small" />}
-                onClick={handleCopyScript}
+                onClick={(e) => handleCopyScript(e)}
                 size="small"
               >
                 SCRIPT
               </Button>
               <Button
                 startIcon={<OpenInBrowserIcon fontSize="small" />}
-                onClick={() => openTallyInBrowser(input)}
+                onClick={(e) => openTallyInBrowser(e, input)}
                 size="small"
                 disabled={isSpecialInput}
               >
@@ -273,7 +292,7 @@ const VirtualizedInputItem = memo(({ index, style, data }: {
               </Button>
               <Button
                 startIcon={<ContentCopyIcon fontSize="small" />}
-                onClick={handleCopyKey}
+                onClick={(e) => handleCopyKey(e)}
                 size="small"
                 disabled={isSpecialInput}
               >
@@ -282,7 +301,7 @@ const VirtualizedInputItem = memo(({ index, style, data }: {
               <Button
                 startIcon={<PlayArrowIcon fontSize="small" />}
                 color="primary"
-                onClick={handleTryCommand}
+                onClick={(e) => handleTryCommand(e)}
                 size="small"
               >
                 TRY!
@@ -330,6 +349,9 @@ const ShortcutGenerator = () => {
   // Collapse states
   const [functionConfigExpanded, setFunctionConfigExpanded] = useState(true);
   const [specialInputsExpanded, setSpecialInputsExpanded] = useState(true);
+  
+  // Highlighted input state
+  const [lastClickedInputId, setLastClickedInputId] = useState<number | null>(null);
   
   
   // Shortcut generation state
@@ -522,13 +544,14 @@ const ShortcutGenerator = () => {
       showToast(`Failed to send command: ${error}`, 'error');
     }
   }, [selectedConnection, generateParamsObject, showToast]);
+  
+  // Handle input click to set highlight
+  const handleInputClick = useCallback((inputId: number) => {
+    setLastClickedInputId(inputId);
+  }, []);
 
   return (
     <Box sx={{ p: 3 }}>
-      <Typography variant="h4" component="h1" gutterBottom>
-        Shortcut Generator
-      </Typography>
-      
       <Paper sx={{ p: 2, mb: 2 }}>
         {/* Connection and Filter Row */}
         <Box sx={{ display: 'flex', gap: 2, alignItems: 'flex-start', flexWrap: 'wrap', mb: 2 }}>
@@ -768,13 +791,15 @@ const ShortcutGenerator = () => {
             width={"100%"}
             height={600}
             itemCount={filteredInputs.length}
-            itemSize={100}
+            itemSize={70}
             itemData={{
               filteredInputs,
               vmixInputs,
               selectedConnection,
               showToast,
-              onTryCommand: tryCommand
+              onTryCommand: tryCommand,
+              lastClickedInputId,
+              onInputClick: handleInputClick
             }}
           >
             {VirtualizedInputItem}

@@ -39,20 +39,24 @@ const Developer = () => {
 
   return (
     <Box sx={{ p: 3 }}>
-      <Typography variant="h4" component="h1" gutterBottom>
-        Developer
-      </Typography>
 
       <Grid container spacing={3}>
         {/* Repository Information */}
         <Grid item xs={12} md={6}>
-          <Card elevation={3}>
+          <Card elevation={3} sx={{ height: '100%' }}>
             <CardContent>
               <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
-                <GitHub sx={{ mr: 1 }} />
-                <Typography variant="h6" component="h2">
-                  Repository
-                </Typography>
+                <Avatar sx={{ mr: 2, bgcolor: 'primary.main' }}>
+                  <GitHub />
+                </Avatar>
+                <Box>
+                  <Typography variant="h6" component="h2">
+                    Repository
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    Open Source Project
+                  </Typography>
+                </Box>
               </Box>
               
               <Typography variant="body2" color="text.secondary" gutterBottom>
@@ -81,7 +85,7 @@ const Developer = () => {
 
         {/* Developer Information */}
         <Grid item xs={12} md={6}>
-          <Card elevation={3}>
+          <Card elevation={3} sx={{ height: '100%' }}>
             <CardContent>
               <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
                 <Avatar sx={{ mr: 2, bgcolor: 'primary.main' }}>
