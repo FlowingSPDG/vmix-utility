@@ -13,6 +13,15 @@ use tokio::fs;
 use tokio::time::{interval, sleep};
 use tauri::{Emitter, Manager};
 
+#[derive(Debug, Clone)]
+pub struct VideoListWindow {
+    pub window_id: String,
+    pub host: String,
+    pub list_key: String,
+    pub list_title: String,
+    pub created_at: std::time::Instant,
+}
+
 pub struct AppState {
     pub http_connections: Arc<Mutex<Vec<VmixClientWrapper>>>,
     pub tcp_connections: Arc<Mutex<Vec<TcpVmixManager>>>,
@@ -22,6 +31,7 @@ pub struct AppState {
     pub video_lists_cache: Arc<Mutex<HashMap<String, Vec<VmixVideoListInput>>>>,
     pub connection_labels: Arc<Mutex<HashMap<String, String>>>,
     pub app_settings: Arc<Mutex<AppSettings>>,
+    pub video_list_windows: Arc<Mutex<HashMap<String, VideoListWindow>>>,
 }
 
 impl AppState {
@@ -35,6 +45,7 @@ impl AppState {
             video_lists_cache: Arc::new(Mutex::new(HashMap::new())),
             connection_labels: Arc::new(Mutex::new(HashMap::new())),
             app_settings: Arc::new(Mutex::new(AppSettings::default())),
+            video_list_windows: Arc::new(Mutex::new(HashMap::new())),
         }
     }
     
@@ -463,5 +474,61 @@ impl AppState {
                 }
             }
         });
+    }
+
+    // VideoList window registry management methods
+    pub fn register_video_list_window(&self, window_id: String, host: String, list_key: String, list_title: String) {
+        let window_info = VideoListWindow {
+            window_id: window_id.clone(),
+            host,
+            list_key,
+            list_title,
+            created_at: std::time::Instant::now(),
+        };
+        
+        let mut windows = self.video_list_windows.lock().unwrap();
+        windows.insert(window_id.clone(), window_info);
+        app_log!(info, "Registered VideoList window: {}", window_id);
+    }
+
+    pub fn unregister_video_list_window(&self, window_id: &str) {
+        let mut windows = self.video_list_windows.lock().unwrap();
+        if windows.remove(window_id).is_some() {
+            app_log!(info, "Unregistered VideoList window: {}", window_id);
+        } else {
+            app_log!(warn, "Attempted to unregister non-existent VideoList window: {}", window_id);
+        }
+    }
+
+    pub fn get_video_list_window(&self, window_id: &str) -> Option<VideoListWindow> {
+        let windows = self.video_list_windows.lock().unwrap();
+        windows.get(window_id).cloned()
+    }
+
+    pub fn get_video_list_windows_for_host(&self, host: &str) -> Vec<VideoListWindow> {
+        let windows = self.video_list_windows.lock().unwrap();
+        windows.values()
+            .filter(|window| window.host == host)
+            .cloned()
+            .collect()
+    }
+
+    pub fn cleanup_stale_video_list_windows(&self, app_handle: &tauri::AppHandle) {
+        let mut windows_to_remove = Vec::new();
+        
+        {
+            let windows = self.video_list_windows.lock().unwrap();
+            for (window_id, _window_info) in windows.iter() {
+                // Check if window still exists in Tauri
+                if app_handle.get_webview_window(window_id).is_none() {
+                    windows_to_remove.push(window_id.clone());
+                }
+            }
+        }
+        
+        // Remove stale entries
+        for window_id in windows_to_remove {
+            self.unregister_video_list_window(&window_id);
+        }
     }
 }

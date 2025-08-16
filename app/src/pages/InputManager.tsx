@@ -1,5 +1,7 @@
 import { useState, useMemo, useCallback, memo } from 'react';
 import { useVMixStatus } from '../hooks/useVMixStatus';
+import { useConnectionSelection } from '../hooks/useConnectionSelection';
+import ConnectionSelector from '../components/ConnectionSelector';
 import {
   Box,
   Typography,
@@ -14,10 +16,6 @@ import {
   Button,
   TableSortLabel,
   IconButton,
-  FormControl,
-  InputLabel,
-  Select,
-  MenuItem,
   Alert,
   Chip,
   Dialog,
@@ -182,13 +180,8 @@ const InputManager = () => {
   // Loading states for operations
   const [operationLoading, setOperationLoading] = useState<{[key: string]: boolean}>({});
 
-  const connectedConnections = useMemo(() => 
-    connections.filter(conn => conn.status === 'Connected'), 
-    [connections]
-  );
-
-  // Derive selected connection directly from connected connections
-  const selectedConnection = connectedConnections.length > 0 ? connectedConnections[0].host : '';
+  // Use optimized connection selection hook
+  const { selectedConnection, setSelectedConnection } = useConnectionSelection();
   
   // Derive inputs directly from globalInputs without useState
   const inputs = useMemo(() => {
@@ -207,10 +200,6 @@ const InputManager = () => {
   // Show loading if no connections or no data yet
   const isLoading = connections.length === 0 || (selectedConnection && !globalInputs[selectedConnection]);
 
-  const handleConnectionChange = (_host: string) => {
-    // Connection change will be handled by re-rendering since we derive selectedConnection
-    // This is for manual selection if we add a dropdown later
-  };
 
   const handleEditClick = useCallback((input: Input) => {
     setEditingData(prev => ({ ...prev, [input.key]: input.title }));
@@ -326,17 +315,14 @@ const InputManager = () => {
     });
   }, [inputs, order, orderBy]);
 
+  // Optimize row data generation with stable references
   const inputRowData = useMemo(() => {
-    return sortedInputs.map(input => {
-      const isEditing = input.key in editingData;
-      const isLoading = operationLoading[input.key] || false;
-      return {
-        input,
-        isEditing,
-        editingValue: editingData[input.key] ?? input.title,
-        isLoading
-      };
-    });
+    return sortedInputs.map(input => ({
+      input,
+      isEditing: input.key in editingData,
+      editingValue: editingData[input.key] ?? input.title,
+      isLoading: operationLoading[input.key] || false
+    }));
   }, [sortedInputs, editingData, operationLoading]);
 
   // Show skeleton loading state while loading
@@ -381,24 +367,12 @@ const InputManager = () => {
     <Box sx={{ p: 3 }}>
 
       <Paper sx={{ p: 2, mb: 3 }}>
-        <FormControl fullWidth sx={{ mb: 2 }}>
-          <InputLabel id="connection-select-label">vMix Connection</InputLabel>
-          <Select
-            labelId="connection-select-label"
-            value={selectedConnection}
-            label="vMix Connection"
-            onChange={(e) => handleConnectionChange(e.target.value as string)}
-          >
-            <MenuItem value="">
-              <em>Select a vMix connection</em>
-            </MenuItem>
-            {connectedConnections.map((conn) => (
-              <MenuItem key={conn.host} value={conn.host}>
-                {conn.label} ({conn.host})
-              </MenuItem>
-            ))}
-          </Select>
-        </FormControl>
+        <ConnectionSelector
+          selectedConnection={selectedConnection}
+          onConnectionChange={setSelectedConnection}
+          label="vMix Connection"
+          sx={{ mb: 2 }}
+        />
 
         {error && (
           <Alert severity="error" sx={{ mb: 2 }} onClose={() => setError(null)}>

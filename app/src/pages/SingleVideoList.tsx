@@ -46,15 +46,12 @@ const SingleVideoList: React.FC<SingleVideoListProps> = ({ host, listKey }) => {
   const targetHost = host || urlParams.get('host') || '';
   const targetListKey = listKey || urlParams.get('listKey') || '';
   
-  console.log('SingleVideoList component initialized');
-  console.log('URL:', window.location.href);
-  console.log('URL params:', Object.fromEntries(urlParams.entries()));
-  console.log('Props - host:', host, 'listKey:', listKey);
-  console.log('Resolved - targetHost:', targetHost, 'targetListKey:', targetListKey);
+  console.log('SingleVideoList initialized:', { targetHost, targetListKey, url: window.location.href });
   
-  // 開発モードでは自動的にdevtoolsを開く
+  // Development tools and debugging
   useEffect(() => {
     if (import.meta.env.DEV) {
+      // Auto-open devtools in development
       import('@tauri-apps/api/window').then(({ getCurrentWindow }) => {
         const currentWindow = getCurrentWindow();
         if ('openDevtools' in currentWindow && typeof currentWindow.openDevtools === 'function') {
@@ -63,12 +60,29 @@ const SingleVideoList: React.FC<SingleVideoListProps> = ({ host, listKey }) => {
           });
         }
       });
+
+      // Add global diagnostic function for testing
+      (window as any).debugVideoListWindows = async () => {
+        try {
+          const diagnostic = await invoke('get_video_list_windows_diagnostic');
+          console.log('🔧 VideoList Windows Diagnostic:', diagnostic);
+          return diagnostic;
+        } catch (error) {
+          console.error('❌ Failed to get diagnostic info:', error);
+        }
+      };
+
+      console.log('🔧 Development mode: Call window.debugVideoListWindows() to see window registry');
     }
   }, []);
 
-  // ページタイトルにデバッグ情報を表示
+  // Set page title with better formatting
   useEffect(() => {
-    document.title = `VideoList: ${targetHost} - ${targetListKey}`;
+    if (targetHost && targetListKey) {
+      document.title = `VideoList: ${targetHost} - ${targetListKey}`;
+    } else {
+      document.title = 'VideoList - Loading...';
+    }
   }, [targetHost, targetListKey]);
 
   useEffect(() => {
@@ -77,53 +91,31 @@ const SingleVideoList: React.FC<SingleVideoListProps> = ({ host, listKey }) => {
     }
   }, [targetHost, targetListKey]);
 
-  // Listen for VideoList updates
+  // Listen for VideoList updates from the backend
   useEffect(() => {
     if (!targetHost || !targetListKey) {
-      console.log('Skipping event listener setup - missing host or listKey');
+      console.log('⚠️ Skipping event listener setup - missing host or listKey');
       return;
     }
 
-    console.log('Setting up event listener for:', targetHost, targetListKey);
-    
-    // タイトルを更新して設定中であることを示す
-    document.title = `VideoList: ${targetHost} - SETTING UP LISTENER`;
+    console.log(`🎧 Setting up VideoList update listener for ${targetHost}:${targetListKey}`);
 
     const unlistenVideoListsUpdated = listen('vmix-videolists-updated', (event) => {
-      // タイトルを更新してイベント受信を示す
-      document.title = `VideoList: ${targetHost} - EVENT RECEIVED!`;
-      
-      const logMessage = `POPUP EVENT: ${JSON.stringify({
-        timestamp: new Date().toISOString(),
-        targetHost,
-        targetListKey,
-        eventHost: (event.payload as any).host,
-        eventLists: (event.payload as any).videoLists?.map((l: any) => l.key)
-      })}`;
-      console.log(logMessage);
-      
       const payload = event.payload as any;
       
       if (payload.host === targetHost && payload.videoLists) {
         const foundList = payload.videoLists.find((list: VmixVideoListInput) => list.key === targetListKey);
         if (foundList) {
-          console.log('Found matching list, updating state:', foundList);
+          console.log(`✅ VideoList updated: ${targetHost}:${targetListKey}`);
           setVideoList(foundList);
-          document.title = `VideoList: ${targetHost} - UPDATED!`;
         } else {
-          console.log('No matching list found for key:', targetListKey);
-          document.title = `VideoList: ${targetHost} - NO MATCH`;
+          console.log(`⚠️ VideoList not found in update: ${targetListKey}`);
         }
       }
     });
 
-    // リスナー設定完了をタイトルで示す
-    unlistenVideoListsUpdated.then(() => {
-      document.title = `VideoList: ${targetHost} - LISTENING`;
-    });
-
     return () => {
-      document.title = `VideoList: ${targetHost} - CLEANUP`;
+      console.log(`🧹 Cleaning up VideoList listener for ${targetHost}:${targetListKey}`);
       unlistenVideoListsUpdated.then(fn => fn());
     };
   }, [targetHost, targetListKey]);
@@ -177,6 +169,10 @@ const SingleVideoList: React.FC<SingleVideoListProps> = ({ host, listKey }) => {
       <Box p={3}>
         <Alert severity="error">
           Missing required parameters: host and listKey
+          <br />
+          <Typography variant="caption" display="block" sx={{ mt: 1, opacity: 0.7 }}>
+            Current URL: {window.location.href}
+          </Typography>
         </Alert>
       </Box>
     );

@@ -1,4 +1,6 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo } from 'react';
+import { useConnectionSelection } from '../hooks/useConnectionSelection';
+import ConnectionSelector from '../components/ConnectionSelector';
 import {
   Box,
   Card,
@@ -11,10 +13,6 @@ import {
   Chip,
   Alert,
   Skeleton,
-  FormControl,
-  InputLabel,
-  Select,
-  MenuItem,
   IconButton,
   Tooltip,
   Collapse
@@ -46,18 +44,15 @@ interface VmixVideoListInput {
 }
 
 const ListManager: React.FC = () => {
-  const { connections, videoLists: contextVideoLists, getVMixVideoLists } = useVMixStatus();
+  const { videoLists: contextVideoLists, getVMixVideoLists } = useVMixStatus();
   const [_error, _setError] = useState<string | null>(null);
   const [expandedLists, setExpandedLists] = useState<Set<string>>(new Set());
   
-  // Get connected hosts
-  const connectedHosts = useMemo(() => 
-    connections.filter(conn => conn.status === 'Connected'), 
-    [connections]
-  );
+  // Use optimized connection selection hook
+  const { selectedConnection, setSelectedConnection, connectedConnections } = useConnectionSelection();
 
-  // Derive selected host directly
-  const selectedHost = connectedHosts.length > 0 ? connectedHosts[0].host : '';
+  // Use selectedConnection instead of selectedHost for compatibility
+  const selectedHost = selectedConnection;
   
   // Get video lists for selected host from context
   const videoLists = useMemo(() => 
@@ -66,14 +61,17 @@ const ListManager: React.FC = () => {
   );
 
   // Show loading if no connections or no data yet
-  const isLoading = connections.length === 0 || (selectedHost && !contextVideoLists[selectedHost]);
+  const isLoading = connectedConnections.length === 0 || (selectedHost && !contextVideoLists[selectedHost]);
 
-  // Auto-fetch VideoLists when selectedHost changes
-  useEffect(() => {
+  // Auto-fetch VideoLists when needed - memoized to avoid constant re-fetching
+  useMemo(() => {
     if (selectedHost && !contextVideoLists[selectedHost]) {
       console.log(`Auto-fetching VideoLists for host: ${selectedHost}`);
-      getVMixVideoLists(selectedHost).catch(error => {
-        console.error(`Failed to auto-fetch VideoLists for ${selectedHost}:`, error);
+      // Use Promise.resolve() to avoid blocking render
+      Promise.resolve().then(() => {
+        getVMixVideoLists(selectedHost).catch(error => {
+          console.error(`Failed to auto-fetch VideoLists for ${selectedHost}:`, error);
+        });
       });
     }
   }, [selectedHost, contextVideoLists, getVMixVideoLists]);
@@ -83,13 +81,17 @@ const ListManager: React.FC = () => {
     if (!selectedHost) return;
     
     try {
+      console.log(`🚀 Opening VideoList popup - Host: ${selectedHost}, Key: ${videoList.key}, Title: ${videoList.title}`);
       await invoke('open_video_list_window', {
         host: selectedHost,
         listKey: videoList.key,
         listTitle: videoList.title
       });
+      console.log(`✅ VideoList popup window request sent successfully`);
     } catch (err) {
-      console.error('Failed to open VideoList popup window:', err);
+      console.error('❌ Failed to open VideoList popup window:', err);
+      // You could add a toast notification here in the future
+      // For now, we'll rely on the backend's improved error handling
     }
   };
 
@@ -160,7 +162,7 @@ const ListManager: React.FC = () => {
     }
   };
 
-  if (connectedHosts.length === 0) {
+  if (connectedConnections.length === 0) {
     return (
       <Box>
         <Alert severity="info">
@@ -179,40 +181,11 @@ const ListManager: React.FC = () => {
         <Typography variant="h6" gutterBottom>
           Connection Settings
         </Typography>
-        <FormControl fullWidth>
-          <InputLabel>vMix Connection</InputLabel>
-          <Select
-            value={selectedHost}
-            label="vMix Connection"
-            onChange={() => {/* Host selection handled automatically */}}
-            sx={{
-              '& .MuiSelect-select': {
-                display: 'flex',
-                alignItems: 'center',
-                gap: 1,
-              },
-            }}
-          >
-            {connectedHosts.map((conn) => (
-              <MenuItem key={conn.host} value={conn.host}>
-                <Box display="flex" alignItems="center" gap={1}>
-                  <Chip
-                    label={conn.connection_type}
-                    size="small"
-                    color={conn.connection_type === 'Tcp' ? 'success' : 'info'}
-                    sx={{ minWidth: 50 }}
-                  />
-                  <Typography>
-                    {conn.label}
-                  </Typography>
-                  <Typography variant="body2" color="text.secondary">
-                    ({conn.host}:{conn.port})
-                  </Typography>
-                </Box>
-              </MenuItem>
-            ))}
-          </Select>
-        </FormControl>
+        <ConnectionSelector
+          selectedConnection={selectedConnection}
+          onConnectionChange={setSelectedConnection}
+          label="vMix Connection"
+        />
       </Card>
 
       {_error && (

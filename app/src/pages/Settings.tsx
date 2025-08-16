@@ -10,7 +10,7 @@ import {
   FormControlLabel,
   Button,
   Divider,
-  Grid,
+  Grid2,
   Select,
   MenuItem,
   InputLabel,
@@ -155,9 +155,9 @@ const Settings = () => {
   return (
     <Box sx={{ p: 3 }}>
       <Paper sx={{ p: 3 }}>
-        <Grid container spacing={3}>
+        <Grid2 container spacing={3}>
           
-          <Grid item xs={12} md={6}>
+          <Grid2 size={{ xs: 12, md: 6 }}>
             <Typography variant="h6" gutterBottom>
               Application Settings
             </Typography>
@@ -184,9 +184,9 @@ const Settings = () => {
               </Typography>
             </Box>
 
-          </Grid>
+          </Grid2>
 
-          <Grid item xs={12} md={6}>
+          <Grid2 size={{ xs: 12, md: 6 }}>
             <Typography variant="h6" gutterBottom>
               Logging Settings
             </Typography>
@@ -240,9 +240,9 @@ const Settings = () => {
                 </IconButton>
               </Box>
             )}
-          </Grid>
+          </Grid2>
 
-          <Grid item xs={12}>
+          <Grid2 size={12}>
             <Box sx={{ display: 'flex', justifyContent: 'flex-end', mt: 2 }}>
               <Button 
                 variant="contained" 
@@ -253,8 +253,8 @@ const Settings = () => {
                 Apply Settings
               </Button>
             </Box>
-          </Grid>
-        </Grid>
+          </Grid2>
+        </Grid2>
       </Paper>
 
       {/* Application Information Section */}
