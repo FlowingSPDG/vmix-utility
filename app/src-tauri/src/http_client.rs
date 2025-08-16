@@ -58,6 +58,7 @@ impl VmixClientWrapper {
                     key: input.key,
                     number: input.number.to_string(),
                     title: input.title.clone(),
+                    short_title: Some(input.short_title),
                     input_type: Some(input.input_type),
                     state: Some(match input.state {
                         vmix_rs::models::State::Running => "Running".to_string(),

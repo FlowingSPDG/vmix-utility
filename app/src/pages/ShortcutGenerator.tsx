@@ -40,6 +40,7 @@ interface VmixInput {
   title: string;
   input_type: string;
   state: string;
+  short_title?: string;
 }
 
 interface QueryParam {
@@ -185,9 +186,9 @@ const VirtualizedInputItem = memo(({ index, style, data }: {
               whiteSpace: 'nowrap',
               fontSize: '0.875rem'
             }}
-            title={isSpecialInput ? input.title.replace(`${input.functionName} to `, '') : `Input ${input.number}: ${vmixInput?.title || 'Unknown'}`}
+            title={isSpecialInput ? input.title.replace(`${input.functionName} to `, '') : `Input ${input.number}: ${vmixInput?.short_title || vmixInput?.title || 'Unknown'}`}
           >
-            {isSpecialInput ? input.title.replace(`${input.functionName} to `, '') : `Input ${input.number}: ${vmixInput?.title || 'Unknown'}`}
+            {isSpecialInput ? input.title.replace(`${input.functionName} to `, '') : `Input ${input.number}: ${vmixInput?.short_title || vmixInput?.title || 'Unknown'}`}
           </Typography>
           <Typography 
             variant="caption" 
@@ -405,7 +406,7 @@ const ShortcutGenerator = () => {
       return {
         id: index + 1,
         number: input.number,
-        title: `${sharedFunctionName} to ${input.title}`,
+        title: `${sharedFunctionName} to ${input.short_title || input.title}`,
         functionName: sharedFunctionName,
         queryParams
       };

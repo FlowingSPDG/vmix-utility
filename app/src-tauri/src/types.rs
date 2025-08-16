@@ -26,6 +26,8 @@ pub struct Input {
     pub number: String,
     #[serde(rename = "@title")]
     pub title: String,
+    #[serde(rename = "@shortTitle")]
+    pub short_title: Option<String>,
     #[serde(rename = "@type")]
     pub input_type: Option<String>,
     #[serde(rename = "@state")]
@@ -37,6 +39,7 @@ pub struct VmixInput {
     pub key: String,
     pub number: i32,
     pub title: String,
+    pub short_title: Option<String>,
     pub input_type: String,
     pub state: String,
 }

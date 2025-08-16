@@ -188,7 +188,7 @@ const InputManager = () => {
     if (selectedConnection && globalInputs[selectedConnection]) {
       return globalInputs[selectedConnection].map((input) => ({
         number: input.number,
-        title: input.title,
+        title: input.short_title || input.title, // Use shortTitle if available, fallback to title
         type: input.input_type,
         key: input.key,
         state: input.state,
@@ -202,8 +202,10 @@ const InputManager = () => {
 
 
   const handleEditClick = useCallback((input: Input) => {
-    setEditingData(prev => ({ ...prev, [input.key]: input.title }));
-  }, []);
+    const originalInput = globalInputs[selectedConnection!]?.find(inp => inp.key === input.key);
+    const currentTitle = originalInput?.short_title || originalInput?.title || input.title;
+    setEditingData(prev => ({ ...prev, [input.key]: currentTitle }));
+  }, [globalInputs, selectedConnection]);
 
   const handleSaveClick = useCallback(async (key: string) => {
     const newTitle = editingData[key];

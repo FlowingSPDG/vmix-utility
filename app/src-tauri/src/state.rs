@@ -356,6 +356,7 @@ impl AppState {
                                     key: input.key,
                                     number: input.number.parse().unwrap_or(0),
                                     title: input.title,
+                                    short_title: input.short_title,
                                     input_type: input.input_type.unwrap_or_default(),
                                     state: input.state.unwrap_or_default(),
                                 }).collect::<Vec<_>>()
