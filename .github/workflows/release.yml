@@ -40,10 +40,8 @@ jobs:
         with:
           targets: ${{ matrix.platform == 'macos-latest' && 'aarch64-apple-darwin,x86_64-apple-darwin' || '' }}
 
-      - name: Rust cache
-        uses: swatinem/rust-cache@v2
-        with:
-          workspaces: './app/src-tauri -> target'
+      - name: Run sccache-cache
+        uses: mozilla-actions/sccache-action@v0.0.9
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -76,6 +74,8 @@ jobs:
           GIT_COMMIT_HASH: ${{ env.GIT_COMMIT_HASH }}
           GIT_BRANCH: ${{ env.GIT_BRANCH }}
           BUILD_TIMESTAMP: ${{ env.BUILD_TIMESTAMP }}
+          SCCACHE_GHA_ENABLED: "true"
+          RUSTC_WRAPPER: "sccache"
         with:
           projectPath: './app'
           tagName: v__VERSION__
