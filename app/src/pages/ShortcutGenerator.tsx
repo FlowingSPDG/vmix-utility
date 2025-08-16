@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo, useCallback, memo } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { openUrl } from '@tauri-apps/plugin-opener';
 import { useVMixStatus } from '../hooks/useVMixStatus';
+import { useConnectionSelection } from '../hooks/useConnectionSelection';
 import { FixedSizeList as List } from 'react-window';
 import ConnectionSelector from '../components/ConnectionSelector';
 import {
@@ -329,26 +330,10 @@ const ShortcutGenerator = () => {
       shortcut.Name.toLowerCase().includes(searchTerm.toLowerCase())
     );
   };
-  const { connections, inputs: vmixStatusInputs } = useVMixStatus();
+  const { inputs: vmixStatusInputs } = useVMixStatus();
   
-  // Connection state management
-  const [selectedConnection, setSelectedConnection] = useState<string>('');
-  const connectedConnections = useMemo(() => 
-    connections.filter(conn => conn.status === 'Connected'), 
-    [connections]
-  );
-  
-  // Auto-select first available connection when connections change
-  useEffect(() => {
-    if (connectedConnections.length > 0 && !selectedConnection) {
-      setSelectedConnection(connectedConnections[0].host);
-    } else if (connectedConnections.length === 0) {
-      setSelectedConnection('');
-    } else if (selectedConnection && !connectedConnections.find(conn => conn.host === selectedConnection)) {
-      // If current selection is no longer connected, switch to first available
-      setSelectedConnection(connectedConnections[0].host);
-    }
-  }, [connectedConnections, selectedConnection]);
+  // Use optimized connection selection hook
+  const { selectedConnection, setSelectedConnection } = useConnectionSelection();
   
   // Derive vmixInputs directly from context
   const vmixInputs = useMemo(() => {
@@ -367,28 +352,14 @@ const ShortcutGenerator = () => {
   const [lastClickedInputId, setLastClickedInputId] = useState<number | null>(null);
   
   
-  // Shortcut generation state
-  const [inputs, setInputs] = useState<Input[]>([]);
   
   // Shared function configuration
   const [sharedFunctionName, setSharedFunctionName] = useState('PreviewInput');
   const [sharedQueryParams, setSharedQueryParams] = useState<QueryParam[]>([]);
 
-  // Auto-select first available connection and update inputs when connections change
-  useEffect(() => {
-    // Connection selection handled automatically through useMemo
-  }, [connections]);
 
-  // vmixInputs are now derived from useMemo above, reset filter when connection changes
-  useEffect(() => {
-    setInputTypeFilter('All');
-    if (!selectedConnection) {
-      setInputs([]);
-    }
-  }, [selectedConnection]);
-
-  // Generate shortcuts separately using useMemo for performance
-  const generatedInputs = useMemo(() => {
+  // Generate shortcuts directly with useMemo for performance - no separate state needed
+  const inputs = useMemo(() => {
     const specialInputs: Input[] = [];
     
     // Add special input types at the beginning
@@ -443,12 +414,11 @@ const ShortcutGenerator = () => {
     return [...specialInputs, ...regularInputs];
   }, [vmixInputs, sharedFunctionName, sharedQueryParams]);
 
-  // Update inputs when generated inputs change
-  useEffect(() => {
-    setInputs(generatedInputs);
-  }, [generatedInputs]);
+  // Reset filter when connection changes - memoized to avoid re-renders  
+  const effectiveInputTypeFilter = useMemo(() => {
+    return selectedConnection ? inputTypeFilter : 'All';
+  }, [selectedConnection, inputTypeFilter]);
 
-  
   // State for new query param
   const [newParamKey, setNewParamKey] = useState('');
   const [newParamValue, setNewParamValue] = useState('');
@@ -508,14 +478,14 @@ const ShortcutGenerator = () => {
 
   // Filter regular inputs based on selected type
   const filteredRegularInputs = useMemo(() => {
-    if (inputTypeFilter === 'All') {
+    if (effectiveInputTypeFilter === 'All') {
       return regularInputs;
     }
     return regularInputs.filter(input => {
       const vmixInput = vmixInputs.find(vi => vi.number === input.number);
-      return vmixInput?.input_type === inputTypeFilter;
+      return vmixInput?.input_type === effectiveInputTypeFilter;
     });
-  }, [regularInputs, inputTypeFilter, vmixInputs]);
+  }, [regularInputs, effectiveInputTypeFilter, vmixInputs]);
   
   // Combine inputs based on collapse states
   const filteredInputs = useMemo(() => {
@@ -577,7 +547,7 @@ const ShortcutGenerator = () => {
               <InputLabel id="input-type-filter-label">Filter by Input Type</InputLabel>
               <Select
                 labelId="input-type-filter-label"
-                value={inputTypeFilter}
+                value={effectiveInputTypeFilter}
                 label="Filter by Input Type"
                 onChange={(e) => setInputTypeFilter(e.target.value as string)}
                 size="small"
@@ -789,7 +759,7 @@ const ShortcutGenerator = () => {
             height={600}
             itemCount={filteredInputs.length}
             itemSize={70}
-            itemData={{
+            itemData={useMemo(() => ({
               filteredInputs,
               vmixInputs,
               selectedConnection,
@@ -797,7 +767,7 @@ const ShortcutGenerator = () => {
               onTryCommand: tryCommand,
               lastClickedInputId,
               onInputClick: handleInputClick
-            }}
+            }), [filteredInputs, vmixInputs, selectedConnection, showToast, tryCommand, lastClickedInputId, handleInputClick])}
           >
             {VirtualizedInputItem}
           </List>

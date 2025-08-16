@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import React, { memo, useCallback, useMemo } from 'react';
 import {
   FormControl,
   InputLabel,
@@ -17,14 +17,14 @@ interface ConnectionSelectorProps {
   sx?: object;
 }
 
-const ConnectionSelector = ({
+const ConnectionSelector = memo<ConnectionSelectorProps>(({
   selectedConnection,
   onConnectionChange,
   label = 'vMix Connection',
   size = 'small',
   fullWidth = true,
   sx = {}
-}: ConnectionSelectorProps) => {
+}) => {
   const { connections } = useVMixStatus();
   
   const connectedConnections = useMemo(() => 
@@ -32,11 +32,15 @@ const ConnectionSelector = ({
     [connections]
   );
 
-  const handleChange = (event: SelectChangeEvent<string>) => {
+  const handleChange = useCallback((event: SelectChangeEvent<string>) => {
     onConnectionChange(event.target.value);
-  };
+  }, [onConnectionChange]);
 
-  const labelId = `connection-select-label-${Math.random().toString(36).substr(2, 9)}`;
+  // Use stable labelId based on component identity rather than random
+  const labelId = useMemo(() => 
+    `connection-select-label-${label.replace(/\s+/g, '-').toLowerCase()}`, 
+    [label]
+  );
 
   return (
     <FormControl fullWidth={fullWidth} sx={sx}>
@@ -59,6 +63,8 @@ const ConnectionSelector = ({
       </Select>
     </FormControl>
   );
-};
+});
+
+ConnectionSelector.displayName = 'ConnectionSelector';
 
 export default ConnectionSelector;

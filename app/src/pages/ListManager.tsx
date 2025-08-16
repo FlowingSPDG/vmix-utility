@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react';
+import { useConnectionSelection } from '../hooks/useConnectionSelection';
 import ConnectionSelector from '../components/ConnectionSelector';
 import {
   Box,
@@ -43,30 +44,14 @@ interface VmixVideoListInput {
 }
 
 const ListManager: React.FC = () => {
-  const { connections, videoLists: contextVideoLists, getVMixVideoLists } = useVMixStatus();
+  const { videoLists: contextVideoLists, getVMixVideoLists } = useVMixStatus();
   const [_error, _setError] = useState<string | null>(null);
   const [expandedLists, setExpandedLists] = useState<Set<string>>(new Set());
-  const [selectedConnection, setSelectedConnection] = useState<string>('');
   
-  // Get connected hosts
-  const connectedHosts = useMemo(() => 
-    connections.filter(conn => conn.status === 'Connected'), 
-    [connections]
-  );
+  // Use optimized connection selection hook
+  const { selectedConnection, setSelectedConnection, connectedConnections } = useConnectionSelection();
 
-  // Auto-select first available connection when connections change
-  useEffect(() => {
-    if (connectedHosts.length > 0 && !selectedConnection) {
-      setSelectedConnection(connectedHosts[0].host);
-    } else if (connectedHosts.length === 0) {
-      setSelectedConnection('');
-    } else if (selectedConnection && !connectedHosts.find(conn => conn.host === selectedConnection)) {
-      // If current selection is no longer connected, switch to first available
-      setSelectedConnection(connectedHosts[0].host);
-    }
-  }, [connectedHosts, selectedConnection]);
-
-  // Use selectedConnection instead of selectedHost
+  // Use selectedConnection instead of selectedHost for compatibility
   const selectedHost = selectedConnection;
   
   // Get video lists for selected host from context
@@ -76,14 +61,17 @@ const ListManager: React.FC = () => {
   );
 
   // Show loading if no connections or no data yet
-  const isLoading = connections.length === 0 || (selectedHost && !contextVideoLists[selectedHost]);
+  const isLoading = connectedConnections.length === 0 || (selectedHost && !contextVideoLists[selectedHost]);
 
-  // Auto-fetch VideoLists when selectedHost changes
-  useEffect(() => {
+  // Auto-fetch VideoLists when needed - memoized to avoid constant re-fetching
+  useMemo(() => {
     if (selectedHost && !contextVideoLists[selectedHost]) {
       console.log(`Auto-fetching VideoLists for host: ${selectedHost}`);
-      getVMixVideoLists(selectedHost).catch(error => {
-        console.error(`Failed to auto-fetch VideoLists for ${selectedHost}:`, error);
+      // Use Promise.resolve() to avoid blocking render
+      Promise.resolve().then(() => {
+        getVMixVideoLists(selectedHost).catch(error => {
+          console.error(`Failed to auto-fetch VideoLists for ${selectedHost}:`, error);
+        });
       });
     }
   }, [selectedHost, contextVideoLists, getVMixVideoLists]);
@@ -170,7 +158,7 @@ const ListManager: React.FC = () => {
     }
   };
 
-  if (connectedHosts.length === 0) {
+  if (connectedConnections.length === 0) {
     return (
       <Box>
         <Alert severity="info">

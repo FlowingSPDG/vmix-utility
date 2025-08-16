@@ -1,6 +1,7 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { useVMixStatus } from '../hooks/useVMixStatus';
+import { useConnectionSelection } from '../hooks/useConnectionSelection';
 import ConnectionSelector from '../components/ConnectionSelector';
 import {
   Box,
@@ -21,10 +22,9 @@ import {
 } from '@mui/material';
 
 const BlankGenerator = () => {
-  const { connections, getVMixInputs } = useVMixStatus();
+  const { getVMixInputs } = useVMixStatus();
   const [transparent, setTransparent] = useState(false);
   const [count, setCount] = useState(1);
-  const [selectedConnection, setSelectedConnection] = useState<string>('');
   const [showConfirmDialog, setShowConfirmDialog] = useState(false);
   const [generating, setGenerating] = useState(false);
   
@@ -33,22 +33,8 @@ const BlankGenerator = () => {
   const [toastMessage, setToastMessage] = useState('');
   const [toastSeverity, setToastSeverity] = useState<'success' | 'error'>('success');
 
-  const connectedConnections = useMemo(() => 
-    connections.filter(conn => conn.status === 'Connected'), 
-    [connections]
-  );
-  
-  // Auto-select first available connection when connections change
-  useEffect(() => {
-    if (connectedConnections.length > 0 && !selectedConnection) {
-      setSelectedConnection(connectedConnections[0].host);
-    } else if (connectedConnections.length === 0) {
-      setSelectedConnection('');
-    } else if (selectedConnection && !connectedConnections.find(conn => conn.host === selectedConnection)) {
-      // If current selection is no longer connected, switch to first available
-      setSelectedConnection(connectedConnections[0].host);
-    }
-  }, [connectedConnections, selectedConnection]);
+  // Use optimized connection selection hook
+  const { selectedConnection, setSelectedConnection, connectedConnections } = useConnectionSelection();
 
   const handleTransparentChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     setTransparent(event.target.checked);
@@ -185,7 +171,7 @@ const BlankGenerator = () => {
             Are you sure you want to generate {count} {transparent ? 'transparent' : 'black'} blank input{count !== 1 ? 's' : ''} in vMix?
             <br />
             <br />
-            <strong>Connection:</strong> {connections.find(c => c.id === selectedConnection)?.label}
+            <strong>Connection:</strong> {connectedConnections.find(c => c.host === selectedConnection)?.label}
             <br />
             <strong>Type:</strong> {transparent ? 'Transparent' : 'Black'} Colour
             <br />

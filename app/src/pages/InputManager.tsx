@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo, useCallback, memo } from 'react';
 import { useVMixStatus } from '../hooks/useVMixStatus';
+import { useConnectionSelection } from '../hooks/useConnectionSelection';
 import ConnectionSelector from '../components/ConnectionSelector';
 import {
   Box,
@@ -179,24 +180,8 @@ const InputManager = () => {
   // Loading states for operations
   const [operationLoading, setOperationLoading] = useState<{[key: string]: boolean}>({});
 
-  // Connection state management
-  const [selectedConnection, setSelectedConnection] = useState<string>('');
-  const connectedConnections = useMemo(() => 
-    connections.filter(conn => conn.status === 'Connected'), 
-    [connections]
-  );
-  
-  // Auto-select first available connection when connections change
-  useEffect(() => {
-    if (connectedConnections.length > 0 && !selectedConnection) {
-      setSelectedConnection(connectedConnections[0].host);
-    } else if (connectedConnections.length === 0) {
-      setSelectedConnection('');
-    } else if (selectedConnection && !connectedConnections.find(conn => conn.host === selectedConnection)) {
-      // If current selection is no longer connected, switch to first available
-      setSelectedConnection(connectedConnections[0].host);
-    }
-  }, [connectedConnections, selectedConnection]);
+  // Use optimized connection selection hook
+  const { selectedConnection, setSelectedConnection } = useConnectionSelection();
   
   // Derive inputs directly from globalInputs without useState
   const inputs = useMemo(() => {
@@ -330,17 +315,14 @@ const InputManager = () => {
     });
   }, [inputs, order, orderBy]);
 
+  // Optimize row data generation with stable references
   const inputRowData = useMemo(() => {
-    return sortedInputs.map(input => {
-      const isEditing = input.key in editingData;
-      const isLoading = operationLoading[input.key] || false;
-      return {
-        input,
-        isEditing,
-        editingValue: editingData[input.key] ?? input.title,
-        isLoading
-      };
-    });
+    return sortedInputs.map(input => ({
+      input,
+      isEditing: input.key in editingData,
+      editingValue: editingData[input.key] ?? input.title,
+      isLoading: operationLoading[input.key] || false
+    }));
   }, [sortedInputs, editingData, operationLoading]);
 
   // Show skeleton loading state while loading
