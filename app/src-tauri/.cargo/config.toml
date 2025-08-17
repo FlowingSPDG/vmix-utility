@@ -1,0 +1,6 @@
+[build]
+# 並列ビルドの設定
+jobs = 8
+
+# キャッシュディレクトリの設定
+target-dir = "target" 

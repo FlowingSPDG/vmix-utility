@@ -15,6 +15,9 @@ interface AppSettings {
   auto_reconnect: boolean;
   auto_reconnect_interval: number;
   max_log_file_size: number;
+  // New UI settings for ListManager
+  ui_density?: 'compact' | 'comfortable' | 'spacious';
+  show_file_paths?: boolean;
 }
 
 interface ThemeContextType {

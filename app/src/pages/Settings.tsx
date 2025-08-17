@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import type { SelectChangeEvent } from '@mui/material';
 import { useTheme, type ThemeMode } from '../hooks/useTheme';
+import { useUISettings } from '../hooks/useUISettings.tsx';
 import {
   Box,
   Typography,
@@ -24,6 +25,7 @@ import FolderOpenIcon from '@mui/icons-material/FolderOpen';
 
 const Settings = () => {
   const { themeMode, setThemeMode, resolvedTheme } = useTheme();
+  const { refreshSettings } = useUISettings();
   const [settings, setSettings] = useState({
     defaultVMixIP: '127.0.0.1',
     defaultVMixPort: 8088,
@@ -31,6 +33,8 @@ const Settings = () => {
     logLevel: 'info',
     saveLogsToFile: false,
     logFilePath: '',
+    // New UI settings
+    uiDensity: 'comfortable' as 'compact' | 'comfortable' | 'spacious',
   });
 
   const [appInfo, setAppInfo] = useState<{
@@ -96,6 +100,7 @@ const Settings = () => {
           default_vmix_ip: settings.defaultVMixIP,
           default_vmix_port: settings.defaultVMixPort,
           theme: settings.theme,
+          ui_density: settings.uiDensity,
         }
       });
 
@@ -104,6 +109,9 @@ const Settings = () => {
         level: settings.logLevel,
         saveToFile: settings.saveLogsToFile
       });
+      
+      // Refresh UI settings in context
+      await refreshSettings();
       
       showToast('Settings saved successfully!', 'success');
     } catch (error) {
@@ -125,6 +133,7 @@ const Settings = () => {
             defaultVMixIP: settings_data.default_vmix_ip ?? '127.0.0.1',
             defaultVMixPort: settings_data.default_vmix_port ?? 8088,
             theme: settings_data.theme ?? 'Auto',
+            uiDensity: settings_data.ui_density ?? 'comfortable',
           }));
         }
 
@@ -240,6 +249,34 @@ const Settings = () => {
                 </IconButton>
               </Box>
             )}
+          </Grid2>
+
+          <Grid2 size={12}>
+            <Typography variant="h6" gutterBottom>
+              UI Settings
+            </Typography>
+            <Divider sx={{ mb: 2 }} />
+            
+            <Box sx={{ mb: 2 }}>
+              <FormControl fullWidth margin="normal">
+                <InputLabel id="ui-density-select-label">UI Density</InputLabel>
+                <Select
+                  labelId="ui-density-select-label"
+                  name="uiDensity"
+                  value={settings.uiDensity}
+                  onChange={handleSelectChange}
+                  label="UI Density"
+                >
+                  <MenuItem value="compact">Compact</MenuItem>
+                  <MenuItem value="comfortable">Comfortable</MenuItem>
+                  <MenuItem value="spacious">Spacious</MenuItem>
+                </Select>
+              </FormControl>
+              <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+                Controls the spacing and size of UI elements in list views
+              </Typography>
+            </Box>
+
           </Grid2>
 
           <Grid2 size={12}>

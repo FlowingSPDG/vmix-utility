@@ -7,6 +7,7 @@ import ListManager from './pages/ListManager';
 import SingleVideoList from './pages/SingleVideoList';
 import { VMixStatusProvider } from './hooks/useVMixStatus';
 import { ThemeProvider as CustomThemeProvider, useTheme } from './hooks/useTheme';
+import { UISettingsProvider } from './hooks/useUISettings.tsx';
 import "./App.css";
 
 function AppContent() {
@@ -83,9 +84,11 @@ function AppContent() {
   return (
     <ThemeProvider theme={theme}>
       <CssBaseline />
-      <VMixStatusProvider>
-        {renderContent()}
-      </VMixStatusProvider>
+      <UISettingsProvider>
+        <VMixStatusProvider>
+          {renderContent()}
+        </VMixStatusProvider>
+      </UISettingsProvider>
     </ThemeProvider>
   );
 }

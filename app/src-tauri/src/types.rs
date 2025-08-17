@@ -26,6 +26,8 @@ pub struct Input {
     pub number: String,
     #[serde(rename = "@title")]
     pub title: String,
+    #[serde(rename = "@shortTitle")]
+    pub short_title: Option<String>,
     #[serde(rename = "@type")]
     pub input_type: Option<String>,
     #[serde(rename = "@state")]
@@ -37,6 +39,7 @@ pub struct VmixInput {
     pub key: String,
     pub number: i32,
     pub title: String,
+    pub short_title: Option<String>,
     pub input_type: String,
     pub state: String,
 }
@@ -100,11 +103,59 @@ impl Default for ThemeMode {
     }
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub enum UIDensity {
+    #[serde(rename = "compact")]
+    Compact,
+    #[serde(rename = "comfortable")]
+    Comfortable,
+    #[serde(rename = "spacious")]
+    Spacious,
+}
+
+impl Default for UIDensity {
+    fn default() -> Self {
+        UIDensity::Comfortable
+    }
+}
+
+impl From<String> for UIDensity {
+    fn from(s: String) -> Self {
+        match s.as_str() {
+            "compact" => UIDensity::Compact,
+            "spacious" => UIDensity::Spacious,
+            _ => UIDensity::Comfortable, // Default fallback for migration
+        }
+    }
+}
+
+impl From<&str> for UIDensity {
+    fn from(s: &str) -> Self {
+        match s {
+            "compact" => UIDensity::Compact,
+            "spacious" => UIDensity::Spacious,
+            _ => UIDensity::Comfortable, // Default fallback for migration
+        }
+    }
+}
+
+impl ToString for UIDensity {
+    fn to_string(&self) -> String {
+        match self {
+            UIDensity::Compact => "compact".to_string(),
+            UIDensity::Comfortable => "comfortable".to_string(),
+            UIDensity::Spacious => "spacious".to_string(),
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AppSettings {
     pub default_vmix_ip: String,
     pub default_vmix_port: u16,
     pub theme: ThemeMode,
+    #[serde(default)]
+    pub ui_density: UIDensity,
 }
 
 impl Default for AppSettings {
@@ -113,6 +164,7 @@ impl Default for AppSettings {
             default_vmix_ip: "127.0.0.1".to_string(),
             default_vmix_port: 8088,
             theme: ThemeMode::Auto,
+            ui_density: UIDensity::default(),
         }
     }
 }
