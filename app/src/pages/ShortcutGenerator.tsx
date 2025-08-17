@@ -1,5 +1,4 @@
 import { useState, useMemo, useCallback, memo } from 'react';
-import { invoke } from '@tauri-apps/api/core';
 import { openUrl } from '@tauri-apps/plugin-opener';
 import { useVMixStatus } from '../hooks/useVMixStatus';
 import { useConnectionSelection } from '../hooks/useConnectionSelection';
@@ -339,6 +338,7 @@ const ShortcutGenerator = () => {
   
   // Use optimized connection selection hook
   const { selectedConnection, setSelectedConnection } = useConnectionSelection();
+  const { sendVMixFunction } = useVMixStatus();
   
   // Derive vmixInputs directly from context
   const vmixInputs = useMemo(() => {
@@ -518,11 +518,7 @@ const ShortcutGenerator = () => {
 
     try {
       const params = generateParamsObject(input);
-      await invoke('send_vmix_function', {
-        host: selectedConnection,
-        functionName: input.functionName,
-        params: Object.keys(params).length > 0 ? params : null
-      });
+      await sendVMixFunction(selectedConnection, input.functionName, Object.keys(params).length > 0 ? params : undefined);
       showToast(`Command sent successfully: ${input.functionName}`, 'success');
     } catch (error) {
       console.error('Failed to send command:', error);

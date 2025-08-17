@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useVMixStatus } from '../hooks/useVMixStatus';
-import { invoke } from '@tauri-apps/api/core';
+import { settingsService } from '../services/settingsService';
 import { 
   Box, 
   Typography, 
@@ -199,11 +199,8 @@ const Connections: React.FC = () => {
     if (!editingConnection || !newLabel.trim()) return;
     
     try {
-      // Use Tauri invoke to update label on backend (auto-saves config)
-      await invoke('update_connection_label', {
-        host: editingConnection.host,
-        label: newLabel.trim()
-      });
+      // Use settings service to update label on backend (auto-saves config)
+      await settingsService.updateConnectionLabel(editingConnection.host, newLabel);
       
       // Always close the modal after successful label update
       setLabelDialogOpen(false);

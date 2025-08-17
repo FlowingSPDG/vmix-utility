@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react';
-import { invoke } from '@tauri-apps/api/core';
 import type { SelectChangeEvent } from '@mui/material';
 import { useTheme, type ThemeMode } from '../hooks/useTheme';
 import { useUISettings } from '../hooks/useUISettings.tsx';
+import { settingsService } from '../services/settingsService';
 import {
   Box,
   Typography,
@@ -71,7 +71,7 @@ const Settings = () => {
 
   const handleOpenLogsDirectory = async () => {
     try {
-      await invoke('open_logs_directory');
+      await settingsService.openLogsDirectory();
       showToast('Logs directory opened', 'info');
     } catch (error) {
       console.error('Failed to open logs directory:', error);
@@ -95,20 +95,15 @@ const Settings = () => {
       }
       
       // Save app settings to backend
-      await invoke('save_app_settings', {
-        settings: {
-          default_vmix_ip: settings.defaultVMixIP,
-          default_vmix_port: settings.defaultVMixPort,
-          theme: settings.theme,
-          ui_density: settings.uiDensity,
-        }
+      await settingsService.saveAppSettings({
+        defaultVMixIP: settings.defaultVMixIP,
+        defaultVMixPort: settings.defaultVMixPort,
+        theme: settings.theme,
+        uiDensity: settings.uiDensity,
       });
 
       // Save logging configuration to backend
-      await invoke('set_logging_config', {
-        level: settings.logLevel,
-        saveToFile: settings.saveLogsToFile
-      });
+      await settingsService.setLoggingConfig(settings.logLevel, settings.saveLogsToFile);
       
       // Refresh UI settings in context
       await refreshSettings();
@@ -125,30 +120,29 @@ const Settings = () => {
     const loadConfigurations = async () => {
       try {
         // Load app settings
-        const appSettings = await invoke('get_app_settings');
+        const appSettings = await settingsService.getAppSettings();
         if (appSettings) {
-          const settings_data = appSettings as any;
           setSettings(prev => ({
             ...prev,
-            defaultVMixIP: settings_data.default_vmix_ip ?? '127.0.0.1',
-            defaultVMixPort: settings_data.default_vmix_port ?? 8088,
-            theme: settings_data.theme ?? 'Auto',
-            uiDensity: settings_data.ui_density ?? 'comfortable',
+            defaultVMixIP: appSettings.default_vmix_ip ?? '127.0.0.1',
+            defaultVMixPort: appSettings.default_vmix_port ?? 8088,
+            theme: appSettings.theme as ThemeMode ?? 'Auto',
+            uiDensity: appSettings.ui_density as any ?? 'comfortable',
           }));
         }
 
         // Load logging configuration
-        const loggingConfig = await invoke('get_logging_config');
+        const loggingConfig = await settingsService.getLoggingConfig();
         if (loggingConfig) {
           setSettings(prev => ({
             ...prev,
-            logLevel: (loggingConfig as any).level || 'info',
-            saveLogsToFile: (loggingConfig as any).save_to_file || false
+            logLevel: loggingConfig.level || 'info',
+            saveLogsToFile: loggingConfig.save_to_file || false
           }));
         }
 
         // Load application information
-        const appInfo = await invoke('get_app_info');
+        const appInfo = await settingsService.getAppInfo();
         if (appInfo) {
           setAppInfo(appInfo as any);
         }

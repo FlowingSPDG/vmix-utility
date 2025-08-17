@@ -18,7 +18,6 @@ import {
   TableSortLabel,
   IconButton,
   Alert,
-  Chip,
   Dialog,
   DialogTitle,
   DialogContent,
@@ -146,20 +145,29 @@ const OptimizedInputRow = memo(({
         {input.type}
       </TableCell>
       <TableCell sx={{ p: spacing.tableCellPadding, width: '100px' }}>
-        <Chip 
-          label={input.state}
-          color={input.state === 'Running' ? 'success' : input.state === 'Paused' ? 'warning' : 'default'}
-          variant="outlined"
-          size={spacing.chipSize}
-          sx={{ 
-            fontSize: spacing.fontSize,
-            height: spacing.itemHeight,
-            '& .MuiChip-label': {
-              px: spacing.spacing,
-              py: 0,
-            }
-          }}
-        />
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+          <Box 
+            sx={{
+              width: 8,
+              height: 8,
+              borderRadius: '50%',
+              bgcolor: input.state === 'Running' ? 'success.main' : 
+                       input.state === 'Paused' ? 'warning.main' : 'grey.400',
+              flexShrink: 0,
+            }}
+          />
+          <Typography 
+            variant="body2"
+            sx={{ 
+              fontSize: spacing.fontSize,
+              fontWeight: input.state === 'Running' ? 600 : 400,
+              color: input.state === 'Running' ? 'success.main' : 
+                     input.state === 'Paused' ? 'warning.main' : 'text.secondary',
+            }}
+          >
+            {input.state}
+          </Typography>
+        </Box>
       </TableCell>
       <TableCell sx={{ p: spacing.tableCellPadding, width: '140px' }}>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: spacing.spacing }}>

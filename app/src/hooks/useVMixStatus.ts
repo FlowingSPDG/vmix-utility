@@ -1,52 +1,8 @@
 import React, { useState, useEffect, createContext, useContext, useCallback } from 'react';
 import { listen } from '@tauri-apps/api/event';
-import { invoke } from '@tauri-apps/api/core';
+import { vmixService, VMIX_EVENTS, type VmixConnection, type VmixInput, type VmixVideoListInput, type AutoRefreshConfig } from '../services/vmixService';
 
-interface VmixConnection {
-  host: string;
-  port: number;
-  label: string;
-  status: string;
-  active_input: number;
-  preview_input: number;
-  connection_type: 'Http' | 'Tcp';
-  version: string;
-  edition: string;
-}
-
-interface AutoRefreshConfig {
-  enabled: boolean;
-  duration: number;
-}
-
-interface VmixInput {
-  key: string;
-  number: number;
-  title: string;
-  short_title?: string;
-  input_type: string;
-  state: string;
-}
-
-interface VmixVideoListItem {
-  key: string;
-  number: number;
-  title: string;
-  input_type: string;
-  state: string;
-  selected: boolean;
-  enabled: boolean;
-}
-
-interface VmixVideoListInput {
-  key: string;
-  number: number;
-  title: string;
-  input_type: string;
-  state: string;
-  items: VmixVideoListItem[];
-  selected_index: number | null;
-}
+// Types are now imported from vmixService
 
 interface VMixStatusContextType {
   connections: VmixConnection[];
@@ -61,6 +17,8 @@ interface VMixStatusContextType {
   sendVMixFunction: (host: string, functionName: string, params?: Record<string, string>) => Promise<void>;
   getVMixInputs: (host: string) => Promise<VmixInput[]>;
   getVMixVideoLists: (host: string) => Promise<VmixVideoListInput[]>;
+  selectVideoListItem: (host: string, inputNumber: number, itemIndex: number) => Promise<void>;
+  openVideoListWindow: (host: string, listKey: string, listTitle: string) => Promise<void>;
   refreshConnections: () => Promise<void>;
 }
 
@@ -78,7 +36,7 @@ export const VMixStatusProvider = ({ children }: { children: React.ReactNode }) 
 
   const fetchInputsForHost = useCallback(async (host: string) => {
     try {
-      const vmixInputs = await invoke<VmixInput[]>('get_vmix_inputs', { host });
+      const vmixInputs = await vmixService.getVMixInputs(host);
       setInputs(prev => ({
         ...prev,
         [host]: vmixInputs
@@ -90,7 +48,7 @@ export const VMixStatusProvider = ({ children }: { children: React.ReactNode }) 
 
   const fetchVideoListsForHost = useCallback(async (host: string) => {
     try {
-      const vmixVideoLists = await invoke<VmixVideoListInput[]>('get_vmix_video_lists', { host });
+      const vmixVideoLists = await vmixService.getVMixVideoLists(host);
       setVideoLists(prev => ({
         ...prev,
         [host]: vmixVideoLists
@@ -103,7 +61,7 @@ export const VMixStatusProvider = ({ children }: { children: React.ReactNode }) 
   const loadConnections = useCallback(async () => {
     try {
       setLoading(true);
-      const statuses = await invoke<VmixConnection[]>('get_vmix_statuses');
+      const statuses = await vmixService.getVMixStatuses();
       setConnections(statuses);
       
       // Fetch inputs and video lists for all connected hosts
@@ -122,7 +80,7 @@ export const VMixStatusProvider = ({ children }: { children: React.ReactNode }) 
 
   const loadAutoRefreshConfigs = useCallback(async () => {
     try {
-      const configs = await invoke<Record<string, AutoRefreshConfig>>('get_all_auto_refresh_configs');
+      const configs = await vmixService.getAllAutoRefreshConfigs();
       setAutoRefreshConfigs(configs);
     } catch (error) {
       console.error('Failed to load auto refresh configs:', error);
@@ -131,7 +89,7 @@ export const VMixStatusProvider = ({ children }: { children: React.ReactNode }) 
 
   // Listen for status updates from Tauri backend
   useEffect(() => {
-    const unlistenStatus = listen<VmixConnection>('vmix-status-updated', (event) => {
+    const unlistenStatus = listen<VmixConnection>(VMIX_EVENTS.STATUS_UPDATED, (event) => {
       console.log('vmix-status-updated event received:', event);
       const updatedConnection = event.payload;
       
@@ -184,7 +142,7 @@ export const VMixStatusProvider = ({ children }: { children: React.ReactNode }) 
 
   // Listen for connection removal events
   useEffect(() => {
-    const unlistenRemoval = listen<{host: string}>('vmix-connection-removed', (event) => {
+    const unlistenRemoval = listen<{host: string}>(VMIX_EVENTS.CONNECTION_REMOVED, (event) => {
       const { host } = event.payload;
       console.log('vmix-connection-removed event received for host:', host);
       
@@ -224,7 +182,7 @@ export const VMixStatusProvider = ({ children }: { children: React.ReactNode }) 
 
   // Listen for inputs updates (especially for TCP connections)
   useEffect(() => {
-    const unlistenInputs = listen<{host: string, inputs: VmixInput[]}>('vmix-inputs-updated', (event) => {
+    const unlistenInputs = listen<{host: string, inputs: VmixInput[]}>(VMIX_EVENTS.INPUTS_UPDATED, (event) => {
       const { host, inputs: updatedInputs } = event.payload;
       
       setInputs(prev => ({
@@ -243,7 +201,7 @@ export const VMixStatusProvider = ({ children }: { children: React.ReactNode }) 
   // Listen for video lists updates
   useEffect(() => {
     console.log('Setting up vmix-videolists-updated listener');
-    const unlistenVideoLists = listen<{host: string, videoLists: VmixVideoListInput[]}>('vmix-videolists-updated', (event) => {
+    const unlistenVideoLists = listen<{host: string, videoLists: VmixVideoListInput[]}>(VMIX_EVENTS.VIDEOLISTS_UPDATED, (event) => {
       const { host, videoLists: updatedVideoLists } = event.payload;
       
       console.log(`VideoLists update event received for ${host}:`, updatedVideoLists);
@@ -304,11 +262,7 @@ export const VMixStatusProvider = ({ children }: { children: React.ReactNode }) 
   const connectVMix = async (host: string, port?: number, connectionType: 'Http' | 'Tcp' = 'Http'): Promise<VmixConnection> => {
     try {
       console.log('Connecting to vMix:', host, port, connectionType);
-      const connection = await invoke<VmixConnection>('connect_vmix', { 
-        host, 
-        port, 
-        connectionType 
-      });
+      const connection = await vmixService.connectVMix(host, port, connectionType);
       setConnections(prev => {
         const existingIndex = prev.findIndex(conn => conn.host === host);
         if (existingIndex >= 0) {
@@ -362,7 +316,7 @@ export const VMixStatusProvider = ({ children }: { children: React.ReactNode }) 
       });
       
       // Call backend to actually disconnect
-      await invoke('disconnect_vmix', { host });
+      await vmixService.disconnectVMix(host);
       
       // Backend will also emit vmix-connection-removed event, but UI is already updated
       
@@ -384,7 +338,7 @@ export const VMixStatusProvider = ({ children }: { children: React.ReactNode }) 
 
   const setAutoRefreshConfig = async (host: string, config: AutoRefreshConfig): Promise<void> => {
     try {
-      await invoke('set_auto_refresh_config', { host, config });
+      await vmixService.setAutoRefreshConfig(host, config);
       setAutoRefreshConfigs(prev => ({
         ...prev,
         [host]: config
@@ -397,7 +351,7 @@ export const VMixStatusProvider = ({ children }: { children: React.ReactNode }) 
 
   const getAutoRefreshConfig = async (host: string): Promise<AutoRefreshConfig> => {
     try {
-      return await invoke<AutoRefreshConfig>('get_auto_refresh_config', { host });
+      return await vmixService.getAutoRefreshConfig(host);
     } catch (error) {
       console.error('Failed to get auto refresh config:', error);
       throw error;
@@ -406,7 +360,7 @@ export const VMixStatusProvider = ({ children }: { children: React.ReactNode }) 
 
   const sendVMixFunction = async (host: string, functionName: string, params?: Record<string, string>): Promise<void> => {
     try {
-      await invoke('send_vmix_function', { host, functionName, params });
+      await vmixService.sendVMixFunction(host, functionName, params);
     } catch (error) {
       console.error('Failed to send vMix function:', error);
       throw error;
@@ -415,7 +369,7 @@ export const VMixStatusProvider = ({ children }: { children: React.ReactNode }) 
 
   const getVMixInputs = async (host: string): Promise<VmixInput[]> => {
     try {
-      const vmixInputs = await invoke<VmixInput[]>('get_vmix_inputs', { host });
+      const vmixInputs = await vmixService.getVMixInputs(host);
       setInputs(prev => ({
         ...prev,
         [host]: vmixInputs
@@ -429,7 +383,7 @@ export const VMixStatusProvider = ({ children }: { children: React.ReactNode }) 
 
   const getVMixVideoLists = async (host: string): Promise<VmixVideoListInput[]> => {
     try {
-      const vmixVideoLists = await invoke<VmixVideoListInput[]>('get_vmix_video_lists', { host });
+      const vmixVideoLists = await vmixService.getVMixVideoLists(host);
       setVideoLists(prev => ({
         ...prev,
         [host]: vmixVideoLists
@@ -437,6 +391,30 @@ export const VMixStatusProvider = ({ children }: { children: React.ReactNode }) 
       return vmixVideoLists;
     } catch (error) {
       console.error('Failed to get vMix video lists:', error);
+      throw error;
+    }
+  };
+
+  const selectVideoListItem = async (host: string, inputNumber: number, itemIndex: number): Promise<void> => {
+    try {
+      await vmixService.selectVideoListItem(host, inputNumber, itemIndex);
+      
+      // Wait a moment for vMix to update, then refresh
+      await new Promise(resolve => setTimeout(resolve, 200));
+      await getVMixVideoLists(host);
+    } catch (error) {
+      console.error('Failed to select video list item:', error);
+      throw error;
+    }
+  };
+
+  const openVideoListWindow = async (host: string, listKey: string, listTitle: string): Promise<void> => {
+    try {
+      console.log(`🚀 Opening VideoList popup - Host: ${host}, Key: ${listKey}, Title: ${listTitle}`);
+      await vmixService.openVideoListWindow(host, listKey, listTitle);
+      console.log(`✅ VideoList popup window request sent successfully`);
+    } catch (error) {
+      console.error('❌ Failed to open VideoList popup window:', error);
       throw error;
     }
   };
@@ -454,6 +432,8 @@ export const VMixStatusProvider = ({ children }: { children: React.ReactNode }) 
     sendVMixFunction,
     getVMixInputs,
     getVMixVideoLists,
+    selectVideoListItem,
+    openVideoListWindow,
     refreshConnections: loadConnections,
   };
 
