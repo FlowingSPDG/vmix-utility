@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   Box,
   Card,
@@ -7,29 +7,12 @@ import {
   Alert,
   CircularProgress
 } from '@mui/material';
-import { listen } from '@tauri-apps/api/event';
 import CompactVideoListView from '../components/CompactVideoListView';
 import { diagnosticsService } from '../services/diagnosticsService';
+import { useVMixStatus } from '../hooks/useVMixStatus';
+import { vmixService } from '../services/vmixService';
 
-interface VmixVideoListItem {
-  key: string;
-  number: number;
-  title: string;
-  input_type: string;
-  state: string;
-  selected: boolean;
-  enabled: boolean;
-}
-
-interface VmixVideoListInput {
-  key: string;
-  number: number;
-  title: string;
-  input_type: string;
-  state: string;
-  items: VmixVideoListItem[];
-  selected_index: number | null;
-}
+// Using VmixVideoListItem and VmixVideoListInput from useVMixStatus hook
 
 interface SingleVideoListProps {
   host?: string;
@@ -37,9 +20,10 @@ interface SingleVideoListProps {
 }
 
 const SingleVideoList: React.FC<SingleVideoListProps> = ({ host, listKey }) => {
-  const [videoList, setVideoList] = useState<VmixVideoListInput | null>(null);
-  const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  
+  // Use global VMixStatusProvider instead of direct API calls
+  const { videoLists: contextVideoLists, connections } = useVMixStatus();
 
   // Get URL parameters if not provided as props
   const urlParams = new URLSearchParams(window.location.search);
@@ -47,6 +31,23 @@ const SingleVideoList: React.FC<SingleVideoListProps> = ({ host, listKey }) => {
   const targetListKey = listKey || urlParams.get('listKey') || '';
   
   console.log('SingleVideoList initialized:', { targetHost, targetListKey, url: window.location.href });
+
+  // Get video list from global cache
+  const videoList = useMemo(() => {
+    const hostVideoLists = contextVideoLists[targetHost] || [];
+    return hostVideoLists.find(list => list.key === targetListKey) || null;
+  }, [contextVideoLists, targetHost, targetListKey]);
+
+  // Check if connection exists for this host
+  const connectionExists = useMemo(() => {
+    return connections.some(conn => conn.host === targetHost && conn.status === 'Connected');
+  }, [connections, targetHost]);
+
+  // Set loading state based on connection and data availability
+  const loading = useMemo(() => {
+    if (!connectionExists) return false; // Don't show loading if no connection
+    return !videoList && targetHost && targetListKey; // Loading if we expect data but don't have it
+  }, [connectionExists, videoList, targetHost, targetListKey]);
   
   // Development tools and debugging
   useEffect(() => {
@@ -83,88 +84,42 @@ const SingleVideoList: React.FC<SingleVideoListProps> = ({ host, listKey }) => {
     }
   }, [targetHost, targetListKey]);
 
-  useEffect(() => {
-    if (targetHost && targetListKey) {
-      fetchVideoList();
-    }
-  }, [targetHost, targetListKey]);
-
-  // Listen for VideoList updates from the backend
+  // Set error state based on data availability
   useEffect(() => {
     if (!targetHost || !targetListKey) {
-      console.log('⚠️ Skipping event listener setup - missing host or listKey');
+      setError('Missing required parameters: host and listKey');
       return;
     }
 
-    console.log(`🎧 Setting up VideoList update listener for ${targetHost}:${targetListKey}`);
-
-    const unlistenVideoListsUpdated = listen('vmix-videolists-updated', (event) => {
-      const payload = event.payload as any;
-      
-      if (payload.host === targetHost && payload.videoLists) {
-        const foundList = payload.videoLists.find((list: VmixVideoListInput) => list.key === targetListKey);
-        if (foundList) {
-          console.log(`✅ VideoList updated: ${targetHost}:${targetListKey}`);
-          setVideoList(foundList);
-        } else {
-          console.log(`⚠️ VideoList not found in update: ${targetListKey}`);
-        }
-      }
-    });
-
-    return () => {
-      console.log(`🧹 Cleaning up VideoList listener for ${targetHost}:${targetListKey}`);
-      unlistenVideoListsUpdated.then(fn => fn());
-    };
-  }, [targetHost, targetListKey]);
-
-  const fetchVideoList = async () => {
-    if (!targetHost) return;
-
-    setLoading(true);
-    setError(null);
-    
-    try {
-      // Import here to avoid circular dependency
-      const { invoke } = await import('@tauri-apps/api/core');
-      const lists = await invoke<VmixVideoListInput[]>('get_vmix_video_lists', {
-        host: targetHost
-      });
-      
-      const foundList = lists.find(list => list.key === targetListKey);
-      if (foundList) {
-        setVideoList(foundList);
-      } else {
-        setError(`VideoList with key "${targetListKey}" not found`);
-      }
-    } catch (err) {
-      setError(err as string);
-      console.error('Failed to fetch video list:', err);
-    } finally {
-      setLoading(false);
+    if (!connectionExists) {
+      setError(`No active connection found for host: ${targetHost}`);
+      return;
     }
-  };
 
+    if (!loading && !videoList) {
+      setError(`VideoList with key "${targetListKey}" not found`);
+      return;
+    }
+
+    // Clear error if we have valid data
+    if (videoList) {
+      setError(null);
+    }
+  }, [targetHost, targetListKey, connectionExists, loading, videoList]);
 
   const handleItemSelected = async (_listKey: string, itemIndex: number) => {
     if (!targetHost || !videoList) return;
     
     try {
-      // Import here to avoid circular dependency  
-      const { invoke } = await import('@tauri-apps/api/core');
-      await invoke('select_video_list_item', {
-        host: targetHost,
-        inputNumber: videoList.number,
-        itemIndex
-      });
+      await vmixService.selectVideoListItem(targetHost, videoList.number, itemIndex);
       
-      // Refresh the video list to show updated state
-      await fetchVideoList();
+      // No need to manually refresh - backend will emit vmix-videolists-updated event
+      // which will automatically update the global cache via VMixStatusProvider
     } catch (err) {
       console.error('Failed to select item:', err);
+      setError(`Failed to select item: ${err}`);
     }
   };
-
 
   if (!targetHost || !targetListKey) {
     return (
