@@ -61,6 +61,8 @@ interface VMixStatusContextType {
   sendVMixFunction: (host: string, functionName: string, params?: Record<string, string>) => Promise<void>;
   getVMixInputs: (host: string) => Promise<VmixInput[]>;
   getVMixVideoLists: (host: string) => Promise<VmixVideoListInput[]>;
+  selectVideoListItem: (host: string, inputNumber: number, itemIndex: number) => Promise<void>;
+  openVideoListWindow: (host: string, listKey: string, listTitle: string) => Promise<void>;
   refreshConnections: () => Promise<void>;
 }
 
@@ -441,6 +443,38 @@ export const VMixStatusProvider = ({ children }: { children: React.ReactNode }) 
     }
   };
 
+  const selectVideoListItem = async (host: string, inputNumber: number, itemIndex: number): Promise<void> => {
+    try {
+      await invoke('select_video_list_item', {
+        host,
+        inputNumber,
+        itemIndex
+      });
+      
+      // Wait a moment for vMix to update, then refresh
+      await new Promise(resolve => setTimeout(resolve, 200));
+      await getVMixVideoLists(host);
+    } catch (error) {
+      console.error('Failed to select video list item:', error);
+      throw error;
+    }
+  };
+
+  const openVideoListWindow = async (host: string, listKey: string, listTitle: string): Promise<void> => {
+    try {
+      console.log(`🚀 Opening VideoList popup - Host: ${host}, Key: ${listKey}, Title: ${listTitle}`);
+      await invoke('open_video_list_window', {
+        host,
+        listKey,
+        listTitle
+      });
+      console.log(`✅ VideoList popup window request sent successfully`);
+    } catch (error) {
+      console.error('❌ Failed to open VideoList popup window:', error);
+      throw error;
+    }
+  };
+
   const contextValue: VMixStatusContextType = {
     connections: connections.filter(conn => !optimisticallyRemovedHosts.has(conn.host)),
     autoRefreshConfigs,
@@ -454,6 +488,8 @@ export const VMixStatusProvider = ({ children }: { children: React.ReactNode }) 
     sendVMixFunction,
     getVMixInputs,
     getVMixVideoLists,
+    selectVideoListItem,
+    openVideoListWindow,
     refreshConnections: loadConnections,
   };
 

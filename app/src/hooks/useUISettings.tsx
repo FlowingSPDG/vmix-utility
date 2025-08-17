@@ -1,5 +1,5 @@
 import React, { useState, useEffect, createContext, useContext } from 'react';
-import { invoke } from '@tauri-apps/api/core';
+import { settingsService } from '../services/settingsService';
 
 export type UIDensity = 'compact' | 'comfortable' | 'spacious';
 
@@ -20,10 +20,9 @@ export const UISettingsProvider = ({ children }: { children: React.ReactNode }) 
   const loadUISettings = async () => {
     try {
       setIsLoading(true);
-      const appSettings = await invoke('get_app_settings');
+      const appSettings = await settingsService.getAppSettings();
       if (appSettings) {
-        const settings = appSettings as any;
-        setUiDensity(settings.ui_density ?? 'comfortable');
+        setUiDensity(appSettings.ui_density as UIDensity ?? 'comfortable');
       }
     } catch (error) {
       console.error('Failed to load UI settings:', error);

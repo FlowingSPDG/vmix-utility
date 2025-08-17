@@ -7,9 +7,9 @@ import {
   Alert,
   CircularProgress
 } from '@mui/material';
-import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import CompactVideoListView from '../components/CompactVideoListView';
+import { diagnosticsService } from '../services/diagnosticsService';
 
 interface VmixVideoListItem {
   key: string;
@@ -64,9 +64,7 @@ const SingleVideoList: React.FC<SingleVideoListProps> = ({ host, listKey }) => {
       // Add global diagnostic function for testing
       (window as any).debugVideoListWindows = async () => {
         try {
-          const diagnostic = await invoke('get_video_list_windows_diagnostic');
-          console.log('🔧 VideoList Windows Diagnostic:', diagnostic);
-          return diagnostic;
+          return await diagnosticsService.getVideoListWindowsDiagnostic();
         } catch (error) {
           console.error('❌ Failed to get diagnostic info:', error);
         }
@@ -127,6 +125,8 @@ const SingleVideoList: React.FC<SingleVideoListProps> = ({ host, listKey }) => {
     setError(null);
     
     try {
+      // Import here to avoid circular dependency
+      const { invoke } = await import('@tauri-apps/api/core');
       const lists = await invoke<VmixVideoListInput[]>('get_vmix_video_lists', {
         host: targetHost
       });
@@ -146,10 +146,12 @@ const SingleVideoList: React.FC<SingleVideoListProps> = ({ host, listKey }) => {
   };
 
 
-  const handleItemSelected = async (listKey: string, itemIndex: number) => {
+  const handleItemSelected = async (_listKey: string, itemIndex: number) => {
     if (!targetHost || !videoList) return;
     
     try {
+      // Import here to avoid circular dependency  
+      const { invoke } = await import('@tauri-apps/api/core');
       await invoke('select_video_list_item', {
         host: targetHost,
         inputNumber: videoList.number,

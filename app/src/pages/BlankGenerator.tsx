@@ -1,5 +1,4 @@
 import { useState } from 'react';
-import { invoke } from '@tauri-apps/api/core';
 import { useVMixStatus } from '../hooks/useVMixStatus';
 import { useConnectionSelection } from '../hooks/useConnectionSelection';
 import ConnectionSelector from '../components/ConnectionSelector';
@@ -22,7 +21,7 @@ import {
 } from '@mui/material';
 
 const BlankGenerator = () => {
-  const { getVMixInputs } = useVMixStatus();
+  const { getVMixInputs, sendVMixFunction } = useVMixStatus();
   const [transparent, setTransparent] = useState(false);
   const [count, setCount] = useState(1);
   const [showConfirmDialog, setShowConfirmDialog] = useState(false);
@@ -66,11 +65,7 @@ const BlankGenerator = () => {
           ? { Value: 'Colour|Transparent'}
           : { Value: 'Colour|Black'};
         
-        await invoke('send_vmix_function', {
-          host: selectedConnection,
-          functionName: 'AddInput',
-          params: params
-        });
+        await sendVMixFunction(selectedConnection, 'AddInput', params);
       }
 
       // Refresh inputs to get latest XML data

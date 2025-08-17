@@ -48,7 +48,7 @@ const CompactVideoListView: React.FC<CompactVideoListViewProps> = ({
   onItemSelected,
   onPopout,
   showPathsToggle = false,
-  uiDensity = 'standard',
+  uiDensity = 'standard' as UIDensity,
   initialExpandedLists = new Set(),
 }) => {
   const [expandedLists, setExpandedLists] = useState<Set<string>>(initialExpandedLists);

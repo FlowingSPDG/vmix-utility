@@ -9,7 +9,6 @@ import {
   Alert,
   Skeleton,
 } from '@mui/material';
-import { invoke } from '@tauri-apps/api/core';
 import { useVMixStatus } from '../hooks/useVMixStatus';
 import { useUISettings, getDensitySpacing } from '../hooks/useUISettings.tsx';
 
@@ -34,9 +33,9 @@ interface VmixVideoListInput {
 }
 
 const ListManager: React.FC = () => {
-  const { videoLists: contextVideoLists, getVMixVideoLists } = useVMixStatus();
+  const { videoLists: contextVideoLists, getVMixVideoLists, selectVideoListItem, openVideoListWindow } = useVMixStatus();
   const [_error, _setError] = useState<string | null>(null);
-  const [expandedLists, setExpandedLists] = useState<Set<string>>(new Set());
+  const [expandedLists] = useState<Set<string>>(new Set());
   
   // Use optimized connection selection hook
   const { selectedConnection, setSelectedConnection, connectedConnections } = useConnectionSelection();
@@ -76,13 +75,7 @@ const ListManager: React.FC = () => {
     if (!selectedHost) return;
     
     try {
-      console.log(`🚀 Opening VideoList popup - Host: ${selectedHost}, Key: ${videoList.key}, Title: ${videoList.title}`);
-      await invoke('open_video_list_window', {
-        host: selectedHost,
-        listKey: videoList.key,
-        listTitle: videoList.title
-      });
-      console.log(`✅ VideoList popup window request sent successfully`);
+      await openVideoListWindow(selectedHost, videoList.key, videoList.title);
     } catch (err) {
       console.error('❌ Failed to open VideoList popup window:', err);
       // You could add a toast notification here in the future
@@ -101,16 +94,7 @@ const ListManager: React.FC = () => {
       
       console.log('Selecting item:', itemIndex, 'for list:', listKey);
       
-      await invoke('select_video_list_item', {
-        host: selectedHost,
-        inputNumber: videoList.number,
-        itemIndex
-      });
-      
-      // Wait a moment for vMix to update, then refresh
-      await new Promise(resolve => setTimeout(resolve, 200));
-      console.log('Refreshing VideoLists after selection...');
-      await getVMixVideoLists(selectedHost);
+      await selectVideoListItem(selectedHost, videoList.number, itemIndex);
     } catch (err) {
       console.error('Failed to select item:', err);
     }
