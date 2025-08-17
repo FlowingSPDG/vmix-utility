@@ -3,6 +3,7 @@ import { invoke } from '@tauri-apps/api/core';
 import { openUrl } from '@tauri-apps/plugin-opener';
 import { useVMixStatus } from '../hooks/useVMixStatus';
 import { useConnectionSelection } from '../hooks/useConnectionSelection';
+import { useUISettings, getDensitySpacing } from '../hooks/useUISettings.tsx';
 import { FixedSizeList as List } from 'react-window';
 import ConnectionSelector from '../components/ConnectionSelector';
 import {
@@ -321,6 +322,9 @@ const VirtualizedInputItem = memo(({ index, style, data }: {
 VirtualizedInputItem.displayName = 'VirtualizedInputItem';
 
 const ShortcutGenerator = () => {
+  const { uiDensity } = useUISettings();
+  const spacing = getDensitySpacing(uiDensity);
+  
   // Process shortcuts data for autocomplete
   const shortcutsData: ShortcutData[] = Array.isArray(shortcuts) ? shortcuts : [];
   
@@ -532,10 +536,10 @@ const ShortcutGenerator = () => {
   }, []);
 
   return (
-    <Box sx={{ p: 3 }}>
-      <Paper sx={{ p: 2, mb: 2 }}>
+    <Box sx={{ p: spacing.cardPadding * 3 }}>
+      <Paper sx={{ p: spacing.cardPadding, mb: spacing.spacing * 2 }}>
         {/* Connection and Filter Row */}
-        <Box sx={{ display: 'flex', gap: 2, alignItems: 'flex-start', flexWrap: 'wrap', mb: 2 }}>
+        <Box sx={{ display: 'flex', gap: spacing.spacing * 2, alignItems: 'flex-start', flexWrap: 'wrap', mb: spacing.spacing * 2 }}>
           <ConnectionSelector
             selectedConnection={selectedConnection}
             onConnectionChange={setSelectedConnection}
@@ -551,7 +555,7 @@ const ShortcutGenerator = () => {
                 value={effectiveInputTypeFilter}
                 label="Filter by Input Type"
                 onChange={(e) => setInputTypeFilter(e.target.value as string)}
-                size="small"
+                size={spacing.iconSize}
               >
                 {availableInputTypes.map((type) => (
                   <MenuItem key={type} value={type}>
@@ -574,13 +578,13 @@ const ShortcutGenerator = () => {
       </Paper>
 
       {/* Shared Function Configuration */}
-      <Paper sx={{ p: 1.5, mb: 2 }}>
-        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1 }}>
-          <Typography variant="h6" sx={{ fontSize: '1.1rem' }}>
+      <Paper sx={{ p: spacing.cardPadding * 1.5, mb: spacing.spacing * 2 }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: spacing.spacing }}>
+          <Typography variant={spacing.headerVariant} sx={{ fontSize: spacing.fontSize === '0.7rem' ? '0.9rem' : '1.1rem' }}>
             Function Configuration
           </Typography>
           <IconButton
-            size="small"
+            size={spacing.iconSize}
             onClick={() => setFunctionConfigExpanded(!functionConfigExpanded)}
           >
             {functionConfigExpanded ? <ExpandLessIcon /> : <ExpandMoreIcon />}
@@ -588,8 +592,8 @@ const ShortcutGenerator = () => {
         </Box>
         
         <Collapse in={functionConfigExpanded}>
-        {/* Function Name with Autocomplete */}
-        <Box sx={{ mb: 1.5, display: 'flex', alignItems: 'flex-start', gap: 2, flexWrap: 'wrap' }}>
+        {/* Function Name with Autocomplete and Quick Functions in same row */}
+        <Box sx={{ mb: spacing.spacing * 1.5, display: 'flex', alignItems: 'flex-start', gap: spacing.spacing * 2, width: '100%' }}>
           <Autocomplete
             freeSolo
             options={shortcutsData}
@@ -610,8 +614,8 @@ const ShortcutGenerator = () => {
               <TextField
                 {...params}
                 label="Function Name"
-                size="small"
-                sx={{ width: '250px' }}
+                size={spacing.iconSize}
+                sx={{ width: '250px', flexShrink: 0 }}
                 helperText="Search functions or enter custom"
               />
             )}
@@ -638,22 +642,41 @@ const ShortcutGenerator = () => {
             }}
           />
           
-          {/* Quick Function Selection - moved to same row */}
-          <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5, alignItems: 'center' }}>
-            <Typography variant="caption" color="text.secondary" sx={{ mr: 1 }}>
+          {/* Quick Function Selection - same row with overflow handling */}
+          <Box sx={{ 
+            display: 'flex', 
+            alignItems: 'center', 
+            gap: spacing.spacing * 0.5, 
+            flex: 1, 
+            minWidth: 0,
+            overflow: 'hidden'
+          }}>
+            <Typography variant="caption" color="text.secondary" sx={{ flexShrink: 0 }}>
               Quick:
             </Typography>
-            {['PreviewInput','Cut', 'Fade', 'Merge', 'Stinger1', 'Stinger2', 'OverlayInput1', 'OverlayInput2', 'OverlayInput3', 'OverlayInput4'].map((funcName) => (
-              <Chip
-                key={funcName}
-                label={funcName}
-                size="small"
-                onClick={() => setSharedFunctionName(funcName)}
-                color={sharedFunctionName === funcName ? 'primary' : 'default'}
-                variant={sharedFunctionName === funcName ? 'filled' : 'outlined'}
-                sx={{ fontSize: '0.7rem', height: '24px' }}
-              />
-            ))}
+            <Box sx={{ 
+              display: 'flex', 
+              gap: spacing.spacing * 0.5, 
+              overflow: 'hidden',
+              '&::-webkit-scrollbar': { display: 'none' },
+              scrollbarWidth: 'none'
+            }}>
+              {['PreviewInput','Cut', 'Fade', 'Merge', 'Stinger1', 'Stinger2', 'OverlayInput1', 'OverlayInput2', 'OverlayInput3', 'OverlayInput4'].map((funcName) => (
+                <Chip
+                  key={funcName}
+                  label={funcName}
+                  size={spacing.chipSize}
+                  onClick={() => setSharedFunctionName(funcName)}
+                  color={sharedFunctionName === funcName ? 'primary' : 'default'}
+                  variant={sharedFunctionName === funcName ? 'filled' : 'outlined'}
+                  sx={{ 
+                    fontSize: spacing.fontSize, 
+                    height: spacing.itemHeight,
+                    flexShrink: 0
+                  }}
+                />
+              ))}
+            </Box>
           </Box>
         </Box>
         
@@ -662,8 +685,8 @@ const ShortcutGenerator = () => {
           const selectedShortcut = shortcutsData.find(s => s.Name === sharedFunctionName);
           if (selectedShortcut) {
             return (
-              <Box sx={{ mb: 1.5, p: 0.75, bgcolor: 'action.hover', borderRadius: 1 }}>
-                <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.75rem' }}>
+              <Box sx={{ mb: spacing.spacing * 1.5, p: spacing.listItemPadding * 3, bgcolor: 'action.hover', borderRadius: 1 }}>
+                <Typography variant="caption" color="text.secondary" sx={{ fontSize: spacing.fontSize }}>
                   {selectedShortcut.Description}
                   {selectedShortcut.Parameters && ` | Params: ${selectedShortcut.Parameters.join(', ')}`}
                 </Typography>
@@ -675,62 +698,66 @@ const ShortcutGenerator = () => {
         
         {/* Shared Query Parameters - more compact */}
         {sharedQueryParams.length > 0 && (
-          <Box sx={{ mb: 1 }}>
+          <Box sx={{ mb: spacing.spacing }}>
             <Typography variant="caption" color="text.secondary" gutterBottom>
               Additional Parameters:
             </Typography>
             {sharedQueryParams.map((param) => (
-              <Box key={param.id} sx={{ display: 'flex', alignItems: 'center', mb: 0.5, gap: 1 }}>
+              <Box key={param.id} sx={{ display: 'flex', alignItems: 'center', mb: spacing.spacing * 0.5, gap: spacing.spacing }}>
                 <TextField
                   label="Key"
                   value={param.key}
                   onChange={(e) => handleSharedParamChange(param.id, e.target.value, param.value)}
-                  size="small"
+                  size={spacing.iconSize}
                   sx={{ width: '120px' }}
                 />
                 <TextField
                   label="Value"
                   value={param.value}
                   onChange={(e) => handleSharedParamChange(param.id, param.key, e.target.value)}
-                  size="small"
+                  size={spacing.iconSize}
                   sx={{ width: '120px' }}
                 />
                 <IconButton
-                  size="small"
+                  size={spacing.iconSize}
                   color="error"
                   onClick={() => handleDeleteSharedParam(param.id)}
-                  sx={{ p: 0.5 }}
+                  sx={{ p: spacing.listItemPadding }}
                 >
-                  <DeleteIcon fontSize="small" />
+                  <DeleteIcon fontSize={spacing.iconSize} />
                 </IconButton>
               </Box>
             ))}
           </Box>
         )}
         
-        {/* Add New Parameter - inline */}
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
+        {/* Add New Parameter - inline with proper sizing */}
+        <Box sx={{ display: 'flex', alignItems: 'flex-end', gap: spacing.spacing * 2, flexWrap: 'wrap' }}>
           <TextField
             label="Add Key"
             value={newParamKey}
             onChange={(e) => setNewParamKey(e.target.value)}
-            size="small"
+            size={spacing.iconSize}
             sx={{ width: '120px' }}
           />
           <TextField
             label="Add Value"
             value={newParamValue}
             onChange={(e) => setNewParamValue(e.target.value)}
-            size="small"
+            size={spacing.iconSize}
             sx={{ width: '120px' }}
           />
           <Button
             variant="outlined"
-            size="small"
-            startIcon={<AddIcon />}
+            size={spacing.buttonSize}
+            startIcon={<AddIcon fontSize={spacing.iconSize} />}
             onClick={handleAddSharedParam}
             disabled={!newParamKey || !newParamValue}
-            sx={{ minWidth: 'auto', px: 1 }}
+            sx={{ 
+              height: '40px', // Match TextField height
+              px: spacing.spacing * 2,
+              minWidth: '80px'
+            }}
           >
             Add
           </Button>
@@ -741,12 +768,12 @@ const ShortcutGenerator = () => {
       <Paper sx={{ width: '100%' }}>
         {/* Special Inputs Header */}
         {specialInputs.length > 0 && (
-          <Box sx={{ p: 1.5, display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid', borderColor: 'divider' }}>
+          <Box sx={{ p: spacing.cardPadding * 1.5, display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid', borderColor: 'divider' }}>
             <Typography variant="subtitle2" color="text.secondary">
               Special Inputs (None/Preview/Program/Dynamic) ({specialInputs.length})
             </Typography>
             <IconButton
-              size="small"
+              size={spacing.iconSize}
               onClick={() => setSpecialInputsExpanded(!specialInputsExpanded)}
             >
               {specialInputsExpanded ? <ExpandLessIcon /> : <ExpandMoreIcon />}
@@ -759,7 +786,7 @@ const ShortcutGenerator = () => {
             width={"100%"}
             height={600}
             itemCount={filteredInputs.length}
-            itemSize={70}
+            itemSize={spacing.itemHeight + 46}
             itemData={useMemo(() => ({
               filteredInputs,
               vmixInputs,
@@ -767,8 +794,9 @@ const ShortcutGenerator = () => {
               showToast,
               onTryCommand: tryCommand,
               lastClickedInputId,
-              onInputClick: handleInputClick
-            }), [filteredInputs, vmixInputs, selectedConnection, showToast, tryCommand, lastClickedInputId, handleInputClick])}
+              onInputClick: handleInputClick,
+              spacing
+            }), [filteredInputs, vmixInputs, selectedConnection, showToast, tryCommand, lastClickedInputId, handleInputClick, spacing])}
           >
             {VirtualizedInputItem}
           </List>

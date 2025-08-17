@@ -1,6 +1,7 @@
 import { useState, useMemo, useCallback, memo } from 'react';
 import { useVMixStatus } from '../hooks/useVMixStatus';
 import { useConnectionSelection } from '../hooks/useConnectionSelection';
+import { useUISettings, getDensitySpacing } from '../hooks/useUISettings.tsx';
 import ConnectionSelector from '../components/ConnectionSelector';
 import {
   Box,
@@ -85,75 +86,104 @@ const OptimizedInputRow = memo(({
   onTitleChange,
   onCopyKey
 }: InputRowProps) => {
+  const { uiDensity } = useUISettings();
+  const spacing = getDensitySpacing(uiDensity);
   return (
-    <TableRow key={input.key}>
-      <TableCell>{input.number}</TableCell>
-      <TableCell>
+    <TableRow key={input.key} sx={{ height: spacing.itemHeight + 8 }}>
+      <TableCell sx={{ p: spacing.tableCellPadding, fontSize: spacing.fontSize, width: '60px' }}>
+        {input.number}
+      </TableCell>
+      <TableCell sx={{ p: spacing.tableCellPadding, minWidth: '160px' }}>
         <Box sx={boxSx}>
           <TextField
             value={editingValue}
             onChange={isEditing ? (e) => onTitleChange(input.key, e.target.value) : undefined}
-            size="small"
+            size={spacing.buttonSize}
             disabled={!isEditing || isLoading}
             variant={isEditing ? "outlined" : "standard"}
-            sx={textFieldSx}
+            sx={{
+              ...textFieldSx,
+              flex: 1,
+              '& .MuiInputBase-input': {
+                fontSize: spacing.fontSize,
+                py: spacing.listItemPadding,
+              }
+            }}
           />
           {isEditing ? (
             <>
               <IconButton
-                size="small"
+                size={spacing.iconSize}
                 color="primary"
                 onClick={() => onSaveClick(input.key)}
                 disabled={isLoading}
+                sx={{ p: spacing.listItemPadding }}
               >
-                <SaveIcon fontSize="small" />
+                <SaveIcon fontSize={spacing.iconSize} />
               </IconButton>
               <IconButton
-                size="small"
+                size={spacing.iconSize}
                 onClick={() => onCancelClick(input.key)}
                 disabled={isLoading}
+                sx={{ p: spacing.listItemPadding }}
               >
-                <CancelIcon fontSize="small" />
+                <CancelIcon fontSize={spacing.iconSize} />
               </IconButton>
             </>
           ) : (
             <IconButton
-              size="small"
+              size={spacing.iconSize}
               onClick={() => onEditClick(input)}
               disabled={isLoading}
+              sx={{ p: spacing.listItemPadding }}
             >
-              <EditIcon fontSize="small" />
+              <EditIcon fontSize={spacing.iconSize} />
             </IconButton>
           )}
         </Box>
       </TableCell>
-      <TableCell>{input.type}</TableCell>
-      <TableCell>
+      <TableCell sx={{ p: spacing.tableCellPadding, fontSize: spacing.fontSize, width: '120px' }}>
+        {input.type}
+      </TableCell>
+      <TableCell sx={{ p: spacing.tableCellPadding, width: '100px' }}>
         <Chip 
           label={input.state}
           color={input.state === 'Running' ? 'success' : input.state === 'Paused' ? 'warning' : 'default'}
           variant="outlined"
-          size="small"
+          size={spacing.chipSize}
+          sx={{ 
+            fontSize: spacing.fontSize,
+            height: spacing.itemHeight,
+            '& .MuiChip-label': {
+              px: spacing.spacing,
+              py: 0,
+            }
+          }}
         />
       </TableCell>
-      <TableCell>
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-          <Typography variant="caption" color="textSecondary">
+      <TableCell sx={{ p: spacing.tableCellPadding, width: '140px' }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: spacing.spacing }}>
+          <Typography variant="caption" color="textSecondary" sx={{ fontSize: spacing.fontSize }}>
             {input.key.substring(0, 8)}...
           </Typography>
-          <IconButton size="small" onClick={() => onCopyKey(input.key)}>
-            <ContentCopyIcon fontSize="small" />
+          <IconButton 
+            size={spacing.iconSize} 
+            onClick={() => onCopyKey(input.key)}
+            sx={{ p: spacing.listItemPadding }}
+          >
+            <ContentCopyIcon fontSize={spacing.iconSize} />
           </IconButton>
         </Box>
       </TableCell>
-      <TableCell>
+      <TableCell sx={{ p: spacing.tableCellPadding, width: '80px' }}>
         <IconButton
           color="error"
-          size="small"
+          size={spacing.iconSize}
           onClick={() => onDeleteClick(input.key)}
           disabled={isLoading}
+          sx={{ p: spacing.listItemPadding }}
         >
-          <DeleteIcon />
+          <DeleteIcon fontSize={spacing.iconSize} />
         </IconButton>
       </TableCell>
     </TableRow>
@@ -165,6 +195,8 @@ const InputRow = OptimizedInputRow;
 
 const InputManager = () => {
   const { connections, inputs: globalInputs, sendVMixFunction, getVMixInputs } = useVMixStatus();
+  const { uiDensity } = useUISettings();
+  const spacing = getDensitySpacing(uiDensity);
   const [error, setError] = useState<string | null>(null);
   const [toast, setToast] = useState<ToastState>({ open: false, message: '', severity: 'info' });
   
@@ -366,18 +398,18 @@ const InputManager = () => {
   }
 
   return (
-    <Box sx={{ p: 3 }}>
+    <Box sx={{ p: spacing.cardPadding * 2 }}>
 
-      <Paper sx={{ p: 2, mb: 3 }}>
+      <Paper sx={{ p: spacing.cardPadding, mb: spacing.spacing * 2 }}>
         <ConnectionSelector
           selectedConnection={selectedConnection}
           onConnectionChange={setSelectedConnection}
           label="vMix Connection"
-          sx={{ mb: 2 }}
+          sx={{ mb: spacing.spacing }}
         />
 
         {error && (
-          <Alert severity="error" sx={{ mb: 2 }} onClose={() => setError(null)}>
+          <Alert severity="error" sx={{ mb: spacing.spacing }} onClose={() => setError(null)}>
             {error}
           </Alert>
         )}
@@ -388,16 +420,16 @@ const InputManager = () => {
         <Table>
           <TableHead>
             <TableRow>
-              <TableCell>
+              <TableCell sx={{ width: '60px', minWidth: '60px' }}>
                 <TableSortLabel
                   active={orderBy === 'number'}
                   direction={orderBy === 'number' ? order : 'asc'}
                   onClick={() => handleRequestSort('number')}
                 >
-                  Number
+                  #
                 </TableSortLabel>
               </TableCell>
-              <TableCell>
+              <TableCell sx={{ minWidth: '160px' }}>
                 <TableSortLabel
                   active={orderBy === 'title'}
                   direction={orderBy === 'title' ? order : 'asc'}
@@ -406,7 +438,7 @@ const InputManager = () => {
                   Title
                 </TableSortLabel>
               </TableCell>
-              <TableCell>
+              <TableCell sx={{ width: '120px', minWidth: '120px' }}>
                 <TableSortLabel
                   active={orderBy === 'type'}
                   direction={orderBy === 'type' ? order : 'asc'}
@@ -415,9 +447,9 @@ const InputManager = () => {
                   Type
                 </TableSortLabel>
               </TableCell>
-              <TableCell>State</TableCell>
-              <TableCell>Key</TableCell>
-              <TableCell>Actions</TableCell>
+              <TableCell sx={{ width: '100px', minWidth: '100px' }}>State</TableCell>
+              <TableCell sx={{ width: '140px', minWidth: '140px' }}>Key</TableCell>
+              <TableCell sx={{ width: '80px', minWidth: '80px' }}>Actions</TableCell>
             </TableRow>
           </TableHead>
           <TableBody>

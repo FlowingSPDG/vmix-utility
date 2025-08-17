@@ -4,24 +4,22 @@ import ConnectionSelector from '../components/ConnectionSelector';
 import {
   Box,
   Card,
-  CardContent,
   Typography,
-  List,
-  ListItem,
-  ListItemText,
-  ListItemSecondaryAction,
-  Chip,
   Alert,
   Skeleton,
   IconButton,
-  Tooltip,
-  Collapse
+  Collapse,
+  Switch,
+  FormControlLabel,
 } from '@mui/material';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import ExpandLessIcon from '@mui/icons-material/ExpandLess';
 import OpenInNewIcon from '@mui/icons-material/OpenInNew';
+import VisibilityIcon from '@mui/icons-material/Visibility';
+import VisibilityOffIcon from '@mui/icons-material/VisibilityOff';
 import { invoke } from '@tauri-apps/api/core';
 import { useVMixStatus } from '../hooks/useVMixStatus';
+import { useUISettings, getDensitySpacing } from '../hooks/useUISettings.tsx';
 
 interface VmixVideoListItem {
   key: string;
@@ -50,6 +48,13 @@ const ListManager: React.FC = () => {
   
   // Use optimized connection selection hook
   const { selectedConnection, setSelectedConnection, connectedConnections } = useConnectionSelection();
+  
+  // Use UI settings hook
+  const { uiDensity } = useUISettings();
+  const spacing = getDensitySpacing(uiDensity);
+  
+  // Local state for file paths visibility (temporary, not saved)
+  const [showFullPaths, setShowFullPaths] = useState(false);
 
   // Use selectedConnection instead of selectedHost for compatibility
   const selectedHost = selectedConnection;
@@ -149,18 +154,6 @@ const ListManager: React.FC = () => {
   };
 
 
-  const getStateChipColor = (state: string) => {
-    switch (state.toLowerCase()) {
-      case 'running':
-        return 'success';
-      case 'paused':
-        return 'warning';
-      case 'completed':
-        return 'info';
-      default:
-        return 'default';
-    }
-  };
 
   if (connectedConnections.length === 0) {
     return (
@@ -174,11 +167,29 @@ const ListManager: React.FC = () => {
 
   return (
     <Box>
-      <Box display="flex" justifyContent="flex-end" alignItems="center" mb={2}>
+      {/* Top header with show full paths toggle */}
+      <Box display="flex" justifyContent="space-between" alignItems="center" mb={1}>
+        <Typography variant={spacing.headerVariant} sx={{ fontWeight: 'medium' }}>
+          List Manager
+        </Typography>
+        <FormControlLabel
+          control={
+            <Switch
+              checked={showFullPaths}
+              onChange={(e) => setShowFullPaths(e.target.checked)}
+              size="small"
+              icon={<VisibilityOffIcon fontSize="small" />}
+              checkedIcon={<VisibilityIcon fontSize="small" />}
+            />
+          }
+          label="Show full paths"
+          labelPlacement="start"
+          sx={{ ml: 0, mr: 0 }}
+        />
       </Box>
 
-      <Card sx={{ mb: 3, p: 2 }}>
-        <Typography variant="h6" gutterBottom>
+      <Card sx={{ mb: spacing.spacing * 2, p: spacing.cardPadding }}>
+        <Typography variant={spacing.headerVariant} gutterBottom>
           Connection Settings
         </Typography>
         <ConnectionSelector
@@ -209,176 +220,132 @@ const ListManager: React.FC = () => {
           {videoLists.map((videoList) => {
             const isExpanded = expandedLists.has(videoList.key);
             return (
-              <Card key={generateListKey(videoList)} sx={{ mb: 2 }}>
-                <CardContent sx={{ pb: isExpanded ? 2 : 1 }}>
-                  <Box 
-                    display="flex" 
-                    justifyContent="space-between" 
-                    alignItems="center" 
-                    mb={isExpanded ? 2 : 0}
-                    sx={{
-                      cursor: 'pointer',
-                      '&:hover': {
-                        bgcolor: 'action.hover',
-                      },
-                      p: 1,
-                      borderRadius: 1,
-                      transition: 'background-color 0.2s',
-                    }}
-                    onClick={() => toggleListExpansion(videoList.key)}
-                  >
+              <Box key={generateListKey(videoList)} sx={{ mb: spacing.spacing }}>
+                {/* vMix-style compact header */}
+                <Box 
+                  sx={{
+                    bgcolor: 'grey.800',
+                    color: 'white',
+                    p: spacing.cardPadding,
+                    borderRadius: '4px 4px 0 0',
+                    border: '1px solid',
+                    borderColor: 'grey.700',
+                    cursor: 'pointer',
+                    '&:hover': {
+                      bgcolor: 'grey.700',
+                    },
+                  }}
+                  onClick={() => toggleListExpansion(videoList.key)}
+                >
+                  <Box display="flex" justifyContent="space-between" alignItems="center">
                     <Box display="flex" alignItems="center" gap={1}>
+                      <Typography variant="body2" sx={{ fontSize: '0.8rem', fontWeight: 'medium' }}>
+                        {videoList.title}
+                      </Typography>
+                      <Box 
+                        sx={{ 
+                          width: 8, 
+                          height: 8, 
+                          bgcolor: videoList.state === 'running' ? 'success.main' : 'grey.400', 
+                          borderRadius: '50%' 
+                        }} 
+                      />
+                    </Box>
+                    <Box display="flex" alignItems="center" gap={1}>
+                      <Typography variant="caption" sx={{ fontSize: '0.7rem', color: 'grey.300' }}>
+                        {videoList.items.length} items
+                      </Typography>
                       <IconButton
                         size="small"
-                        sx={{ 
-                          bgcolor: isExpanded ? 'primary.main' : 'grey.300',
-                          color: isExpanded ? 'white' : 'grey.700',
-                          '&:hover': {
-                            bgcolor: isExpanded ? 'primary.dark' : 'grey.400',
-                          },
-                        }}
+                        onClick={() => handleVideoListPopout(videoList)}
+                        sx={{ color: 'white', p: 0.25 }}
                       >
-                        {isExpanded ? <ExpandLessIcon /> : <ExpandMoreIcon />}
+                        <OpenInNewIcon fontSize="small" />
                       </IconButton>
-                      <Box>
-                        <Typography variant="h6" sx={{ fontWeight: 'bold' }}>
-                          Input {videoList.number}: {videoList.title}
-                        </Typography>
-                        <Typography variant="body2" color="text.secondary">
-                          {videoList.items.length} items
-                          {videoList.selected_index !== null && ` • Selected: ${videoList.selected_index}`}
-                        </Typography>
-                      </Box>
-                    </Box>
-                    <Box display="flex" gap={1} alignItems="center" onClick={(e) => e.stopPropagation()}>
-                      <Tooltip title="Open VideoList in new window">
-                        <IconButton
-                          size="small"
-                          onClick={() => handleVideoListPopout(videoList)}
-                          sx={{
-                            bgcolor: 'secondary.main',
-                            color: 'white',
-                            '&:hover': {
-                              bgcolor: 'secondary.dark',
-                            },
-                            mr: 1
-                          }}
-                        >
-                          <OpenInNewIcon fontSize="small" />
-                        </IconButton>
-                      </Tooltip>
-                      <Chip
-                        label={videoList.state}
-                        color={getStateChipColor(videoList.state)}
-                        size="small"
-                        sx={{ fontWeight: 'bold' }}
-                      />
-                      <Chip
-                        label={videoList.input_type}
-                        variant="outlined"
-                        size="small"
-                      />
+                      <IconButton size="small" sx={{ color: 'white', p: 0.25 }}>
+                        {isExpanded ? <ExpandLessIcon fontSize="small" /> : <ExpandMoreIcon fontSize="small" />}
+                      </IconButton>
                     </Box>
                   </Box>
+                </Box>
 
-                  <Collapse in={isExpanded}>
+                {/* vMix-style compact list */}
+                <Collapse in={isExpanded}>
+                  <Box 
+                    sx={{
+                      bgcolor: 'grey.900',
+                      border: '1px solid',
+                      borderColor: 'grey.700',
+                      borderTop: 'none',
+                      borderRadius: '0 0 4px 4px',
+                      maxHeight: '300px',
+                      overflow: 'auto',
+                    }}
+                  >
                     {videoList.items.length === 0 ? (
-                      <Typography color="text.secondary">
+                      <Typography color="text.secondary" sx={{ p: 2, textAlign: 'center' }}>
                         No items in this video list
                       </Typography>
                     ) : (
-                      <Box key={`items-${generateListKey(videoList)}`}>
-                        <Typography variant="subtitle2" gutterBottom>
-                          VideoList Items:
-                        </Typography>
-                        <List dense>
-                          {videoList.items.map((item, index) => {
-                            const itemKey = generateItemKey(item, index);
-                            console.log('Rendering ListItem:', { itemKey, selected: item.selected, enabled: item.enabled, title: item.title });
-                            return (
-                              <ListItem 
-                                key={itemKey} 
-                                divider
-                                component="div"
+                      videoList.items.map((item, index) => {
+                        const itemKey = generateItemKey(item, index);
+                        const displayName = showFullPaths ? item.title : getFileName(item.title);
+                        
+                        return (
+                          <Box
+                            key={itemKey}
+                            sx={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'space-between',
+                              height: spacing.itemHeight,
+                              px: 1,
+                              py: 0.25,
+                              bgcolor: item.selected ? 'primary.dark' : 'transparent',
+                              borderBottom: '1px solid',
+                              borderColor: 'grey.800',
+                              cursor: 'pointer',
+                              '&:hover': {
+                                bgcolor: item.selected ? 'primary.dark' : 'grey.800',
+                              },
+                              '&:last-child': {
+                                borderBottom: 'none',
+                              },
+                            }}
+                            onClick={() => item.enabled && handleItemSelected(videoList.key, index)}
+                          >
+                            {/* Status indicator (green square like vMix) */}
+                            <Box display="flex" alignItems="center" gap={1} sx={{ flex: 1, minWidth: 0 }}>
+                              <Box 
                                 sx={{
-                                  pl: 1,
-                                  pr: 1,
+                                  width: 12,
+                                  height: 12,
+                                  bgcolor: item.enabled ? 'success.main' : 'grey.600',
+                                  borderRadius: '2px',
+                                  flexShrink: 0,
+                                }}
+                              />
+                              <Typography 
+                                variant="body2"
+                                sx={{ 
+                                  fontSize: spacing.fontSize,
+                                  fontWeight: item.selected ? 'bold' : 'normal',
+                                  color: item.selected ? 'white' : 'text.primary',
+                                  overflow: 'hidden',
+                                  textOverflow: 'ellipsis',
+                                  whiteSpace: 'nowrap',
                                 }}
                               >
-                              <ListItemText
-                                primary={
-                                  <Box display="flex" alignItems="center" gap={1} key={`text-${itemKey}`}>
-                                    <Typography 
-                                      key={`title-${itemKey}-${item.selected ? 'bold' : 'normal'}`}
-                                      variant="body2" 
-                                      fontWeight={item.selected ? 'bold' : 'normal'}
-                                    >
-                                      {getFileName(item.title)}
-                                    </Typography>
-                                    {item.selected && (
-                                      <Chip
-                                        key={`selected-chip-${itemKey}`}
-                                        label="Selected"
-                                        color="primary"
-                                        size="small"
-                                        sx={{ height: 20, fontSize: '0.7rem' }}
-                                      />
-                                    )}
-                                    <Chip
-                                      key={`enabled-chip-${itemKey}-${item.enabled ? 'en' : 'dis'}`}
-                                      label={item.enabled ? "Enabled" : "Disabled"}
-                                      color={item.enabled ? "success" : "default"}
-                                      size="small"
-                                      sx={{ height: 20, fontSize: '0.7rem' }}
-                                    />
-                                  </Box>
-                                }
-                                secondary={
-                                  <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.7rem' }}>
-                                    {item.title}
-                                  </Typography>
-                                }
-                              />
-                              <ListItemSecondaryAction>
-                                <Box display="flex" gap={1} alignItems="center">
-                                  <Tooltip title={item.enabled ? "Select this item" : "Item is disabled"}>
-                                    <span key={`button-span-${itemKey}`}>
-                                      <IconButton
-                                        key={`button-${itemKey}-${item.selected ? 'sel' : 'unsel'}-${item.enabled ? 'en' : 'dis'}`}
-                                        size="small"
-                                        onClick={() => item.enabled && handleItemSelected(videoList.key, index)}
-                                        disabled={!item.enabled}
-                                        sx={{
-                                          bgcolor: item.selected ? 'primary.main' : 'grey.300',
-                                          color: item.selected ? 'white' : 'grey.700',
-                                          '&:hover': {
-                                            bgcolor: item.selected ? 'primary.dark' : 'grey.400',
-                                          },
-                                          '&:disabled': {
-                                            bgcolor: 'grey.100',
-                                            color: 'grey.400',
-                                          },
-                                          mr: 1,
-                                          width: 32,
-                                          height: 32,
-                                          borderRadius: '4px'
-                                        }}
-                                      >
-                                        {item.selected ? '✓' : '○'}
-                                      </IconButton>
-                                    </span>
-                                  </Tooltip>
-                                </Box>
-                              </ListItemSecondaryAction>
-                            </ListItem>
-                            );
-                          })}
-                        </List>
-                      </Box>
+                                {displayName}
+                              </Typography>
+                            </Box>
+                          </Box>
+                        );
+                      })
                     )}
-                  </Collapse>
-                </CardContent>
-              </Card>
+                  </Box>
+                </Collapse>
+              </Box>
             );
           })}
         </Box>
