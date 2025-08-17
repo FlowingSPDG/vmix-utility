@@ -9,7 +9,7 @@ import {
 } from '@mui/material';
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
-import VideoListView from '../components/VideoListView';
+import CompactVideoListView from '../components/CompactVideoListView';
 
 interface VmixVideoListItem {
   key: string;
@@ -146,7 +146,7 @@ const SingleVideoList: React.FC<SingleVideoListProps> = ({ host, listKey }) => {
   };
 
 
-  const handleItemSelected = async (itemIndex: number) => {
+  const handleItemSelected = async (listKey: string, itemIndex: number) => {
     if (!targetHost || !videoList) return;
     
     try {
@@ -212,9 +212,11 @@ const SingleVideoList: React.FC<SingleVideoListProps> = ({ host, listKey }) => {
       
       <Card>
         <CardContent>
-          <VideoListView 
-            videoList={videoList} 
+          <CompactVideoListView 
+            videoLists={[videoList]} 
             onItemSelected={handleItemSelected}
+            showPathsToggle={false}
+            initialExpandedLists={new Set([videoList.key])}
           />
         </CardContent>
       </Card>
