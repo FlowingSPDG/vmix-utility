@@ -38,7 +38,7 @@ env_logger = "0.11"
 chrono = { version = "0.4", features = ["serde"] }
 once_cell = "1.19"
 urlencoding = "2.1"
-vmix_rs = { git = "https://github.com/FlowingSPDG/vmix-rs.git", branch = "fix/xml-attribute-parsing" }
+vmix_rs = { git = "https://github.com/FlowingSPDG/vmix-rs.git" }
 
 [profile.dev]
 # デバッグ情報を削減
