@@ -10,6 +10,7 @@ pub mod http_client;
 pub mod tcp_manager;
 pub mod state;
 pub mod commands;
+pub mod network_scanner;
 
 // Re-export commonly used types
 pub use types::UpdateInfo;
@@ -232,7 +233,9 @@ pub fn run() {
             get_app_info,
             open_logs_directory,
             check_for_updates,
-            install_update
+            install_update,
+            get_network_interfaces_command,
+            scan_network_for_vmix_command
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

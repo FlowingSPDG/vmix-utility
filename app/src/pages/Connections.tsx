@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useVMixStatus } from '../hooks/useVMixStatus';
 import { settingsService } from '../services/settingsService';
+import { NetworkScannerService, type NetworkInterface, type VmixScanResult } from '../services/networkScannerService';
 import { 
   Box, 
   Typography, 
@@ -38,6 +39,8 @@ import AddIcon from '@mui/icons-material/Add';
 import DeleteIcon from '@mui/icons-material/Delete';
 import ReconnectIcon from '@mui/icons-material/Refresh';
 import EditIcon from '@mui/icons-material/Edit';
+import SearchIcon from '@mui/icons-material/Search';
+import WifiIcon from '@mui/icons-material/Wifi';
 
 interface Connection {
   id: number;
@@ -69,6 +72,14 @@ const Connections: React.FC = () => {
   // Delete confirmation dialog state
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [connectionToDelete, setConnectionToDelete] = useState<Connection | null>(null);
+
+  // Network scanning state
+  const [networkInterfaces, setNetworkInterfaces] = useState<NetworkInterface[]>([]);
+  const [selectedInterface, setSelectedInterface] = useState<string>('');
+  const [scanResults, setScanResults] = useState<VmixScanResult[]>([]);
+  const [isScanning, setIsScanning] = useState(false);
+  const [scanDialogOpen, setScanDialogOpen] = useState(false);
+  const [scanError, setScanError] = useState<string | null>(null);
 
   // Transform global connections to local format
   useEffect(() => {
@@ -179,6 +190,62 @@ const Connections: React.FC = () => {
     setConnectionToDelete(null);
   };
 
+  // Network scanning functions
+  const loadNetworkInterfaces = async () => {
+    try {
+      const interfaces = await NetworkScannerService.getNetworkInterfaces();
+      setNetworkInterfaces(interfaces);
+      if (interfaces.length > 0 && !selectedInterface) {
+        setSelectedInterface(interfaces[0].name);
+      }
+    } catch (error) {
+      console.error('Failed to load network interfaces:', error);
+      setError(`Failed to load network interfaces: ${error}`);
+    }
+  };
+
+  const handleScanClick = () => {
+    setScanDialogOpen(true);
+    setScanError(null);
+    setScanResults([]);
+    loadNetworkInterfaces();
+  };
+
+  const handleScanClose = () => {
+    setScanDialogOpen(false);
+    setSelectedInterface('');
+    setScanResults([]);
+    setScanError(null);
+  };
+
+  const handleScanNetwork = async () => {
+    if (!selectedInterface) return;
+    
+    setIsScanning(true);
+    setScanError(null);
+    setScanResults([]);
+    
+    try {
+      const results = await NetworkScannerService.scanNetworkForVmix(selectedInterface);
+      setScanResults(results);
+    } catch (error) {
+      console.error('Network scan failed:', error);
+      setScanError(`Network scan failed: ${error}`);
+    } finally {
+      setIsScanning(false);
+    }
+  };
+
+  const handleConnectFromScan = async (ipAddress: string) => {
+    try {
+      await connectVMix(ipAddress, 8088, 'Http');
+      setScanDialogOpen(false);
+    } catch (error) {
+      console.error('Failed to connect to scanned vMix:', error);
+      setScanError(`Failed to connect to ${ipAddress}: ${error}`);
+    }
+  };
+
   const handleReconnect = async (connection: Connection) => {
     setError(null);
     try {
@@ -256,14 +323,26 @@ const Connections: React.FC = () => {
     <Box sx={{ p: 3 }}>
       <LoadingScreen />
       
-      <Box sx={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', mb: 3 }}>
-        <Button 
-          variant="contained" 
-          startIcon={<AddIcon />}
-          onClick={handleClickOpen}
-        >
-          Add Connection
-        </Button>
+      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
+        <Typography variant="h5" component="h1">
+          vMix Connections
+        </Typography>
+        <Box sx={{ display: 'flex', gap: 2 }}>
+          <Button 
+            variant="outlined" 
+            startIcon={<WifiIcon />}
+            onClick={handleScanClick}
+          >
+            Auto Detect vMix
+          </Button>
+          <Button 
+            variant="contained" 
+            startIcon={<AddIcon />}
+            onClick={handleClickOpen}
+          >
+            Add Connection
+          </Button>
+        </Box>
       </Box>
 
       {error && (
@@ -614,6 +693,113 @@ const Connections: React.FC = () => {
           </Button>
           <Button onClick={handleDeleteConfirm} color="error" variant="contained">
             Delete
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Network Scan Dialog */}
+      <Dialog 
+        open={scanDialogOpen} 
+        onClose={handleScanClose} 
+        maxWidth="md" 
+        fullWidth
+      >
+        <DialogTitle>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            <WifiIcon />
+            Auto Detect vMix Instances
+          </Box>
+        </DialogTitle>
+        <DialogContent>
+          <Alert severity="warning" sx={{ mb: 2 }}>
+            <Typography variant="body2">
+              <strong>Warning:</strong> This will scan your network for vMix instances. 
+              The scan will attempt to connect to all IP addresses in the selected network interface's subnet.
+              Only use this feature on networks you trust.
+            </Typography>
+          </Alert>
+
+          <FormControl fullWidth sx={{ mb: 2 }}>
+            <FormLabel>Select Network Interface</FormLabel>
+            <Select
+              value={selectedInterface}
+              onChange={(e) => setSelectedInterface(e.target.value)}
+              disabled={isScanning}
+            >
+              {networkInterfaces.map((iface) => (
+                <MenuItem key={iface.name} value={iface.name}>
+                  {iface.name} ({iface.ip_address})
+                </MenuItem>
+              ))}
+            </Select>
+          </FormControl>
+
+          {scanError && (
+            <Alert severity="error" sx={{ mb: 2 }}>
+              {scanError}
+            </Alert>
+          )}
+
+          {scanResults.length > 0 && (
+            <Box sx={{ mt: 2 }}>
+              <Typography variant="h6" sx={{ mb: 1 }}>
+                Scan Results ({scanResults.length} devices found)
+              </Typography>
+              <TableContainer component={Paper} variant="outlined">
+                <Table size="small">
+                  <TableHead>
+                    <TableRow>
+                      <TableCell>IP Address</TableCell>
+                      <TableCell>Port</TableCell>
+                      <TableCell>Status</TableCell>
+                      <TableCell>Response Time</TableCell>
+                      <TableCell>Action</TableCell>
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
+                    {scanResults.map((result, index) => (
+                      <TableRow key={index}>
+                        <TableCell>{result.ip_address}</TableCell>
+                        <TableCell>{result.port}</TableCell>
+                        <TableCell>
+                          <Chip 
+                            label={result.is_vmix ? 'vMix Found' : 'HTTP Service'} 
+                            color={result.is_vmix ? 'success' : 'default'}
+                            size="small"
+                          />
+                        </TableCell>
+                        <TableCell>{result.response_time}ms</TableCell>
+                        <TableCell>
+                          {result.is_vmix && (
+                            <Button
+                              size="small"
+                              variant="outlined"
+                              onClick={() => handleConnectFromScan(result.ip_address)}
+                              disabled={connections.some(conn => conn.host === result.ip_address)}
+                            >
+                              {connections.some(conn => conn.host === result.ip_address) ? 'Connected' : 'Connect'}
+                            </Button>
+                          )}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </TableContainer>
+            </Box>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={handleScanClose} disabled={isScanning}>
+            Close
+          </Button>
+          <Button 
+            onClick={handleScanNetwork} 
+            variant="contained" 
+            disabled={!selectedInterface || isScanning}
+            startIcon={isScanning ? <CircularProgress size={16} /> : <SearchIcon />}
+          >
+            {isScanning ? 'Scanning...' : 'Start Scan'}
           </Button>
         </DialogActions>
       </Dialog>
