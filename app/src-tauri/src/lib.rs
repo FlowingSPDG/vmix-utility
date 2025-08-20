@@ -2,6 +2,7 @@ use tauri::tray::TrayIconBuilder;
 use tauri::{
     menu::{Menu, MenuItem}, Emitter, Manager
 };
+use tauri_plugin_dialog::{DialogExt, MessageDialogButtons, MessageDialogKind};
 
 // Module declarations
 pub mod types;
@@ -19,6 +20,8 @@ pub use logging::{init_logging, LOGGING_CONFIG};
 
 // Import all commands
 use commands::*;
+
+// (no helpers)
 
 #[cfg(debug_assertions)]
 fn prevent_default() -> tauri::plugin::TauriPlugin<tauri::Wry> {
@@ -49,6 +52,7 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_shell::init())
         .plugin(prevent_default())
+        .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .on_window_event(|window, event| {
             match event {
@@ -121,12 +125,22 @@ pub fn run() {
                                                 body: update.body.clone(),
                                             };
                                             let _ = app_handle.emit("update-available", &update_info);
-                                            
-                                            // Show main window when update is found
-                                            if let Some(window) = app_handle.get_webview_window("main") {
-                                                let _ = window.show();
-                                                let _ = window.set_focus();
-                                            }
+
+                                            // Native dialog (Dialog plugin)
+                                            let current = update_info.current_version.clone();
+                                            let latest = update_info.latest_version.clone().unwrap_or_default();
+                                            app.dialog()
+                                                .message(format!("Update available: {} → {}", current, latest))
+                                                .title("Update Available")
+                                                .buttons(MessageDialogButtons::OkCancelCustom("Update now".to_string(), "Later".to_string()))
+                                                .show(move |result| {
+                                                    if result {
+                                                        let app_handle_clone = app_handle.clone();
+                                                        tauri::async_runtime::spawn(async move {
+                                                            let _ = install_update(app_handle_clone).await;
+                                                        });
+                                                    }
+                                                });
                                         }
                                         Ok(None) => {
                                             app_log!(info, "No updates available from tray check");
@@ -137,6 +151,14 @@ pub fn run() {
                                                 body: None,
                                             };
                                             let _ = app_handle.emit("update-checked", &update_info);
+
+                                            // Native message dialog for up-to-date
+                                            let current = update_info.current_version.clone();
+                                            app.dialog()
+                                                .message(format!("You are using the latest version of vmix-utility!\nCurrent version: {}", current))
+                                                .kind(MessageDialogKind::Info)
+                                                .title("Up to Date")
+                                                .blocking_show();
                                         }
                                         Err(e) => {
                                             app_log!(error, "Failed to check for updates from tray: {}", e);
@@ -190,6 +212,22 @@ pub fn run() {
                                     body: update.body.clone(),
                                 };
                                 let _ = app_handle_update.emit("update-available", &update_info);
+
+                                // Native dialog for startup prompt
+                                let current = update_info.current_version.clone();
+                                let latest = update_info.latest_version.clone().unwrap_or_default();
+                                app_handle_update.dialog()
+                                    .message(format!("Update available: {} → {}", current, latest))
+                                    .title("Update Available")
+                                    .buttons(MessageDialogButtons::OkCancelCustom("Update now".to_string(), "Later".to_string()))
+                                    .show(move |result| {
+                                        if result {
+                                            let app_handle_clone = app_handle_update.clone();
+                                            tauri::async_runtime::spawn(async move {
+                                                let _ = install_update(app_handle_clone).await;
+                                            });
+                                        }
+                                    });
                             }
                             Ok(None) => {
                                 app_log!(info, "No updates available on startup");

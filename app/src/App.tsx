@@ -2,6 +2,7 @@ import { ThemeProvider, createTheme } from '@mui/material/styles';
 import CssBaseline from '@mui/material/CssBaseline';
 import { useMemo, useEffect, useState } from 'react';
 import { Box, Typography } from '@mui/material';
+// removed update UI wiring; backend shows dialogs/windows instead
 import Layout from './components/Layout';
 import ListManager from './pages/ListManager';
 import SingleVideoList from './pages/SingleVideoList';
@@ -13,6 +14,7 @@ import "./App.css";
 function AppContent() {
   const { resolvedTheme, isLoading } = useTheme();
   const [currentPath, setCurrentPath] = useState(window.location.pathname);
+  // update prompt handled by backend; no local dialog state needed
 
   const theme = useMemo(() => createTheme({
     palette: {
@@ -39,6 +41,8 @@ function AppContent() {
       window.removeEventListener('popstate', handleLocationChange);
     };
   }, []);
+
+  // no update UI wiring in frontend
 
   if (isLoading) {
     return (
