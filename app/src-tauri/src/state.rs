@@ -4,6 +4,7 @@ use crate::types::{
 };
 use crate::http_client::VmixClientWrapper;
 use crate::tcp_manager::TcpVmixManager;
+use crate::multiviewer::MultiviewerServer;
 use crate::app_log;
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -22,6 +23,7 @@ pub struct VideoListWindow {
     pub created_at: std::time::Instant,
 }
 
+#[derive(Clone)]
 pub struct AppState {
     pub http_connections: Arc<Mutex<Vec<VmixClientWrapper>>>,
     pub tcp_connections: Arc<Mutex<Vec<TcpVmixManager>>>,
@@ -32,7 +34,12 @@ pub struct AppState {
     pub connection_labels: Arc<Mutex<HashMap<String, String>>>,
     pub app_settings: Arc<Mutex<AppSettings>>,
     pub video_list_windows: Arc<Mutex<HashMap<String, VideoListWindow>>>,
+    pub multiviewer_server: Arc<Mutex<Option<MultiviewerServer>>>,
 }
+
+// Ensure AppState is Send and Sync
+unsafe impl Send for AppState {}
+unsafe impl Sync for AppState {}
 
 impl AppState {
     pub fn new() -> Self {
@@ -46,6 +53,7 @@ impl AppState {
             connection_labels: Arc::new(Mutex::new(HashMap::new())),
             app_settings: Arc::new(Mutex::new(AppSettings::default())),
             video_list_windows: Arc::new(Mutex::new(HashMap::new())),
+            multiviewer_server: Arc::new(Mutex::new(None)),
         }
     }
     
@@ -531,5 +539,73 @@ impl AppState {
         for window_id in windows_to_remove {
             self.unregister_video_list_window(&window_id);
         }
+    }
+
+    // Multiviewer server management methods
+    pub async fn start_multiviewer_server(&self) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+        // Get config first and drop the guard before any await
+        let multiviewer_config = {
+            let app_settings = self.app_settings.lock().unwrap();
+            app_settings.multiviewer.clone()
+        };
+        
+        if !multiviewer_config.enabled {
+            app_log!(info, "Multiviewer is disabled, not starting server");
+            return Ok(());
+        }
+
+        // Stop existing server if running
+        self.stop_multiviewer_server().await;
+
+        // Create new server
+        let app_state_arc = Arc::new(self.clone());
+        let server = MultiviewerServer::new(app_state_arc);
+        
+        // Start the server
+        server.start().await?;
+        
+        // Store the server
+        {
+            let mut server_guard = self.multiviewer_server.lock().unwrap();
+            *server_guard = Some(server);
+        }
+        
+        app_log!(info, "Multiviewer server started on port {}", multiviewer_config.port);
+        Ok(())
+    }
+
+    pub async fn stop_multiviewer_server(&self) {
+        // Take the server out of the mutex before await
+        let server = {
+            let mut server_guard = self.multiviewer_server.lock().unwrap();
+            server_guard.take()
+        };
+        
+        if let Some(server) = server {
+            server.stop().await;
+            app_log!(info, "Multiviewer server stopped");
+        }
+    }
+
+    pub async fn update_multiviewer_config(&self, config: crate::types::MultiviewerConfig) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+        // Update app settings first
+        {
+            let mut app_settings = self.app_settings.lock().unwrap();
+            app_settings.multiviewer = config.clone();
+        }
+        
+        // Restart server if needed
+        if config.enabled {
+            self.start_multiviewer_server().await?;
+        } else {
+            self.stop_multiviewer_server().await;
+        }
+        
+        Ok(())
+    }
+
+    pub fn get_multiviewer_config(&self) -> crate::types::MultiviewerConfig {
+        let app_settings = self.app_settings.lock().unwrap();
+        app_settings.multiviewer.clone()
     }
 }

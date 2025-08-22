@@ -150,12 +150,33 @@ impl ToString for UIDensity {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MultiviewerConfig {
+    pub enabled: bool,
+    pub port: u16,
+    pub refresh_interval: u64, // in milliseconds
+    pub selected_connection: Option<String>, // host:port
+}
+
+impl Default for MultiviewerConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            port: 8089,
+            refresh_interval: 150,
+            selected_connection: None,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AppSettings {
     pub default_vmix_ip: String,
     pub default_vmix_port: u16,
     pub theme: ThemeMode,
     #[serde(default)]
     pub ui_density: UIDensity,
+    #[serde(default)]
+    pub multiviewer: MultiviewerConfig,
 }
 
 impl Default for AppSettings {
@@ -165,6 +186,7 @@ impl Default for AppSettings {
             default_vmix_port: 8088,
             theme: ThemeMode::Auto,
             ui_density: UIDensity::default(),
+            multiviewer: MultiviewerConfig::default(),
         }
     }
 }

@@ -1,0 +1,402 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>vMix Multiviewer</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #1a1a1a;
+            color: #ffffff;
+            overflow: hidden;
+        }
+
+        .multiviewer {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            grid-auto-rows: minmax(150px, 1fr);
+            gap: 2px;
+            padding: 2px;
+            height: 100vh;
+            width: 100vw;
+        }
+
+        .input-box {
+            background-color: #2a2a2a;
+            border: 2px solid #404040;
+            border-radius: 4px;
+            padding: 8px;
+            position: relative;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            transition: all 0.2s ease;
+        }
+
+        .input-box.active {
+            border-color: #ff6b6b;
+            background-color: #3a2a2a;
+        }
+
+        .input-box.preview {
+            border-color: #4ecdc4;
+            background-color: #2a3a3a;
+        }
+
+        .input-box.playing {
+            border-color: #45b7d1;
+            background-color: #2a2a3a;
+        }
+
+        .input-number {
+            position: absolute;
+            top: 4px;
+            left: 4px;
+            background-color: rgba(0, 0, 0, 0.7);
+            color: #ffffff;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-size: 12px;
+            font-weight: bold;
+        }
+
+        .input-title {
+            margin-top: 20px;
+            font-size: 14px;
+            font-weight: 500;
+            text-align: center;
+            word-break: break-word;
+            line-height: 1.2;
+            flex-grow: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .input-type {
+            position: absolute;
+            bottom: 4px;
+            right: 4px;
+            background-color: rgba(0, 0, 0, 0.7);
+            color: #cccccc;
+            padding: 1px 4px;
+            border-radius: 2px;
+            font-size: 10px;
+        }
+
+        .input-state {
+            position: absolute;
+            top: 4px;
+            right: 4px;
+            background-color: rgba(0, 0, 0, 0.7);
+            color: #cccccc;
+            padding: 1px 4px;
+            border-radius: 2px;
+            font-size: 10px;
+        }
+
+        .status-bar {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            background-color: rgba(0, 0, 0, 0.8);
+            padding: 8px 16px;
+            font-size: 12px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            z-index: 1000;
+        }
+
+        .connection-status {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .status-indicator {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background-color: #666;
+        }
+
+        .status-indicator.connected {
+            background-color: #4caf50;
+        }
+
+        .status-indicator.disconnected {
+            background-color: #f44336;
+        }
+
+        .refresh-rate {
+            color: #cccccc;
+        }
+
+        .timestamp {
+            color: #cccccc;
+        }
+
+        .loading {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            font-size: 18px;
+            color: #cccccc;
+        }
+
+        .error {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            font-size: 18px;
+            color: #f44336;
+            text-align: center;
+            padding: 20px;
+        }
+
+        @media (max-width: 768px) {
+            .multiviewer {
+                grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+                grid-auto-rows: minmax(120px, 1fr);
+            }
+
+            .input-title {
+                font-size: 12px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div id="app">
+        <div class="loading" id="loading">
+            Connecting to vMix...
+        </div>
+        
+        <div class="error" id="error" style="display: none;">
+            <div>
+                <h3>Connection Error</h3>
+                <p id="error-message">Failed to connect to vMix</p>
+                <p>Please check your connection settings and try again.</p>
+            </div>
+        </div>
+
+        <div class="multiviewer" id="multiviewer" style="display: none;"></div>
+
+        <div class="status-bar" id="status-bar" style="display: none;">
+            <div class="connection-status">
+                <div class="status-indicator" id="status-indicator"></div>
+                <span id="connection-text">Disconnected</span>
+            </div>
+            <div class="refresh-rate" id="refresh-rate">Refresh: 150ms</div>
+            <div class="timestamp" id="timestamp"></div>
+        </div>
+    </div>
+
+    <script>
+        class Multiviewer {
+            constructor() {
+                this.ws = null;
+                this.data = null;
+                this.config = null;
+                this.reconnectAttempts = 0;
+                this.maxReconnectAttempts = 5;
+                this.reconnectDelay = 1000;
+                
+                this.init();
+            }
+
+            async init() {
+                try {
+                    await this.loadConfig();
+                    await this.connectWebSocket();
+                    this.setupEventListeners();
+                } catch (error) {
+                    this.showError('Failed to initialize multiviewer: ' + error.message);
+                }
+            }
+
+            async loadConfig() {
+                try {
+                    const response = await fetch('/api/config');
+                    if (!response.ok) {
+                        throw new Error('Failed to load configuration');
+                    }
+                    this.config = await response.json();
+                } catch (error) {
+                    console.error('Failed to load config:', error);
+                    throw error;
+                }
+            }
+
+            async connectWebSocket() {
+                try {
+                    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+                    const wsUrl = `${protocol}//${window.location.host}/ws`;
+                    
+                    this.ws = new WebSocket(wsUrl);
+                    
+                    this.ws.onopen = () => {
+                        console.log('WebSocket connected');
+                        this.reconnectAttempts = 0;
+                        this.updateConnectionStatus(true);
+                        this.hideLoading();
+                        this.showMultiviewer();
+                    };
+
+                    this.ws.onmessage = (event) => {
+                        try {
+                            this.data = JSON.parse(event.data);
+                            this.renderMultiviewer();
+                            this.updateTimestamp();
+                        } catch (error) {
+                            console.error('Failed to parse WebSocket message:', error);
+                        }
+                    };
+
+                    this.ws.onclose = () => {
+                        console.log('WebSocket disconnected');
+                        this.updateConnectionStatus(false);
+                        this.attemptReconnect();
+                    };
+
+                    this.ws.onerror = (error) => {
+                        console.error('WebSocket error:', error);
+                        this.updateConnectionStatus(false);
+                    };
+
+                } catch (error) {
+                    console.error('Failed to connect WebSocket:', error);
+                    throw error;
+                }
+            }
+
+            attemptReconnect() {
+                if (this.reconnectAttempts < this.maxReconnectAttempts) {
+                    this.reconnectAttempts++;
+                    console.log(`Attempting to reconnect (${this.reconnectAttempts}/${this.maxReconnectAttempts})...`);
+                    
+                    setTimeout(() => {
+                        this.connectWebSocket();
+                    }, this.reconnectDelay * this.reconnectAttempts);
+                } else {
+                    this.showError('Failed to connect after multiple attempts. Please refresh the page.');
+                }
+            }
+
+            setupEventListeners() {
+                // Handle window resize
+                window.addEventListener('resize', () => {
+                    this.renderMultiviewer();
+                });
+
+                // Handle page visibility change
+                document.addEventListener('visibilitychange', () => {
+                    if (document.hidden) {
+                        console.log('Page hidden, pausing updates');
+                    } else {
+                        console.log('Page visible, resuming updates');
+                    }
+                });
+            }
+
+            renderMultiviewer() {
+                if (!this.data || !this.data.inputs) {
+                    return;
+                }
+
+                const container = document.getElementById('multiviewer');
+                container.innerHTML = '';
+
+                this.data.inputs.forEach(input => {
+                    const inputBox = this.createInputBox(input);
+                    container.appendChild(inputBox);
+                });
+            }
+
+            createInputBox(input) {
+                const box = document.createElement('div');
+                box.className = 'input-box';
+                
+                // Add state classes
+                if (input.number === this.data.active_input) {
+                    box.classList.add('active');
+                } else if (input.number === this.data.preview_input) {
+                    box.classList.add('preview');
+                }
+                
+                if (input.state.toLowerCase() === 'playing') {
+                    box.classList.add('playing');
+                }
+
+                box.innerHTML = `
+                    <div class="input-number">${input.number}</div>
+                    <div class="input-title">${this.escapeHtml(input.title)}</div>
+                    <div class="input-type">${this.escapeHtml(input.input_type)}</div>
+                    <div class="input-state">${this.escapeHtml(input.state)}</div>
+                `;
+
+                return box;
+            }
+
+            escapeHtml(text) {
+                const div = document.createElement('div');
+                div.textContent = text;
+                return div.innerHTML;
+            }
+
+            updateConnectionStatus(connected) {
+                const indicator = document.getElementById('status-indicator');
+                const text = document.getElementById('connection-text');
+                
+                if (connected) {
+                    indicator.className = 'status-indicator connected';
+                    text.textContent = 'Connected';
+                } else {
+                    indicator.className = 'status-indicator disconnected';
+                    text.textContent = 'Disconnected';
+                }
+            }
+
+            updateTimestamp() {
+                if (this.data && this.data.timestamp) {
+                    const timestamp = document.getElementById('timestamp');
+                    const date = new Date(this.data.timestamp);
+                    timestamp.textContent = date.toLocaleTimeString();
+                }
+            }
+
+            showMultiviewer() {
+                document.getElementById('multiviewer').style.display = 'grid';
+                document.getElementById('status-bar').style.display = 'flex';
+            }
+
+            hideLoading() {
+                document.getElementById('loading').style.display = 'none';
+            }
+
+            showError(message) {
+                document.getElementById('loading').style.display = 'none';
+                document.getElementById('error').style.display = 'flex';
+                document.getElementById('error-message').textContent = message;
+            }
+        }
+
+        // Initialize multiviewer when page loads
+        document.addEventListener('DOMContentLoaded', () => {
+            new Multiviewer();
+        });
+    </script>
+</body>
+</html>
+

@@ -1255,3 +1255,67 @@ pub async fn scan_network_for_vmix_command(
         }
     }
 }
+
+// Multiviewer commands
+#[tauri::command]
+pub async fn get_multiviewer_config(state: State<'_, AppState>) -> Result<crate::types::MultiviewerConfig, String> {
+    app_log!(debug, "Getting multiviewer configuration");
+    Ok(state.get_multiviewer_config())
+}
+
+#[tauri::command]
+pub async fn update_multiviewer_config(
+    config: crate::types::MultiviewerConfig,
+    state: State<'_, AppState>
+) -> Result<(), String> {
+    app_log!(info, "Updating multiviewer configuration: enabled={}, port={}, refresh_interval={}ms", 
+        config.enabled, config.port, config.refresh_interval);
+    
+    match state.update_multiviewer_config(config).await {
+        Ok(_) => {
+            app_log!(info, "Multiviewer configuration updated successfully");
+            Ok(())
+        }
+        Err(e) => {
+            app_log!(error, "Failed to update multiviewer configuration: {}", e);
+            Err(format!("Failed to update multiviewer configuration: {}", e))
+        }
+    }
+}
+
+#[tauri::command]
+pub async fn start_multiviewer_server(state: State<'_, AppState>) -> Result<(), String> {
+    app_log!(info, "Starting multiviewer server");
+    
+    match state.start_multiviewer_server().await {
+        Ok(_) => {
+            app_log!(info, "Multiviewer server started successfully");
+            Ok(())
+        }
+        Err(e) => {
+            app_log!(error, "Failed to start multiviewer server: {}", e);
+            Err(format!("Failed to start multiviewer server: {}", e))
+        }
+    }
+}
+
+#[tauri::command]
+pub async fn stop_multiviewer_server(state: State<'_, AppState>) -> Result<(), String> {
+    app_log!(info, "Stopping multiviewer server");
+    state.stop_multiviewer_server().await;
+    app_log!(info, "Multiviewer server stopped");
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn get_multiviewer_url(state: State<'_, AppState>) -> Result<String, String> {
+    let config = state.get_multiviewer_config();
+    
+    if !config.enabled {
+        return Err("Multiviewer is not enabled".to_string());
+    }
+    
+    let url = format!("http://127.0.0.1:{}", config.port);
+    app_log!(info, "Multiviewer URL: {}", url);
+    Ok(url)
+}

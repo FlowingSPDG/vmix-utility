@@ -3,6 +3,7 @@ import type { SelectChangeEvent } from '@mui/material';
 import { useTheme, type ThemeMode } from '../hooks/useTheme';
 import { useUISettings } from '../hooks/useUISettings.tsx';
 import { settingsService } from '../services/settingsService';
+import { multiviewerService } from '../services/multiviewerService';
 import { invoke } from '@tauri-apps/api/core';
 import {
   Box,
@@ -37,6 +38,11 @@ const Settings = () => {
     logFilePath: '',
     // New UI settings
     uiDensity: 'comfortable' as 'compact' | 'comfortable' | 'spacious',
+    // Multiviewer settings
+    multiviewerEnabled: false,
+    multiviewerPort: 8089,
+    multiviewerRefreshInterval: 150,
+    multiviewerSelectedConnection: '',
   });
 
   const [appInfo, setAppInfo] = useState<{
@@ -148,6 +154,14 @@ const Settings = () => {
 
       // Save logging configuration to backend
       await settingsService.setLoggingConfig(settings.logLevel, settings.saveLogsToFile);
+
+      // Save multiviewer configuration to backend
+      await multiviewerService.updateConfig({
+        enabled: settings.multiviewerEnabled,
+        port: settings.multiviewerPort,
+        refresh_interval: settings.multiviewerRefreshInterval,
+        selected_connection: settings.multiviewerSelectedConnection || undefined,
+      });
       
       // Refresh UI settings in context
       await refreshSettings();
@@ -190,6 +204,16 @@ const Settings = () => {
         if (appInfo) {
           setAppInfo(appInfo as any);
         }
+
+        // Load multiviewer configuration
+        const multiviewerConfig = await multiviewerService.getConfig();
+        setSettings(prev => ({
+          ...prev,
+          multiviewerEnabled: multiviewerConfig.enabled,
+          multiviewerPort: multiviewerConfig.port,
+          multiviewerRefreshInterval: multiviewerConfig.refresh_interval,
+          multiviewerSelectedConnection: multiviewerConfig.selected_connection || '',
+        }));
       } catch (error) {
         console.error('Failed to load configurations:', error);
         showToast('Failed to load settings', 'error');
@@ -315,6 +339,106 @@ const Settings = () => {
               </Typography>
             </Box>
 
+          </Grid2>
+
+          <Grid2 size={12}>
+            <Typography variant="h6" gutterBottom>
+              Multiviewer Settings
+            </Typography>
+            <Divider sx={{ mb: 2 }} />
+            
+            <FormGroup>
+              <FormControlLabel
+                control={
+                  <Switch
+                    checked={settings.multiviewerEnabled}
+                    onChange={handleSwitchChange}
+                    name="multiviewerEnabled"
+                    color="primary"
+                  />
+                }
+                label="Enable Multiviewer"
+              />
+              <Typography variant="body2" color="text.secondary" sx={{ mt: 1, mb: 2 }}>
+                Start a local HTTP server to provide multiviewer functionality for vMix Web Browser inputs
+              </Typography>
+            </FormGroup>
+
+            {settings.multiviewerEnabled && (
+              <>
+                <Box sx={{ mb: 2 }}>
+                  <FormControl fullWidth margin="normal">
+                    <InputLabel id="multiviewer-port-label">Port</InputLabel>
+                    <Select
+                      labelId="multiviewer-port-label"
+                      name="multiviewerPort"
+                      value={settings.multiviewerPort}
+                      onChange={handleSelectChange}
+                      label="Port"
+                    >
+                      <MenuItem value={8089}>8089 (Default)</MenuItem>
+                      <MenuItem value={8090}>8090</MenuItem>
+                      <MenuItem value={8091}>8091</MenuItem>
+                      <MenuItem value={8092}>8092</MenuItem>
+                    </Select>
+                  </FormControl>
+                  <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+                    Port for the multiviewer HTTP server
+                  </Typography>
+                </Box>
+
+                <Box sx={{ mb: 2 }}>
+                  <FormControl fullWidth margin="normal">
+                    <InputLabel id="multiviewer-refresh-label">Refresh Interval</InputLabel>
+                    <Select
+                      labelId="multiviewer-refresh-label"
+                      name="multiviewerRefreshInterval"
+                      value={settings.multiviewerRefreshInterval}
+                      onChange={handleSelectChange}
+                      label="Refresh Interval"
+                    >
+                      <MenuItem value={50}>50ms (Fastest)</MenuItem>
+                      <MenuItem value={100}>100ms</MenuItem>
+                      <MenuItem value={150}>150ms (Default)</MenuItem>
+                      <MenuItem value={200}>200ms</MenuItem>
+                      <MenuItem value={500}>500ms</MenuItem>
+                    </Select>
+                  </FormControl>
+                  <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+                    Update frequency for multiviewer data (lower = more responsive)
+                  </Typography>
+                </Box>
+
+                <Box sx={{ mb: 2 }}>
+                  <FormControl fullWidth margin="normal">
+                    <InputLabel id="multiviewer-connection-label">vMix Connection</InputLabel>
+                    <Select
+                      labelId="multiviewer-connection-label"
+                      name="multiviewerSelectedConnection"
+                      value={settings.multiviewerSelectedConnection}
+                      onChange={handleSelectChange}
+                      label="vMix Connection"
+                    >
+                      <MenuItem value="">Select a connection...</MenuItem>
+                      {/* TODO: Populate with available connections */}
+                    </Select>
+                  </FormControl>
+                  <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+                    Select which vMix connection to use for multiviewer data
+                  </Typography>
+                </Box>
+
+                <Alert severity="info" sx={{ mb: 2 }}>
+                  <Typography variant="body2">
+                    <strong>Multiviewer URL:</strong> When enabled, the multiviewer will be available at{' '}
+                    <code>http://127.0.0.1:{settings.multiviewerPort}</code>
+                  </Typography>
+                  <Typography variant="body2" sx={{ mt: 1 }}>
+                    Add this URL as a Web Browser input in vMix to display the multiviewer.
+                  </Typography>
+                </Alert>
+              </>
+            )}
           </Grid2>
 
           <Grid2 size={12}>

@@ -13,6 +13,10 @@ pub struct VmixClientWrapper {
     port: u16,
 }
 
+// Ensure VmixClientWrapper is Send and Sync
+unsafe impl Send for VmixClientWrapper {}
+unsafe impl Sync for VmixClientWrapper {}
+
 impl VmixClientWrapper {
     pub fn new(host: &str, port: u16) -> Self {
         let client = HttpVmixClient::new_with_host_port(host, port, Duration::from_secs(10));

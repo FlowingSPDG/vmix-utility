@@ -21,6 +21,10 @@ pub struct TcpVmixManager {
     shutdown_signal: Arc<std::sync::atomic::AtomicBool>,
 }
 
+// Ensure TcpVmixManager is Send and Sync
+unsafe impl Send for TcpVmixManager {}
+unsafe impl Sync for TcpVmixManager {}
+
 impl TcpVmixManager {
     pub async fn new(host: &str, port: u16) -> Result<Self> {
         use std::net::ToSocketAddrs;
