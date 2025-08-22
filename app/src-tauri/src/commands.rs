@@ -7,6 +7,7 @@ use crate::tcp_manager::TcpVmixManager;
 use crate::state::AppState;
 use crate::logging::LOGGING_CONFIG;
 use crate::app_log;
+use crate::network_scanner::{get_network_interfaces, scan_network_for_vmix, NetworkInterface, VmixScanResult};
 use std::collections::HashMap;
 use tauri::{AppHandle, Manager, State, Emitter, WebviewUrl, WebviewWindowBuilder};
 
@@ -1136,6 +1137,11 @@ pub async fn check_for_updates(app_handle: AppHandle) -> Result<UpdateInfo, Stri
     
     let current_version = app_handle.package_info().version.to_string();
     
+    // デバッグ情報: プラットフォーム情報を出力
+    app_log!(info, "Current platform: {:?}", std::env::consts::OS);
+    app_log!(info, "Current architecture: {:?}", std::env::consts::ARCH);
+    app_log!(info, "Target triple: {:?}", std::env::var("TARGET").unwrap_or_else(|_| "unknown".to_string()));
+    
     match tauri_plugin_updater::UpdaterExt::updater(&app_handle) {
         Ok(updater) => {
             match updater.check().await {
@@ -1206,6 +1212,46 @@ pub async fn install_update(app_handle: AppHandle) -> Result<(), String> {
         Err(e) => {
             app_log!(error, "Failed to get updater instance for installation: {}", e);
             Err(format!("Failed to get updater instance: {}", e))
+        }
+    }
+}
+
+#[tauri::command]
+pub async fn get_network_interfaces_command() -> Result<Vec<NetworkInterface>, String> {
+    app_log!(info, "Getting network interfaces...");
+    
+    match get_network_interfaces() {
+        Ok(interfaces) => {
+            app_log!(info, "Found {} network interfaces", interfaces.len());
+            Ok(interfaces)
+        }
+        Err(e) => {
+            app_log!(error, "Failed to get network interfaces: {}", e);
+            Err(format!("Failed to get network interfaces: {}", e))
+        }
+    }
+}
+
+#[tauri::command]
+pub async fn scan_network_for_vmix_command(
+    interface_name: String,
+    state: State<'_, AppState>
+) -> Result<Vec<VmixScanResult>, String> {
+    app_log!(info, "Starting vMix network scan for interface: {}", interface_name);
+    
+    // セキュリティ警告をログに記録
+    app_log!(warn, "⚠️  NETWORK SCAN WARNING: Scanning network interface '{}' for vMix instances", interface_name);
+    app_log!(warn, "⚠️  This operation will attempt to connect to all IP addresses in the subnet");
+    
+    match scan_network_for_vmix(interface_name.clone(), &state).await {
+        Ok(results) => {
+            let vmix_count = results.iter().filter(|r| r.is_vmix).count();
+            app_log!(info, "Network scan completed for interface '{}': found {} vMix instances", interface_name, vmix_count);
+            Ok(results)
+        }
+        Err(e) => {
+            app_log!(error, "Failed to scan network for vMix: {}", e);
+            Err(format!("Failed to scan network for vMix: {}", e))
         }
     }
 }

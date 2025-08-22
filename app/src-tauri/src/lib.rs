@@ -2,6 +2,54 @@ use tauri::tray::TrayIconBuilder;
 use tauri::{
     menu::{Menu, MenuItem}, Emitter, Manager
 };
+use tauri_plugin_dialog::{DialogExt, MessageDialogButtons, MessageDialogKind};
+
+// Common update check function
+async fn check_for_updates_with_dialog(app_handle: tauri::AppHandle, show_no_update_dialog: bool) {
+    match tauri_plugin_updater::UpdaterExt::updater(&app_handle) {
+        Ok(updater) => {
+            match updater.check().await {
+                Ok(Some(update)) => {
+                    app_log!(info, "Update available: {} -> {}", app_handle.package_info().version, update.version);
+                    
+                    // Native dialog for update prompt
+                    let current = app_handle.package_info().version.to_string();
+                    let latest = update.version.clone();
+                    app_handle.dialog()
+                        .message(format!("Update available: {} → {}", current, latest))
+                        .title("Update Available")
+                        .buttons(MessageDialogButtons::OkCancelCustom("Update now".to_string(), "Later".to_string()))
+                        .show(move |result| {
+                            if result {
+                                let app_handle_clone = app_handle.clone();
+                                tauri::async_runtime::spawn(async move {
+                                    let _ = install_update(app_handle_clone).await;
+                                });
+                            }
+                        });
+                }
+                Ok(None) => {
+                    app_log!(info, "No updates available");
+                    if show_no_update_dialog {
+                        // Native message dialog for up-to-date
+                        let current = app_handle.package_info().version.to_string();
+                        app_handle.dialog()
+                            .message(format!("You are using the latest version of vmix-utility!\nCurrent version: {}", current))
+                            .kind(MessageDialogKind::Info)
+                            .title("Up to Date")
+                            .blocking_show();
+                    }
+                }
+                Err(e) => {
+                    app_log!(error, "Failed to check for updates: {}", e);
+                }
+            }
+        }
+        Err(e) => {
+            app_log!(error, "Failed to get updater instance: {}", e);
+        }
+    }
+}
 
 // Module declarations
 pub mod types;
@@ -10,14 +58,16 @@ pub mod http_client;
 pub mod tcp_manager;
 pub mod state;
 pub mod commands;
+pub mod network_scanner;
 
 // Re-export commonly used types
-pub use types::UpdateInfo;
 pub use state::AppState;
 pub use logging::{init_logging, LOGGING_CONFIG};
 
 // Import all commands
 use commands::*;
+
+// (no helpers)
 
 #[cfg(debug_assertions)]
 fn prevent_default() -> tauri::plugin::TauriPlugin<tauri::Wry> {
@@ -48,6 +98,7 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_shell::init())
         .plugin(prevent_default())
+        .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .on_window_event(|window, event| {
             match event {
@@ -107,45 +158,7 @@ pub fn run() {
                     "check_update" => {
                         let app_handle = app.clone();
                         tauri::async_runtime::spawn(async move {
-                            match tauri_plugin_updater::UpdaterExt::updater(&app_handle) {
-                                Ok(updater) => {
-                                    match updater.check().await {
-                                        Ok(Some(update)) => {
-                                            app_log!(info, "Update available from tray: {} -> {}", app_handle.package_info().version, update.version);
-                                            
-                                            let update_info = UpdateInfo {
-                                                available: true,
-                                                current_version: app_handle.package_info().version.to_string(),
-                                                latest_version: Some(update.version.clone()),
-                                                body: update.body.clone(),
-                                            };
-                                            let _ = app_handle.emit("update-available", &update_info);
-                                            
-                                            // Show main window when update is found
-                                            if let Some(window) = app_handle.get_webview_window("main") {
-                                                let _ = window.show();
-                                                let _ = window.set_focus();
-                                            }
-                                        }
-                                        Ok(None) => {
-                                            app_log!(info, "No updates available from tray check");
-                                            let update_info = UpdateInfo {
-                                                available: false,
-                                                current_version: app_handle.package_info().version.to_string(),
-                                                latest_version: None,
-                                                body: None,
-                                            };
-                                            let _ = app_handle.emit("update-checked", &update_info);
-                                        }
-                                        Err(e) => {
-                                            app_log!(error, "Failed to check for updates from tray: {}", e);
-                                        }
-                                    }
-                                }
-                                Err(e) => {
-                                    app_log!(error, "Failed to get updater instance from tray: {}", e);
-                                }
-                            }
+                            check_for_updates_with_dialog(app_handle, true).await;
                         });
                     }
                     "quit" => {
@@ -174,34 +187,7 @@ pub fn run() {
             // Check for updates on startup
             tauri::async_runtime::spawn(async move {
                 tokio::time::sleep(tokio::time::Duration::from_secs(3)).await; // Wait 3 seconds after startup
-                
-                match tauri_plugin_updater::UpdaterExt::updater(&app_handle_update) {
-                    Ok(updater) => {
-                        match updater.check().await {
-                            Ok(Some(update)) => {
-                                app_log!(info, "Update available on startup: {} -> {}", app_handle_update.package_info().version, update.version);
-                                
-                                // Emit event to frontend about available update
-                                let update_info = UpdateInfo {
-                                    available: true,
-                                    current_version: app_handle_update.package_info().version.to_string(),
-                                    latest_version: Some(update.version.clone()),
-                                    body: update.body.clone(),
-                                };
-                                let _ = app_handle_update.emit("update-available", &update_info);
-                            }
-                            Ok(None) => {
-                                app_log!(info, "No updates available on startup");
-                            }
-                            Err(e) => {
-                                app_log!(error, "Failed to check for updates on startup: {}", e);
-                            }
-                        }
-                    }
-                    Err(e) => {
-                        app_log!(error, "Failed to get updater instance on startup: {}", e);
-                    }
-                }
+                check_for_updates_with_dialog(app_handle_update, false).await;
             });
             
             Ok(())
@@ -232,7 +218,9 @@ pub fn run() {
             get_app_info,
             open_logs_directory,
             check_for_updates,
-            install_update
+            install_update,
+            get_network_interfaces_command,
+            scan_network_for_vmix_command
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
