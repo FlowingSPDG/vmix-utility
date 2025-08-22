@@ -3,6 +3,7 @@ import type { SelectChangeEvent } from '@mui/material';
 import { useTheme, type ThemeMode } from '../hooks/useTheme';
 import { useUISettings } from '../hooks/useUISettings.tsx';
 import { settingsService } from '../services/settingsService';
+import { invoke } from '@tauri-apps/api/core';
 import {
   Box,
   Typography,
@@ -20,6 +21,7 @@ import {
   Alert,
   Snackbar,
   IconButton,
+  CircularProgress,
 } from '@mui/material';
 import FolderOpenIcon from '@mui/icons-material/FolderOpen';
 
@@ -43,6 +45,15 @@ const Settings = () => {
     git_branch: string;
     build_timestamp: string;
   } | null>(null);
+
+  const [updateInfo, setUpdateInfo] = useState<{
+    available: boolean;
+    current_version: string;
+    latest_version?: string;
+    body?: string;
+  } | null>(null);
+
+  const [checkingUpdate, setCheckingUpdate] = useState(false);
 
   const [toast, setToast] = useState<{
     open: boolean;
@@ -76,6 +87,39 @@ const Settings = () => {
     } catch (error) {
       console.error('Failed to open logs directory:', error);
       showToast(`Failed to open logs directory: ${error}`, 'error');
+    }
+  };
+
+  const handleCheckForUpdates = async () => {
+    setCheckingUpdate(true);
+    try {
+      const result = await invoke<{
+        available: boolean;
+        current_version: string;
+        latest_version?: string;
+        body?: string;
+      }>('check_for_updates');
+      setUpdateInfo(result);
+      if (result.available) {
+        showToast(`Update available: ${result.current_version} → ${result.latest_version}`, 'info');
+      } else {
+        showToast('You are using the latest version', 'success');
+      }
+    } catch (error) {
+      console.error('Failed to check for updates:', error);
+      showToast(`Failed to check for updates: ${error}`, 'error');
+    } finally {
+      setCheckingUpdate(false);
+    }
+  };
+
+  const handleInstallUpdate = async () => {
+    try {
+      await invoke('install_update');
+      showToast('Update installation started', 'info');
+    } catch (error) {
+      console.error('Failed to install update:', error);
+      showToast(`Failed to install update: ${error}`, 'error');
     }
   };
 
@@ -330,6 +374,54 @@ const Settings = () => {
               <Typography variant="body1" fontFamily="monospace" fontWeight="medium">
                 {appInfo.build_timestamp}
               </Typography>
+            </Box>
+            <Divider />
+            
+            {/* Update Status */}
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <Typography variant="body1" color="textSecondary">
+                Update Status:
+              </Typography>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                {updateInfo ? (
+                  updateInfo.available ? (
+                    <Typography variant="body2" color="warning.main" fontWeight="medium">
+                      Update Available: {updateInfo.latest_version}
+                    </Typography>
+                  ) : (
+                    <Typography variant="body2" color="success.main" fontWeight="medium">
+                      ✓ Latest Version
+                    </Typography>
+                  )
+                ) : (
+                  <Typography variant="body2" color="textSecondary">
+                    Unknown
+                  </Typography>
+                )}
+              </Box>
+            </Box>
+            
+            {/* Update Actions */}
+            <Box sx={{ display: 'flex', gap: 1, mt: 2 }}>
+              <Button
+                variant="outlined"
+                size="small"
+                onClick={handleCheckForUpdates}
+                disabled={checkingUpdate}
+                startIcon={checkingUpdate ? <CircularProgress size={16} /> : null}
+              >
+                {checkingUpdate ? 'Checking...' : 'Check for Updates'}
+              </Button>
+              {updateInfo?.available && (
+                <Button
+                  variant="contained"
+                  color="primary"
+                  size="small"
+                  onClick={handleInstallUpdate}
+                >
+                  Install Update
+                </Button>
+              )}
             </Box>
           </Box>
         ) : (
