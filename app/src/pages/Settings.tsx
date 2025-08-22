@@ -25,6 +25,7 @@ import {
   CircularProgress,
 } from '@mui/material';
 import FolderOpenIcon from '@mui/icons-material/FolderOpen';
+import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 
 const Settings = () => {
   const { themeMode, setThemeMode, resolvedTheme } = useTheme();
@@ -60,6 +61,7 @@ const Settings = () => {
   } | null>(null);
 
   const [checkingUpdate, setCheckingUpdate] = useState(false);
+  const [availableConnections, setAvailableConnections] = useState<Array<{ host: string; port: number; label: string }>>([]);
 
   const [toast, setToast] = useState<{
     open: boolean;
@@ -93,6 +95,16 @@ const Settings = () => {
     } catch (error) {
       console.error('Failed to open logs directory:', error);
       showToast(`Failed to open logs directory: ${error}`, 'error');
+    }
+  };
+
+  const handleCopyMultiviewerUrl = async () => {
+    try {
+      await multiviewerService.copyMultiviewerUrl();
+      showToast('Multiviewer URL copied to clipboard', 'success');
+    } catch (error) {
+      console.error('Failed to copy multiviewer URL:', error);
+      showToast(`Failed to copy multiviewer URL: ${error}`, 'error');
     }
   };
 
@@ -205,6 +217,10 @@ const Settings = () => {
           setAppInfo(appInfo as any);
         }
 
+        // Load available connections
+        const connections = await invoke<Array<{ host: string; port: number; label: string }>>('get_all_connections');
+        setAvailableConnections(connections);
+        
         // Load multiviewer configuration
         const multiviewerConfig = await multiviewerService.getConfig();
         setSettings(prev => ({
@@ -372,7 +388,7 @@ const Settings = () => {
                     <Select
                       labelId="multiviewer-port-label"
                       name="multiviewerPort"
-                      value={settings.multiviewerPort}
+                      value={settings.multiviewerPort.toString()}
                       onChange={handleSelectChange}
                       label="Port"
                     >
@@ -393,7 +409,7 @@ const Settings = () => {
                     <Select
                       labelId="multiviewer-refresh-label"
                       name="multiviewerRefreshInterval"
-                      value={settings.multiviewerRefreshInterval}
+                      value={settings.multiviewerRefreshInterval.toString()}
                       onChange={handleSelectChange}
                       label="Refresh Interval"
                     >
@@ -420,7 +436,11 @@ const Settings = () => {
                       label="vMix Connection"
                     >
                       <MenuItem value="">Select a connection...</MenuItem>
-                      {/* TODO: Populate with available connections */}
+                      {availableConnections.map((conn) => (
+                        <MenuItem key={`${conn.host}:${conn.port}`} value={conn.host}>
+                          {conn.label || `${conn.host}:${conn.port}`}
+                        </MenuItem>
+                      ))}
                     </Select>
                   </FormControl>
                   <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
@@ -431,11 +451,25 @@ const Settings = () => {
                 <Alert severity="info" sx={{ mb: 2 }}>
                   <Typography variant="body2">
                     <strong>Multiviewer URL:</strong> When enabled, the multiviewer will be available at{' '}
-                    <code>http://127.0.0.1:{settings.multiviewerPort}</code>
+                    <code>http://127.0.0.1:{settings.multiviewerPort}/multiviewers</code>
                   </Typography>
                   <Typography variant="body2" sx={{ mt: 1 }}>
                     Add this URL as a Web Browser input in vMix to display the multiviewer.
                   </Typography>
+                  <Box sx={{ mt: 2, display: 'flex', alignItems: 'center', gap: 1 }}>
+                    <Button
+                      variant="outlined"
+                      size="small"
+                      startIcon={<ContentCopyIcon />}
+                      onClick={handleCopyMultiviewerUrl}
+                      disabled={!settings.multiviewerEnabled || !settings.multiviewerSelectedConnection}
+                    >
+                      Copy URL
+                    </Button>
+                    <Typography variant="caption" color="text.secondary">
+                      Copies the URL for the selected vMix connection
+                    </Typography>
+                  </Box>
                 </Alert>
               </>
             )}

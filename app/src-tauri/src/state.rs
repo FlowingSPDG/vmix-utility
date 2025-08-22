@@ -555,14 +555,17 @@ impl AppState {
         }
 
         // Stop existing server if running
-        self.stop_multiviewer_server().await;
+        self.stop_multiviewer_server();
 
         // Create new server
         let app_state_arc = Arc::new(self.clone());
         let server = MultiviewerServer::new(app_state_arc);
         
+        // Update server config
+        server.update_config(multiviewer_config.clone())?;
+        
         // Start the server
-        server.start().await?;
+        server.start()?;
         
         // Store the server
         {
@@ -574,7 +577,7 @@ impl AppState {
         Ok(())
     }
 
-    pub async fn stop_multiviewer_server(&self) {
+    pub fn stop_multiviewer_server(&self) {
         // Take the server out of the mutex before await
         let server = {
             let mut server_guard = self.multiviewer_server.lock().unwrap();
@@ -582,7 +585,7 @@ impl AppState {
         };
         
         if let Some(server) = server {
-            server.stop().await;
+            server.stop();
             app_log!(info, "Multiviewer server stopped");
         }
     }
@@ -594,11 +597,19 @@ impl AppState {
             app_settings.multiviewer = config.clone();
         }
         
+        // Update existing server if running
+        {
+            let mut server_guard = self.multiviewer_server.lock().unwrap();
+            if let Some(server) = &mut *server_guard {
+                server.update_config(config.clone())?;
+            }
+        }
+        
         // Restart server if needed
         if config.enabled {
             self.start_multiviewer_server().await?;
         } else {
-            self.stop_multiviewer_server().await;
+            self.stop_multiviewer_server();
         }
         
         Ok(())
@@ -607,5 +618,59 @@ impl AppState {
     pub fn get_multiviewer_config(&self) -> crate::types::MultiviewerConfig {
         let app_settings = self.app_settings.lock().unwrap();
         app_settings.multiviewer.clone()
+    }
+
+    pub fn get_connections(&self) -> Vec<crate::types::VmixConnection> {
+        let mut connections = Vec::new();
+        
+        // Get HTTP connections
+        {
+            let http_connections = self.http_connections.lock().unwrap();
+            for client in http_connections.iter() {
+                let host = client.host().to_string();
+                let label = {
+                    let labels = self.connection_labels.lock().unwrap();
+                    labels.get(&host).cloned().unwrap_or_else(|| format!("{}:8088", host))
+                };
+                
+                connections.push(crate::types::VmixConnection {
+                    host,
+                    port: 8088,
+                    label,
+                    status: "Connected".to_string(),
+                    active_input: 0,
+                    preview_input: 0,
+                    connection_type: crate::types::ConnectionType::Http,
+                    version: "Unknown".to_string(),
+                    edition: "Unknown".to_string(),
+                });
+            }
+        }
+        
+        // Get TCP connections
+        {
+            let tcp_connections = self.tcp_connections.lock().unwrap();
+            for manager in tcp_connections.iter() {
+                let host = manager.host().to_string();
+                let label = {
+                    let labels = self.connection_labels.lock().unwrap();
+                    labels.get(&host).cloned().unwrap_or_else(|| format!("{}:8088", host))
+                };
+                
+                connections.push(crate::types::VmixConnection {
+                    host,
+                    port: 8088,
+                    label,
+                    status: "Connected".to_string(),
+                    active_input: 0,
+                    preview_input: 0,
+                    connection_type: crate::types::ConnectionType::Tcp,
+                    version: "Unknown".to_string(),
+                    edition: "Unknown".to_string(),
+                });
+            }
+        }
+        
+        connections
     }
 }

@@ -1302,7 +1302,7 @@ pub async fn start_multiviewer_server(state: State<'_, AppState>) -> Result<(), 
 #[tauri::command]
 pub async fn stop_multiviewer_server(state: State<'_, AppState>) -> Result<(), String> {
     app_log!(info, "Stopping multiviewer server");
-    state.stop_multiviewer_server().await;
+    state.stop_multiviewer_server();
     app_log!(info, "Multiviewer server stopped");
     Ok(())
 }
@@ -1315,7 +1315,18 @@ pub async fn get_multiviewer_url(state: State<'_, AppState>) -> Result<String, S
         return Err("Multiviewer is not enabled".to_string());
     }
     
-    let url = format!("http://127.0.0.1:{}", config.port);
-    app_log!(info, "Multiviewer URL: {}", url);
+    // Get the selected connection to determine the appropriate IP address
+    let selected_connection = config.selected_connection.as_ref()
+        .ok_or("No vMix connection selected")?;
+    
+    // Get all connections to find the selected one
+    let connections = state.get_connections();
+    let selected_vmix = connections.iter()
+        .find(|conn| conn.host == *selected_connection)
+        .ok_or("Selected vMix connection not found")?;
+    
+    // Use the connection's host IP for the multiviewer URL
+    let url = format!("http://{}:{}/multiviewers", selected_vmix.host, config.port);
+    app_log!(info, "Multiviewer URL for {}: {}", selected_vmix.host, url);
     Ok(url)
 }

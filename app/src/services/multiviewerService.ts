@@ -27,5 +27,15 @@ export const multiviewerService = {
   async getMultiviewerUrl(): Promise<string> {
     return invoke<string>('get_multiviewer_url');
   },
+
+  async copyMultiviewerUrl(): Promise<void> {
+    try {
+      const url = await this.getMultiviewerUrl();
+      await navigator.clipboard.writeText(url);
+    } catch (error) {
+      console.error('Failed to copy multiviewer URL:', error);
+      throw error;
+    }
+  },
 };
 

@@ -228,7 +228,7 @@
 
             async loadConfig() {
                 try {
-                    const response = await fetch('/api/config');
+                    const response = await fetch('/multiviewers/api/config');
                     if (!response.ok) {
                         throw new Error('Failed to load configuration');
                     }
@@ -242,7 +242,7 @@
             async connectWebSocket() {
                 try {
                     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-                    const wsUrl = `${protocol}//${window.location.host}/ws`;
+                    const wsUrl = `${protocol}//${window.location.host}/multiviewers/ws`;
                     
                     this.ws = new WebSocket(wsUrl);
                     
