@@ -129,7 +129,7 @@ pub fn run() {
                                             // Native dialog (Dialog plugin)
                                             let current = update_info.current_version.clone();
                                             let latest = update_info.latest_version.clone().unwrap_or_default();
-                                            app.dialog()
+                                            app_handle.dialog()
                                                 .message(format!("Update available: {} → {}", current, latest))
                                                 .title("Update Available")
                                                 .buttons(MessageDialogButtons::OkCancelCustom("Update now".to_string(), "Later".to_string()))
@@ -154,7 +154,7 @@ pub fn run() {
 
                                             // Native message dialog for up-to-date
                                             let current = update_info.current_version.clone();
-                                            app.dialog()
+                                            app_handle.dialog()
                                                 .message(format!("You are using the latest version of vmix-utility!\nCurrent version: {}", current))
                                                 .kind(MessageDialogKind::Info)
                                                 .title("Up to Date")
