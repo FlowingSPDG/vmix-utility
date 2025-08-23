@@ -51,6 +51,15 @@
             border-color: rgba(255, 0, 0, 1.0);
         }
 
+        .layer-container.preview {
+            border: 4px solid rgba(0, 255, 0, 0.9);
+        }
+
+        .layer-container.preview:hover {
+            border-color: rgba(0, 255, 0, 1.0);
+        }
+
+
         .layer-content {
             position: relative;
             width: 100%;
@@ -472,12 +481,39 @@
                             const wsData = JSON.parse(event.data);
                             console.log('Parsed WebSocket data:', wsData);
                             
-                            // Only use WebSocket data if we don't already have layer data loaded
+                            // Handle WebSocket updates with detailed logging
+                            console.log('=== FRONTEND: WebSocket data received ===');
+                            console.log('Current data state:', {
+                                hasData: !!this.data,
+                                hasInputs: !!this.data?.inputs,
+                                inputsLength: this.data?.inputs?.length || 0
+                            });
+                            console.log('WebSocket data:', {
+                                hasInputs: !!wsData.inputs,
+                                inputsLength: wsData.inputs?.length || 0,
+                                activeInputKey: wsData.active_input_key,
+                                previewInputKey: wsData.preview_input_key,
+                                timestamp: wsData.timestamp
+                            });
+                            
                             if (!this.data || !this.data.inputs || this.data.inputs.length === 0) {
-                                console.log('Using WebSocket data since no layer data available');
+                                console.log('FRONTEND: Using WebSocket data since no layer data available');
                                 this.data = wsData;
                             } else {
-                                console.log('Keeping existing layer data, ignoring WebSocket data');
+                                // Update active/preview input keys from WebSocket while keeping layer data
+                                if (wsData.active_input_key !== undefined || wsData.preview_input_key !== undefined) {
+                                    console.log('FRONTEND: ✅ Updating active/preview keys from WebSocket:', {
+                                        oldActiveKey: this.data.active_input_key,
+                                        newActiveKey: wsData.active_input_key,
+                                        oldPreviewKey: this.data.preview_input_key,
+                                        newPreviewKey: wsData.preview_input_key
+                                    });
+                                    this.data.active_input_key = wsData.active_input_key;
+                                    this.data.preview_input_key = wsData.preview_input_key;
+                                    this.data.timestamp = wsData.timestamp;
+                                } else {
+                                    console.log('FRONTEND: No active/preview key data in WebSocket message');
+                                }
                             }
                             
                             console.log('Data type checks:', {
@@ -629,14 +665,22 @@
                     return;
                 }
 
-                // Filter out full-screen layers and sort by z-order
+                // Filter out full-screen layers, Layer10, and sort by z-order
                 const filteredLayers = selectedInput.layers.filter(layer => {
+                    // Remove Layer10 (index=10) - not needed for multiviewer
+                    if (layer.index === 10) {
+                        console.log(`Filtering out Layer10: ${layer.input_name} (index=${layer.index})`);
+                        return false;
+                    }
+                    
                     // Remove layers that cover the full screen (1920x1080) as they're usually background/overlay layers
                     const isFullScreen = layer.width >= 1920 && layer.height >= 1080;
                     if (isFullScreen) {
                         console.log(`Filtering out full-screen layer: ${layer.input_name} (${layer.width}x${layer.height})`);
+                        return false;
                     }
-                    return !isFullScreen;
+                    
+                    return true;
                 });
                 
                 const sortedLayers = filteredLayers.sort((a, b) => a.zorder - b.zorder);
@@ -690,17 +734,15 @@
                     }
                 }
                 
-                // Calculate proper scale to ensure 960x540 quadrants
-                // The user expects each quadrant to be exactly 960x540
-                const targetQuadrantWidth = 960;
-                const targetQuadrantHeight = 540;
+                // 1920x1080前提でコンテナサイズにフィットさせるスケールを計算
+                const scaleX = containerRect.width / vmixWidth;   // 横方向スケール
+                const scaleY = containerRect.height / vmixHeight; // 縦方向スケール
+                const scale = Math.min(scaleX, scaleY);           // アスペクト比を保持
                 
-                // Use the target quadrant size for calculations
-                const scale = 1;
-                const scaledWidth = vmixWidth * scale;  // 1920
-                const scaledHeight = vmixHeight * scale; // 1080
-                const offsetX = 0;
-                const offsetY = 0;
+                const scaledWidth = vmixWidth * scale;
+                const scaledHeight = vmixHeight * scale;
+                const offsetX = (containerRect.width - scaledWidth) / 2;  // 中央揃え
+                const offsetY = (containerRect.height - scaledHeight) / 2; // 中央揃え
                 
                 console.log('Scaling details:', { 
                     containerSize: { width: containerRect.width, height: containerRect.height },
@@ -710,8 +752,11 @@
                     offset: { x: offsetX, y: offsetY }
                 });
 
-                // Set container background to transparent
+                // Set container to match vMix canvas size
                 container.style.backgroundColor = 'transparent';
+                container.style.position = 'relative';
+                container.style.width = '100vw';
+                container.style.height = '100vh';
 
                 sortedLayers.forEach((layer, index) => {
                     console.log(`\n=== Processing layer ${index + 1} ===`);
@@ -737,25 +782,27 @@
                 const layerDiv = document.createElement('div');
                 layerDiv.className = 'layer-container';
                 
-                // Check if this layer represents the active input
-                const isActive = this.data && this.data.active_input && 
-                    (layer.input_key === this.data.active_input.toString() || 
-                     layer.index === this.data.active_input);
+                // シンプルな番号ベースの判定（キーではなく番号で比較）
+                const activeInputNumber = this.data?.active_input_key ? parseInt(this.data.active_input_key) : null;
+                const previewInputNumber = this.data?.preview_input_key ? parseInt(this.data.preview_input_key) : null;
+                
+                // レイヤーの入力番号と比較
+                const isActive = activeInputNumber && layer.input_number === activeInputNumber;
+                const isPreview = previewInputNumber && layer.input_number === previewInputNumber;
                 
                 if (isActive) {
                     layerDiv.classList.add('active');
-                    console.log(`  Layer ${layer.input_name} is ACTIVE (input ${this.data.active_input})`);
+                    console.log(`  Layer ${layer.input_name} is ACTIVE (number: ${layer.input_number} === ${activeInputNumber})`);
+                } else if (isPreview) {
+                    layerDiv.classList.add('preview');
+                    console.log(`  Layer ${layer.input_name} is PREVIEW (number: ${layer.input_number} === ${previewInputNumber})`);
                 } else {
-                    console.log(`  Layer ${layer.input_name} is not active (active input: ${this.data.active_input})`);
+                    console.log(`  Layer ${layer.input_name} is normal (number: ${layer.input_number}, active: ${activeInputNumber}, preview: ${previewInputNumber})`);
                 }
                 
-                // Apply vMix position and size - ignore zoom factor for base size calculation
-                // The user wants exact positioning regardless of vMix zoom settings
+                // vMixのpositionをコンテナにフィットさせる（1920x1080前提）
                 const scaledX = Math.round(layer.x * scale + offsetX);
                 const scaledY = Math.round(layer.y * scale + offsetY);
-                
-                // Use the exact width/height from vMix, not affected by zoom
-                // Zoom will be applied as a CSS transform separately
                 const scaledWidth = Math.round(layer.width * scale);
                 const scaledHeight = Math.round(layer.height * scale);
                 

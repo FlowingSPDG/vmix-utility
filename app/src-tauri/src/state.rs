@@ -280,6 +280,7 @@ impl AppState {
         let inputs_cache = Arc::clone(&self.inputs_cache);
         let video_lists_cache = Arc::clone(&self.video_lists_cache);
         let labels = Arc::clone(&self.connection_labels);
+        let multiviewer_server = Arc::clone(&self.multiviewer_server);
 
         tokio::spawn(async move {
             let mut interval = interval(Duration::from_secs(1));
@@ -437,6 +438,18 @@ impl AppState {
                             // Always emit event for connection updates
                             if status_changed {
                                 let _ = app_handle.emit("vmix-status-updated", &new_connection);
+                                
+                                // Notify multiviewer server of vMix status update (event-driven, no polling)
+                                if let Some(multiviewer) = multiviewer_server.lock().unwrap().as_ref() {
+                                    app_log!(info, "STATE: Calling multiviewer.on_vmix_status_update for {} - Active: {}, Preview: {}", 
+                                        new_connection.host, new_connection.active_input, new_connection.preview_input);
+                                    multiviewer.on_vmix_status_update(&new_connection);
+                                } else {
+                                    app_log!(warn, "STATE: No multiviewer server available for status update");
+                                }
+                            } else {
+                                app_log!(debug, "STATE: No status change for {} - Active: {}, Preview: {}", 
+                                    new_connection.host, new_connection.active_input, new_connection.preview_input);
                             }
 
                             // Also check and emit VideoLists updates
