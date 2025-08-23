@@ -2,9 +2,8 @@ import { useState, useEffect } from 'react';
 import type { SelectChangeEvent } from '@mui/material';
 import { useTheme, type ThemeMode } from '../hooks/useTheme';
 import { useUISettings } from '../hooks/useUISettings.tsx';
-import { settingsService } from '../services/settingsService';
+import { settingsService, type UpdateInfo } from '../services/settingsService';
 import { multiviewerService } from '../services/multiviewerService';
-import { invoke } from '@tauri-apps/api/core';
 import {
   Box,
   Typography,
@@ -25,7 +24,6 @@ import {
   CircularProgress,
 } from '@mui/material';
 import FolderOpenIcon from '@mui/icons-material/FolderOpen';
-import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 
 const Settings = () => {
   const { themeMode, setThemeMode, resolvedTheme } = useTheme();
@@ -39,11 +37,9 @@ const Settings = () => {
     logFilePath: '',
     // New UI settings
     uiDensity: 'comfortable' as 'compact' | 'comfortable' | 'spacious',
-    // Multiviewer settings
+    // Multiviewer global settings
     multiviewerEnabled: false,
     multiviewerPort: 8089,
-    multiviewerRefreshInterval: 150,
-    multiviewerSelectedConnection: '',
   });
 
   const [appInfo, setAppInfo] = useState<{
@@ -53,15 +49,12 @@ const Settings = () => {
     build_timestamp: string;
   } | null>(null);
 
-  const [updateInfo, setUpdateInfo] = useState<{
-    available: boolean;
-    current_version: string;
-    latest_version?: string;
-    body?: string;
-  } | null>(null);
+  const [updateInfo, setUpdateInfo] = useState<UpdateInfo | null>(null);
+
+  const [updateCheckInProgress, setUpdateCheckInProgress] = useState(true);
 
   const [checkingUpdate, setCheckingUpdate] = useState(false);
-  const [availableConnections, setAvailableConnections] = useState<Array<{ host: string; port: number; label: string }>>([]);
+  const [savingSettings, setSavingSettings] = useState(false);
 
   const [toast, setToast] = useState<{
     open: boolean;
@@ -98,25 +91,11 @@ const Settings = () => {
     }
   };
 
-  const handleCopyMultiviewerUrl = async () => {
-    try {
-      await multiviewerService.copyMultiviewerUrl();
-      showToast('Multiviewer URL copied to clipboard', 'success');
-    } catch (error) {
-      console.error('Failed to copy multiviewer URL:', error);
-      showToast(`Failed to copy multiviewer URL: ${error}`, 'error');
-    }
-  };
 
   const handleCheckForUpdates = async () => {
     setCheckingUpdate(true);
     try {
-      const result = await invoke<{
-        available: boolean;
-        current_version: string;
-        latest_version?: string;
-        body?: string;
-      }>('check_for_updates');
+      const result = await settingsService.checkForUpdates();
       setUpdateInfo(result);
       if (result.available) {
         showToast(`Update available: ${result.current_version} → ${result.latest_version}`, 'info');
@@ -125,7 +104,20 @@ const Settings = () => {
       }
     } catch (error) {
       console.error('Failed to check for updates:', error);
-      showToast(`Failed to check for updates: ${error}`, 'error');
+      // Check if it's a network-related error
+      const errorMessage = String(error);
+      if (errorMessage.includes('network') || errorMessage.includes('connection') || errorMessage.includes('timeout')) {
+        showToast('Unable to check for updates - please check your internet connection', 'error');
+      } else {
+        showToast(`Failed to check for updates: ${error}`, 'error');
+      }
+      // Set updateInfo to indicate no update available when offline
+      setUpdateInfo({
+        available: false,
+        current_version: appInfo?.version || 'Unknown',
+        latest_version: undefined,
+        body: undefined,
+      });
     } finally {
       setCheckingUpdate(false);
     }
@@ -133,7 +125,7 @@ const Settings = () => {
 
   const handleInstallUpdate = async () => {
     try {
-      await invoke('install_update');
+      await settingsService.installUpdate();
       showToast('Update installation started', 'info');
     } catch (error) {
       console.error('Failed to install update:', error);
@@ -150,13 +142,16 @@ const Settings = () => {
   };
 
   const handleApply = async () => {
+    setSavingSettings(true);
     try {
       // Apply theme change first
       if (settings.theme !== themeMode) {
+        console.log('Applying theme change:', settings.theme);
         await setThemeMode(settings.theme as ThemeMode);
       }
       
       // Save app settings to backend
+      console.log('Saving app settings...');
       await settingsService.saveAppSettings({
         defaultVMixIP: settings.defaultVMixIP,
         defaultVMixPort: settings.defaultVMixPort,
@@ -165,23 +160,28 @@ const Settings = () => {
       });
 
       // Save logging configuration to backend
+      console.log('Saving logging config...');
       await settingsService.setLoggingConfig(settings.logLevel, settings.saveLogsToFile);
 
-      // Save multiviewer configuration to backend
+      // Save multiviewer global configuration to backend
+      console.log('Saving multiviewer config...');
       await multiviewerService.updateConfig({
         enabled: settings.multiviewerEnabled,
         port: settings.multiviewerPort,
-        refresh_interval: settings.multiviewerRefreshInterval,
-        selected_connection: settings.multiviewerSelectedConnection || undefined,
+        selected_connection: undefined, // Global settings don't include connection selection
       });
-      
+
       // Refresh UI settings in context
+      console.log('Refreshing UI settings...');
       await refreshSettings();
       
+      console.log('Settings saved successfully');
       showToast('Settings saved successfully!', 'success');
     } catch (error) {
       console.error('Failed to save settings:', error);
       showToast(`Failed to save settings: ${error}`, 'error');
+    } finally {
+      setSavingSettings(false);
     }
   };
 
@@ -217,19 +217,17 @@ const Settings = () => {
           setAppInfo(appInfo as any);
         }
 
-        // Load available connections
-        const connections = await invoke<Array<{ host: string; port: number; label: string }>>('get_all_connections');
-        setAvailableConnections(connections);
-        
-        // Load multiviewer configuration
+        // Load multiviewer global configuration
         const multiviewerConfig = await multiviewerService.getConfig();
         setSettings(prev => ({
           ...prev,
           multiviewerEnabled: multiviewerConfig.enabled,
           multiviewerPort: multiviewerConfig.port,
-          multiviewerRefreshInterval: multiviewerConfig.refresh_interval,
-          multiviewerSelectedConnection: multiviewerConfig.selected_connection || '',
         }));
+
+
+        // Check for updates automatically on app startup
+        await checkForUpdatesOnStartup();
       } catch (error) {
         console.error('Failed to load configurations:', error);
         showToast('Failed to load settings', 'error');
@@ -238,6 +236,27 @@ const Settings = () => {
 
     loadConfigurations();
   }, []);
+
+  // Function to check for updates on startup
+  const checkForUpdatesOnStartup = async () => {
+    try {
+      const result = await settingsService.checkForUpdates();
+      setUpdateInfo(result);
+      // Don't show toast for automatic checks to avoid spam
+    } catch (error) {
+      console.error('Failed to check for updates on startup:', error);
+      // Set updateInfo to indicate no update available (not unknown)
+      // This prevents showing "Unknown" status when offline
+      setUpdateInfo({
+        available: false,
+        current_version: appInfo?.version || 'Unknown',
+        latest_version: undefined,
+        body: undefined,
+      });
+    } finally {
+      setUpdateCheckInProgress(false);
+    }
+  };
 
   return (
     <Box sx={{ p: 3 }}>
@@ -359,7 +378,7 @@ const Settings = () => {
 
           <Grid2 size={12}>
             <Typography variant="h6" gutterBottom>
-              Multiviewer Settings
+              Multiviewer Global Settings
             </Typography>
             <Divider sx={{ mb: 2 }} />
             
@@ -373,7 +392,7 @@ const Settings = () => {
                     color="primary"
                   />
                 }
-                label="Enable Multiviewer"
+                label="Enable Multiviewer Server"
               />
               <Typography variant="body2" color="text.secondary" sx={{ mt: 1, mb: 2 }}>
                 Start a local HTTP server to provide multiviewer functionality for vMix Web Browser inputs
@@ -384,13 +403,13 @@ const Settings = () => {
               <>
                 <Box sx={{ mb: 2 }}>
                   <FormControl fullWidth margin="normal">
-                    <InputLabel id="multiviewer-port-label">Port</InputLabel>
+                    <InputLabel id="multiviewer-port-label">Server Port</InputLabel>
                     <Select
                       labelId="multiviewer-port-label"
                       name="multiviewerPort"
                       value={settings.multiviewerPort.toString()}
                       onChange={handleSelectChange}
-                      label="Port"
+                      label="Server Port"
                     >
                       <MenuItem value={8089}>8089 (Default)</MenuItem>
                       <MenuItem value={8090}>8090</MenuItem>
@@ -403,73 +422,13 @@ const Settings = () => {
                   </Typography>
                 </Box>
 
-                <Box sx={{ mb: 2 }}>
-                  <FormControl fullWidth margin="normal">
-                    <InputLabel id="multiviewer-refresh-label">Refresh Interval</InputLabel>
-                    <Select
-                      labelId="multiviewer-refresh-label"
-                      name="multiviewerRefreshInterval"
-                      value={settings.multiviewerRefreshInterval.toString()}
-                      onChange={handleSelectChange}
-                      label="Refresh Interval"
-                    >
-                      <MenuItem value={50}>50ms (Fastest)</MenuItem>
-                      <MenuItem value={100}>100ms</MenuItem>
-                      <MenuItem value={150}>150ms (Default)</MenuItem>
-                      <MenuItem value={200}>200ms</MenuItem>
-                      <MenuItem value={500}>500ms</MenuItem>
-                    </Select>
-                  </FormControl>
-                  <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
-                    Update frequency for multiviewer data (lower = more responsive)
-                  </Typography>
-                </Box>
-
-                <Box sx={{ mb: 2 }}>
-                  <FormControl fullWidth margin="normal">
-                    <InputLabel id="multiviewer-connection-label">vMix Connection</InputLabel>
-                    <Select
-                      labelId="multiviewer-connection-label"
-                      name="multiviewerSelectedConnection"
-                      value={settings.multiviewerSelectedConnection}
-                      onChange={handleSelectChange}
-                      label="vMix Connection"
-                    >
-                      <MenuItem value="">Select a connection...</MenuItem>
-                      {availableConnections.map((conn) => (
-                        <MenuItem key={`${conn.host}:${conn.port}`} value={conn.host}>
-                          {conn.label || `${conn.host}:${conn.port}`}
-                        </MenuItem>
-                      ))}
-                    </Select>
-                  </FormControl>
-                  <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
-                    Select which vMix connection to use for multiviewer data
-                  </Typography>
-                </Box>
 
                 <Alert severity="info" sx={{ mb: 2 }}>
                   <Typography variant="body2">
-                    <strong>Multiviewer URL:</strong> When enabled, the multiviewer will be available at{' '}
-                    <code>http://127.0.0.1:{settings.multiviewerPort}/multiviewers</code>
+                    <strong>Note:</strong> The multiviewer uses real-time updates from your vMix connections. 
+                    Go to the <strong>Multiviewer</strong> page to select connections and inputs, 
+                    then copy the specific URL for your vMix Web Browser input.
                   </Typography>
-                  <Typography variant="body2" sx={{ mt: 1 }}>
-                    Add this URL as a Web Browser input in vMix to display the multiviewer.
-                  </Typography>
-                  <Box sx={{ mt: 2, display: 'flex', alignItems: 'center', gap: 1 }}>
-                    <Button
-                      variant="outlined"
-                      size="small"
-                      startIcon={<ContentCopyIcon />}
-                      onClick={handleCopyMultiviewerUrl}
-                      disabled={!settings.multiviewerEnabled || !settings.multiviewerSelectedConnection}
-                    >
-                      Copy URL
-                    </Button>
-                    <Typography variant="caption" color="text.secondary">
-                      Copies the URL for the selected vMix connection
-                    </Typography>
-                  </Box>
                 </Alert>
               </>
             )}
@@ -482,8 +441,10 @@ const Settings = () => {
                 color="primary"
                 size="large"
                 onClick={handleApply}
+                disabled={savingSettings}
+                startIcon={savingSettings ? <CircularProgress size={16} color="inherit" /> : null}
               >
-                Apply Settings
+                {savingSettings ? 'Saving...' : 'Apply Settings'}
               </Button>
             </Box>
           </Grid2>
@@ -541,7 +502,14 @@ const Settings = () => {
                 Update Status:
               </Typography>
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                {updateInfo ? (
+                {updateCheckInProgress ? (
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                    <CircularProgress size={16} />
+                    <Typography variant="body2" color="textSecondary">
+                      Checking...
+                    </Typography>
+                  </Box>
+                ) : updateInfo ? (
                   updateInfo.available ? (
                     <Typography variant="body2" color="warning.main" fontWeight="medium">
                       Update Available: {updateInfo.latest_version}
@@ -553,7 +521,7 @@ const Settings = () => {
                   )
                 ) : (
                   <Typography variant="body2" color="textSecondary">
-                    Unknown
+                    Unable to check
                   </Typography>
                 )}
               </Box>

@@ -1268,8 +1268,8 @@ pub async fn update_multiviewer_config(
     config: crate::types::MultiviewerConfig,
     state: State<'_, AppState>
 ) -> Result<(), String> {
-    app_log!(info, "Updating multiviewer configuration: enabled={}, port={}, refresh_interval={}ms", 
-        config.enabled, config.port, config.refresh_interval);
+    app_log!(info, "Updating multiviewer configuration: enabled={}, port={}", 
+        config.enabled, config.port);
     
     match state.update_multiviewer_config(config).await {
         Ok(_) => {

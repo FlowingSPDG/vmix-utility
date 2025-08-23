@@ -69,6 +69,18 @@ impl VmixClientWrapper {
                         vmix_rs::models::State::Paused => "Paused".to_string(),
                         vmix_rs::models::State::Completed => "Completed".to_string(),
                     }),
+                    overlays: input.overlay.into_iter().map(|overlay| crate::types::InputOverlay {
+                        index: overlay.index.to_string(),
+                        x: overlay.position.as_ref().and_then(|p| p.x.as_ref()).map(|x| x.to_string()),
+                        y: overlay.position.as_ref().and_then(|p| p.y.as_ref()).map(|y| y.to_string()),
+                        width: overlay.position.as_ref().and_then(|p| p.width.as_ref()).map(|w| w.to_string()),
+                        height: overlay.position.as_ref().and_then(|p| p.height.as_ref()).map(|h| h.to_string()),
+                        crop: None, // Not available in vmix-rs
+                        zorder: None, // zorder not available in vmix-rs Position
+                        panx: overlay.position.as_ref().and_then(|p| p.pan_x.as_ref()).map(|px| px.to_string()),
+                        pany: overlay.position.as_ref().and_then(|p| p.pan_y.as_ref()).map(|py| py.to_string()),
+                        zoom: overlay.position.as_ref().and_then(|p| p.zoom_x.as_ref()).map(|z| z.to_string()),
+                    }).collect(),
                 }).collect(),
             },
             active: Some(vmix_state.active),

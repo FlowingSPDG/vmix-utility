@@ -3,7 +3,6 @@ import { invoke } from '@tauri-apps/api/core';
 export interface MultiviewerConfig {
   enabled: boolean;
   port: number;
-  refresh_interval: number; // in milliseconds
   selected_connection?: string; // host:port
 }
 

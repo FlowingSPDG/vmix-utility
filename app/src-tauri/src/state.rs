@@ -143,6 +143,7 @@ impl AppState {
             }
             
             AppConfig {
+                version: crate::types::default_config_version(),
                 connections: all_connections,
                 app_settings: Some(self.app_settings.lock().unwrap().clone()),
                 logging_config: Some(crate::logging::LOGGING_CONFIG.lock().unwrap().clone()),
@@ -154,6 +155,19 @@ impl AppState {
         
         fs::write(&config_path, json_data).await.map_err(|e| e.to_string())?;
         println!("Config saved successfully");
+        
+        Ok(())
+    }
+
+    // Save a provided AppConfig to disk (used for migration)
+    async fn save_migrated_config(&self, config: &AppConfig, app_handle: &tauri::AppHandle) -> Result<(), String> {
+        let config_path = Self::get_config_path(app_handle).await?;
+        app_log!(info, "Saving migrated config to: {:?}", config_path);
+        
+        let json_data = serde_json::to_string_pretty(config).map_err(|e| e.to_string())?;
+        
+        fs::write(&config_path, json_data).await.map_err(|e| e.to_string())?;
+        app_log!(info, "Migrated configuration saved successfully");
         
         Ok(())
     }
@@ -169,8 +183,30 @@ impl AppState {
         let json_data = fs::read_to_string(&config_path).await.map_err(|e| e.to_string())?;
         println!("Config file content: {}", json_data);
         
-        let config: AppConfig = serde_json::from_str(&json_data).map_err(|e| e.to_string())?;
+        let mut config: AppConfig = serde_json::from_str(&json_data).map_err(|e| e.to_string())?;
         println!("Parsed config with {} connections", config.connections.len());
+        
+        // Check if migration is needed
+        let original_version = config.version.clone();
+        let current_version = crate::types::default_config_version();
+        let needs_migration = config.version.is_empty() || config.version != current_version;
+        
+        if needs_migration {
+            app_log!(info, "Configuration migration needed: {} -> {}", 
+                if original_version.is_empty() { "legacy".to_string() } else { original_version.clone() },
+                current_version);
+            config.migrate();
+            
+            // Save the migrated configuration back to disk
+            app_log!(info, "Saving migrated configuration to disk");
+            if let Err(e) = self.save_migrated_config(&config, app_handle).await {
+                app_log!(error, "Failed to save migrated configuration: {}", e);
+            } else {
+                app_log!(info, "Configuration successfully migrated from {} to {}", 
+                    if original_version.is_empty() { "legacy".to_string() } else { original_version },
+                    config.version);
+            }
+        }
         
         // Clear existing connections
         {
@@ -562,10 +598,10 @@ impl AppState {
         let server = MultiviewerServer::new(app_state_arc);
         
         // Update server config
-        server.update_config(multiviewer_config.clone())?;
+        server.update_config(multiviewer_config.clone()).await?;
         
         // Start the server
-        server.start()?;
+        server.start().await?;
         
         // Store the server
         {
@@ -598,10 +634,24 @@ impl AppState {
         }
         
         // Update existing server if running
-        {
-            let mut server_guard = self.multiviewer_server.lock().unwrap();
-            if let Some(server) = &mut *server_guard {
-                server.update_config(config.clone())?;
+        let has_server = {
+            let server_guard = self.multiviewer_server.lock().unwrap();
+            server_guard.is_some()
+        };
+        
+        if has_server {
+            // Take the server temporarily to avoid holding the mutex during async operation
+            let server = {
+                let mut server_guard = self.multiviewer_server.lock().unwrap();
+                server_guard.take()
+            };
+            
+            if let Some(server) = server {
+                server.update_config(config.clone()).await?;
+                
+                // Put the server back
+                let mut server_guard = self.multiviewer_server.lock().unwrap();
+                *server_guard = Some(server);
             }
         }
         

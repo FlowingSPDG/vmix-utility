@@ -92,6 +92,7 @@ impl TcpVmixManager {
                 let config = refresh_config.unwrap_or_else(|| crate::types::AutoRefreshConfig {
                     enabled: true,
                     duration: 3,
+                    duration_unit: crate::types::DurationUnit::Seconds,
                 });
                 
                 // Only send XML if auto-refresh is enabled and enough time has passed

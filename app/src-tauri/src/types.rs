@@ -1,5 +1,7 @@
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
+use crate::app_log;
+use semver::Version;
 
 #[derive(Debug, Deserialize)]
 pub struct VmixXml {
@@ -32,6 +34,32 @@ pub struct Input {
     pub input_type: Option<String>,
     #[serde(rename = "@state")]
     pub state: Option<String>,
+    #[serde(rename = "overlay", default)]
+    pub overlays: Vec<InputOverlay>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct InputOverlay {
+    #[serde(rename = "@index")]
+    pub index: String,
+    #[serde(rename = "@x")]
+    pub x: Option<String>,
+    #[serde(rename = "@y")]
+    pub y: Option<String>,
+    #[serde(rename = "@width")]
+    pub width: Option<String>,
+    #[serde(rename = "@height")]
+    pub height: Option<String>,
+    #[serde(rename = "@crop")]
+    pub crop: Option<String>,
+    #[serde(rename = "@zorder")]
+    pub zorder: Option<String>,
+    #[serde(rename = "@panx")]
+    pub panx: Option<String>,
+    #[serde(rename = "@pany")]
+    pub pany: Option<String>,
+    #[serde(rename = "@zoom")]
+    pub zoom: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -60,15 +88,48 @@ impl Default for ConnectionType {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AutoRefreshConfig {
     pub enabled: bool,
-    pub duration: u64, // seconds
+    pub duration: u64, // seconds (legacy) or milliseconds (new)
+    #[serde(default)]
+    pub duration_unit: DurationUnit, // Added for migration
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub enum DurationUnit {
+    #[serde(rename = "seconds")]
+    Seconds,  // Legacy format
+    #[serde(rename = "milliseconds")] 
+    Milliseconds, // New format
+}
+
+impl Default for DurationUnit {
+    fn default() -> Self {
+        DurationUnit::Seconds // Default to legacy for backward compatibility
+    }
 }
 
 impl Default for AutoRefreshConfig {
     fn default() -> Self {
         Self {
             enabled: true,
-            duration: 3,
+            duration: 3000, // 3 seconds in milliseconds for new installations
+            duration_unit: DurationUnit::Milliseconds,
         }
+    }
+}
+
+impl AutoRefreshConfig {
+    // Helper method to get duration in milliseconds, handling migration
+    pub fn get_duration_ms(&self) -> u64 {
+        match self.duration_unit {
+            DurationUnit::Seconds => self.duration * 1000,
+            DurationUnit::Milliseconds => self.duration,
+        }
+    }
+    
+    // Helper method to set duration in milliseconds
+    pub fn set_duration_ms(&mut self, ms: u64) {
+        self.duration = ms;
+        self.duration_unit = DurationUnit::Milliseconds;
     }
 }
 
@@ -84,9 +145,81 @@ pub struct ConnectionConfig {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AppConfig {
+    #[serde(default = "default_config_version")]
+    pub version: String,
     pub connections: Vec<ConnectionConfig>,
     pub app_settings: Option<AppSettings>,
     pub logging_config: Option<LoggingConfig>,
+}
+
+pub fn default_config_version() -> String {
+    "2.2.0".to_string() // Current version in semver format
+}
+
+impl AppConfig {
+    // Migrate configuration from older versions
+    pub fn migrate(&mut self) {
+        // Handle the case where version field doesn't exist (old configs)
+        if self.version.is_empty() {
+            app_log!(info, "No version field found in config - treating as legacy config (pre-v2.2.0)");
+            self.migrate_from_legacy();
+            self.version = "2.2.0".to_string();
+            return;
+        }
+
+        // Parse version and handle migration
+        match self.version.as_str() {
+            "2.2.0" => {
+                // Current version, no migration needed
+                app_log!(debug, "Configuration is already at current version 2.2.0");
+            }
+            _ => {
+                // Check if it's an older version that needs migration
+                if self.is_version_older_than("2.2.0") {
+                    app_log!(info, "Migrating configuration from {} to 2.2.0", self.version);
+                    self.migrate_from_legacy();
+                    self.version = "2.2.0".to_string();
+                } else {
+                    // Future version, no migration needed
+                    app_log!(warn, "Configuration version {} is newer than current version 2.2.0, keeping as is", self.version);
+                }
+            }
+        }
+    }
+
+    fn migrate_from_legacy(&mut self) {
+        app_log!(info, "Migrating legacy configuration to v2.2.0");
+        
+        // Migrate auto-refresh durations from seconds to milliseconds
+        for connection in &mut self.connections {
+            // If duration_unit is not set, assume it's in seconds (legacy format)
+            if connection.auto_refresh.duration_unit == crate::types::DurationUnit::Seconds {
+                // Convert seconds to milliseconds
+                let old_duration = connection.auto_refresh.duration;
+                connection.auto_refresh.duration *= 1000;
+                connection.auto_refresh.duration_unit = crate::types::DurationUnit::Milliseconds;
+                app_log!(info, "Migrated connection {} auto-refresh from {}s to {}ms", 
+                    connection.host, old_duration, connection.auto_refresh.duration);
+            }
+        }
+    }
+
+    fn is_version_older_than(&self, target: &str) -> bool {
+        // Use semver crate for proper semantic version comparison
+        match (Version::parse(&self.version), Version::parse(target)) {
+            (Ok(current), Ok(target_version)) => {
+                current < target_version
+            }
+            (Err(e), _) => {
+                app_log!(warn, "Could not parse current version '{}': {}, assuming it's older", self.version, e);
+                true
+            }
+            (_, Err(e)) => {
+                app_log!(warn, "Could not parse target version '{}': {}, assuming current is newer", target, e);
+                false
+            }
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -153,7 +286,6 @@ impl ToString for UIDensity {
 pub struct MultiviewerConfig {
     pub enabled: bool,
     pub port: u16,
-    pub refresh_interval: u64, // in milliseconds
     pub selected_connection: Option<String>, // host:port
 }
 
@@ -162,7 +294,6 @@ impl Default for MultiviewerConfig {
         Self {
             enabled: false,
             port: 8089,
-            refresh_interval: 150,
             selected_connection: None,
         }
     }
