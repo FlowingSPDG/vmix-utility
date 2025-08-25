@@ -5435,7 +5435,7 @@ checksum = "0b928f33d975fc6ad9f86c8f283853ad26bdd5b10b7f1542aa2fa15e2289105a"
 [[package]]
 name = "vmix_rs"
 version = "0.1.0"
-source = "git+https://github.com/FlowingSPDG/vmix-rs.git#fdd98c4a9140cdea8731a8830e6fd78cd2079201"
+source = "git+https://github.com/FlowingSPDG/vmix-rs.git#46b7f62c67d721e60b524868d653472563e7bda8"
 dependencies = [
  "anyhow",
  "async-trait",
