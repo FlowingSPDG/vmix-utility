@@ -1,6 +1,6 @@
 use tauri::tray::TrayIconBuilder;
 use tauri::{
-    menu::{Menu, MenuItem}, Emitter, Manager
+    menu::{Menu, MenuItem}, Manager
 };
 use tauri_plugin_dialog::{DialogExt, MessageDialogButtons, MessageDialogKind};
 
@@ -59,6 +59,7 @@ pub mod tcp_manager;
 pub mod state;
 pub mod commands;
 pub mod network_scanner;
+pub mod multiviewer;
 
 // Re-export commonly used types
 pub use state::AppState;
@@ -122,6 +123,7 @@ pub fn run() {
             let app_handle_clone = app_handle.clone();
             let app_handle_refresh = app_handle.clone();
             let app_handle_update = app_handle.clone();
+            let app_handle_multiviewer = app_handle.clone();
 
             // system tray icon
             let show_i = MenuItem::with_id(app, "show", "Show", true, None::<&str>)?;
@@ -184,6 +186,14 @@ pub fn run() {
                 app_state.start_auto_refresh_task(app_handle_refresh);
             });
             
+            // Start multiviewer server after initialization
+            tauri::async_runtime::spawn(async move {
+                let app_state = app_handle_multiviewer.state::<AppState>();
+                if let Err(e) = app_state.start_multiviewer_server().await {
+                    app_log!(error, "Failed to start multiviewer server: {}", e);
+                }
+            });
+            
             // Check for updates on startup
             tauri::async_runtime::spawn(async move {
                 tokio::time::sleep(tokio::time::Duration::from_secs(3)).await; // Wait 3 seconds after startup
@@ -220,7 +230,12 @@ pub fn run() {
             check_for_updates,
             install_update,
             get_network_interfaces_command,
-            scan_network_for_vmix_command
+            scan_network_for_vmix_command,
+            get_multiviewer_config,
+            update_multiviewer_config,
+            start_multiviewer_server,
+            stop_multiviewer_server,
+            get_multiviewer_url
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

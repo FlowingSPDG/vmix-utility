@@ -1,0 +1,969 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>vMix Multiviewer</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: transparent;
+            color: #ffffff;
+            overflow: hidden;
+        }
+
+        .multiviewer {
+            position: relative;
+            height: 100vh;
+            width: 100vw;
+            background-color: transparent;
+            overflow: hidden;
+        }
+
+        .layer-container {
+            position: absolute;
+            border: 4px solid rgba(255, 255, 255, 0.9);
+            background-color: transparent;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        .layer-container:hover {
+            border-color: rgba(255, 255, 255, 1.0);
+            background-color: transparent;
+        }
+
+        .layer-container.active {
+            border: 4px solid rgba(255, 0, 0, 0.9);
+        }
+
+        .layer-container.active:hover {
+            border-color: rgba(255, 0, 0, 1.0);
+        }
+
+        .layer-container.preview {
+            border: 4px solid rgba(0, 255, 0, 0.9);
+        }
+
+        .layer-container.preview:hover {
+            border-color: rgba(0, 255, 0, 1.0);
+        }
+
+
+        .layer-content {
+            position: relative;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            text-align: center;
+            padding: 0;
+            margin: 0;
+            box-sizing: border-box;
+            pointer-events: none;
+        }
+
+        .layer-title {
+            display: none;
+        }
+
+        .layer-container:hover .layer-title {
+            display: block;
+            font-size: 12px;
+            font-weight: bold;
+            color: #ffffff;
+            text-shadow: 2px 2px 4px rgba(0, 0, 0, 1);
+            word-break: break-word;
+            line-height: 1.2;
+            text-align: center;
+            background-color: rgba(0, 0, 0, 0.8);
+            padding: 2px 6px;
+            border-radius: 3px;
+            margin: 0;
+            position: absolute;
+            top: 4px;
+            left: 4px;
+            font-size: 10px;
+        }
+
+        .layer-info {
+            display: none;
+        }
+
+        .layer-index {
+            display: none;
+        }
+
+        .input-box {
+            background-color: #2a2a2a;
+            border: 3px solid #404040;
+            border-radius: 8px;
+            padding: 20px;
+            position: relative;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            transition: all 0.3s ease;
+            max-width: 800px;
+            max-height: 600px;
+            min-width: 400px;
+            min-height: 300px;
+            width: 80vw;
+            height: 60vh;
+        }
+
+        .input-box.active {
+            border-color: #ff6b6b;
+            background-color: #3a2a2a;
+            box-shadow: 0 0 20px rgba(255, 107, 107, 0.3);
+        }
+
+        .input-box.preview {
+            border-color: #4ecdc4;
+            background-color: #2a3a3a;
+            box-shadow: 0 0 20px rgba(78, 205, 196, 0.3);
+        }
+
+        .input-box.playing {
+            border-color: #45b7d1;
+            background-color: #2a2a3a;
+            box-shadow: 0 0 20px rgba(69, 183, 209, 0.3);
+        }
+
+        .input-number {
+            position: absolute;
+            top: 8px;
+            left: 8px;
+            background-color: rgba(0, 0, 0, 0.8);
+            color: #ffffff;
+            padding: 4px 12px;
+            border-radius: 6px;
+            font-size: 16px;
+            font-weight: bold;
+        }
+
+        .input-title {
+            margin-top: 40px;
+            font-size: 24px;
+            font-weight: 600;
+            text-align: center;
+            word-break: break-word;
+            line-height: 1.4;
+            flex-grow: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.5);
+        }
+
+        .input-type {
+            position: absolute;
+            bottom: 8px;
+            right: 8px;
+            background-color: rgba(0, 0, 0, 0.8);
+            color: #cccccc;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 12px;
+            text-transform: uppercase;
+        }
+
+        .input-state {
+            position: absolute;
+            top: 8px;
+            right: 8px;
+            background-color: rgba(0, 0, 0, 0.8);
+            color: #cccccc;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 12px;
+            text-transform: uppercase;
+        }
+
+        .status-bar {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            background-color: rgba(0, 0, 0, 0.9);
+            padding: 12px 20px;
+            font-size: 14px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            z-index: 1000;
+        }
+
+        .connection-status {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .status-indicator {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background-color: #666;
+        }
+
+        .status-indicator.connected {
+            background-color: #4caf50;
+            animation: pulse 2s ease-in-out infinite;
+        }
+
+        .status-indicator.disconnected {
+            background-color: #f44336;
+        }
+
+        @keyframes pulse {
+            0% { opacity: 1; }
+            50% { opacity: 0.5; }
+            100% { opacity: 1; }
+        }
+
+        .timestamp {
+            color: #cccccc;
+        }
+
+        .loading {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            font-size: 20px;
+            color: #cccccc;
+        }
+
+        .error {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            font-size: 18px;
+            color: #f44336;
+            text-align: center;
+            padding: 40px;
+        }
+
+        .no-input {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            font-size: 18px;
+            color: #cccccc;
+            text-align: center;
+            padding: 40px;
+        }
+
+        @media (max-width: 768px) {
+            .input-box {
+                min-width: 300px;
+                min-height: 200px;
+                width: 90vw;
+                height: 70vh;
+            }
+
+            .input-title {
+                font-size: 18px;
+            }
+
+            .status-bar {
+                padding: 8px 12px;
+                font-size: 12px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div id="app">
+        <div class="loading" id="loading">
+            Connecting to vMix...
+        </div>
+        
+        <div class="error" id="error" style="display: none;">
+            <div>
+                <h3>Connection Error</h3>
+                <p id="error-message">Failed to connect to vMix</p>
+                <p>Please check your connection settings and try again.</p>
+            </div>
+        </div>
+
+        <div class="no-input" id="no-input" style="display: none;">
+            <div>
+                <h3>No Input Selected</h3>
+                <p>No input was specified or the specified input was not found.</p>
+                <p>Please check the URL parameters and try again.</p>
+            </div>
+        </div>
+
+        <div class="multiviewer" id="multiviewer" style="display: none;"></div>
+
+        <div class="status-bar" id="status-bar" style="display: none;">
+            <div class="connection-status">
+                <div class="status-indicator" id="status-indicator"></div>
+                <span id="connection-text">Disconnected</span>
+                <span id="input-info" style="margin-left: 20px;"></span>
+            </div>
+            <div class="timestamp" id="timestamp"></div>
+        </div>
+    </div>
+
+    <script>
+        class Multiviewer {
+            constructor() {
+                this.ws = null;
+                this.data = null;
+                this.config = null;
+                this.selectedConnection = null;
+                this.selectedInputKey = null;
+                this.reconnectAttempts = 0;
+                this.maxReconnectAttempts = 5;
+                this.reconnectDelay = 1000;
+                
+                this.init();
+            }
+
+            async init() {
+                try {
+                    await this.loadConfig();
+                    this.parseUrlParameters();
+                    await this.loadLayerData();
+                    await this.connectWebSocket();
+                    this.setupEventListeners();
+                } catch (error) {
+                    this.showError('Failed to initialize multiviewer: ' + error.message);
+                }
+            }
+
+            parseUrlParameters() {
+                console.log('Current URL:', window.location.href);
+                console.log('URL search params:', window.location.search);
+                
+                // Check for URL parameters that specify which connection and input to use
+                if (window.multiviewerParams) {
+                    console.log('Using custom connection and input from URL parameters:', window.multiviewerParams);
+                    this.selectedConnection = window.multiviewerParams.connection;
+                    this.selectedInputKey = window.multiviewerParams.input;
+                } else {
+                    // Parse from URL query string as fallback
+                    const urlParams = new URLSearchParams(window.location.search);
+                    this.selectedConnection = urlParams.get('connection');
+                    this.selectedInputKey = urlParams.get('input');
+                    console.log('Parsed from URL - connection:', this.selectedConnection, 'input:', this.selectedInputKey);
+                }
+
+                console.log('Final values - connection:', this.selectedConnection, 'input:', this.selectedInputKey);
+
+                if (!this.selectedConnection || !this.selectedInputKey) {
+                    console.log('Missing parameters, showing no input page');
+                    this.showNoInput();
+                    return;
+                }
+
+                console.log(`Multiviewer configured for connection: ${this.selectedConnection}, input: ${this.selectedInputKey}`);
+            }
+
+            async loadConfig() {
+                try {
+                    const response = await fetch('/multiviewer/api/config');
+                    if (!response.ok) {
+                        throw new Error('Failed to load configuration');
+                    }
+                    this.config = await response.json();
+                } catch (error) {
+                    console.error('Failed to load config:', error);
+                    throw error;
+                }
+            }
+
+            async loadLayerData() {
+                if (!this.selectedConnection || !this.selectedInputKey) {
+                    console.warn('Missing connection or input key, skipping layer data load');
+                    console.log('selectedConnection:', this.selectedConnection);
+                    console.log('selectedInputKey:', this.selectedInputKey);
+                    return;
+                }
+
+                try {
+                    const params = new URLSearchParams({
+                        connection: this.selectedConnection,
+                        input: this.selectedInputKey
+                    });
+                    
+                    console.log('Fetching layer data with params:', params.toString());
+                    const response = await fetch(`/multiviewer/api/layers?${params}`);
+                    console.log('Layer data response status:', response.status, response.statusText);
+                    
+                    if (!response.ok) {
+                        const errorText = await response.text();
+                        console.error('Layer data response error:', errorText);
+                        throw new Error(`Failed to load layer data: ${response.status} ${response.statusText}`);
+                    }
+                    
+                    this.data = await response.json();
+                    console.log('=== LOADED LAYER DATA ===');
+                    console.log('Full data structure:', this.data);
+                    
+                    if (this.data.inputs && this.data.inputs.length > 0) {
+                        const input = this.data.inputs[0];
+                        console.log(`Input: ${input.name} (key: ${input.key})`);
+                        console.log(`Input has ${input.layers?.length || 0} layers`);
+                        
+                        if (input.layers && input.layers.length > 0) {
+                            console.log('=== LAYER DETAILS ===');
+                            input.layers.forEach((layer, i) => {
+                                console.log(`Layer ${i + 1}:`);
+                                console.log(`  Index: ${layer.index}`);
+                                console.log(`  Input Name: ${layer.input_name}`);
+                                console.log(`  Input Key: ${layer.input_key}`);
+                                console.log(`  Position: x=${layer.x}, y=${layer.y}`);
+                                console.log(`  Size: width=${layer.width}, height=${layer.height}`);
+                                console.log(`  Z-order: ${layer.zorder}`);
+                                console.log(`  Pan: x=${layer.panx}, y=${layer.pany}`);
+                                console.log(`  Zoom: ${layer.zoom}`);
+                                console.log(`  Crop: ${layer.crop}`);
+                                console.log('---');
+                            });
+                        } else {
+                            console.warn('No layers array or empty layers');
+                        }
+                    } else {
+                        console.warn('No inputs found in layer data');
+                    }
+                } catch (error) {
+                    console.error('Failed to load layer data:', error);
+                    // Don't throw the error, just log it and continue with empty data
+                    this.data = null;
+                }
+            }
+
+            async connectWebSocket() {
+                try {
+                    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+                    const wsUrl = `${protocol}//${window.location.host}/multiviewer/ws`;
+                    
+                    this.ws = new WebSocket(wsUrl);
+                    
+                    this.ws.onopen = () => {
+                        console.log('WebSocket connected');
+                        this.reconnectAttempts = 0;
+                        this.updateConnectionStatus(true);
+                        this.hideLoading();
+                        this.showMultiviewer();
+                        
+                        // Render with already loaded layer data
+                        if (this.data) {
+                            console.log('Rendering multiviewer with loaded data');
+                            this.renderMultiviewer();
+                        } else {
+                            console.log('No data available to render');
+                            this.showNoInput();
+                        }
+                    };
+
+                    this.ws.onmessage = (event) => {
+                        try {
+                            console.log('Raw WebSocket message:', event.data);
+                            const wsData = JSON.parse(event.data);
+                            console.log('Parsed WebSocket data:', wsData);
+                            
+                            // Handle WebSocket updates with detailed logging
+                            console.log('=== FRONTEND: WebSocket data received ===');
+                            console.log('Current data state:', {
+                                hasData: !!this.data,
+                                hasInputs: !!this.data?.inputs,
+                                inputsLength: this.data?.inputs?.length || 0
+                            });
+                            console.log('WebSocket data:', {
+                                hasInputs: !!wsData.inputs,
+                                inputsLength: wsData.inputs?.length || 0,
+                                activeInputKey: wsData.active_input_key,
+                                previewInputKey: wsData.preview_input_key,
+                                timestamp: wsData.timestamp
+                            });
+                            
+                            if (!this.data || !this.data.inputs || this.data.inputs.length === 0) {
+                                console.log('FRONTEND: Using WebSocket data since no layer data available');
+                                this.data = wsData;
+                            } else {
+                                // Update active/preview input keys from WebSocket while keeping layer data
+                                if (wsData.active_input_key !== undefined || wsData.preview_input_key !== undefined) {
+                                    console.log('FRONTEND: ✅ Updating active/preview keys from WebSocket:', {
+                                        oldActiveKey: this.data.active_input_key,
+                                        newActiveKey: wsData.active_input_key,
+                                        oldPreviewKey: this.data.preview_input_key,
+                                        newPreviewKey: wsData.preview_input_key
+                                    });
+                                    this.data.active_input_key = wsData.active_input_key;
+                                    this.data.preview_input_key = wsData.preview_input_key;
+                                    this.data.timestamp = wsData.timestamp;
+                                } else {
+                                    console.log('FRONTEND: No active/preview key data in WebSocket message');
+                                }
+                            }
+                            
+                            console.log('Data type checks:', {
+                                hasInputs: !!this.data.inputs,
+                                inputsIsArray: Array.isArray(this.data.inputs),
+                                inputsLength: this.data.inputs?.length || 0
+                            });
+                            
+                            if (this.data.inputs && Array.isArray(this.data.inputs)) {
+                                console.log('Available inputs:', this.data.inputs.map(input => ({
+                                    key: input.key, 
+                                    keyType: typeof input.key,
+                                    keyLength: input.key?.length,
+                                    number: input.number, 
+                                    name: input.name,
+                                    layers: input.layers?.length || 0
+                                })));
+                            } else {
+                                console.warn('Data missing inputs array or inputs is not an array');
+                            }
+                            
+                            console.log('Current selectedInputKey:', this.selectedInputKey, typeof this.selectedInputKey);
+                            
+                            this.renderMultiviewer();
+                            this.updateTimestamp();
+                        } catch (error) {
+                            console.error('Failed to parse WebSocket message:', error);
+                            console.error('Raw message was:', event.data);
+                        }
+                    };
+
+                    this.ws.onclose = () => {
+                        console.log('WebSocket disconnected');
+                        this.updateConnectionStatus(false);
+                        this.attemptReconnect();
+                    };
+
+                    this.ws.onerror = (error) => {
+                        console.error('WebSocket error:', error);
+                        this.updateConnectionStatus(false);
+                    };
+
+                } catch (error) {
+                    console.error('Failed to connect WebSocket:', error);
+                    throw error;
+                }
+            }
+
+            attemptReconnect() {
+                if (this.reconnectAttempts < this.maxReconnectAttempts) {
+                    this.reconnectAttempts++;
+                    console.log(`Attempting to reconnect (${this.reconnectAttempts}/${this.maxReconnectAttempts})...`);
+                    
+                    setTimeout(() => {
+                        this.connectWebSocket();
+                    }, this.reconnectDelay * this.reconnectAttempts);
+                } else {
+                    this.showError('Failed to connect after multiple attempts. Please refresh the page.');
+                }
+            }
+
+            setupEventListeners() {
+                // Handle window resize
+                window.addEventListener('resize', () => {
+                    this.renderMultiviewer();
+                });
+
+                // Handle page visibility change
+                document.addEventListener('visibilitychange', () => {
+                    if (document.hidden) {
+                        console.log('Page hidden, pausing updates');
+                    } else {
+                        console.log('Page visible, resuming updates');
+                    }
+                });
+            }
+
+            renderMultiviewer() {
+                console.log('=== renderMultiviewer called ===');
+                console.log('this.data:', this.data);
+                console.log('this.selectedInputKey:', this.selectedInputKey);
+                
+                if (!this.data || !this.data.inputs) {
+                    console.log('Render conditions not met:', { 
+                        hasData: !!this.data, 
+                        hasInputs: !!this.data?.inputs
+                    });
+                    this.showNoInput();
+                    return;
+                }
+
+                // Additional safety check for empty inputs array
+                if (this.data.inputs.length === 0) {
+                    console.log('No inputs available in data');
+                    this.showNoInput();
+                    return;
+                }
+
+                if (!this.selectedInputKey) {
+                    console.log('No input key selected');
+                    this.showNoInput();
+                    return;
+                }
+
+                const container = document.getElementById('multiviewer');
+                container.innerHTML = '';
+
+                console.log(`Looking for input with key: "${this.selectedInputKey}"`);
+                console.log('Available inputs:', this.data.inputs.map(input => ({ 
+                    key: `"${input.key}"`, 
+                    number: input.number, 
+                    name: input.name,
+                    layers: input.layers?.length || 0
+                })));
+
+                // Find the selected input by key
+                let selectedInput = this.data.inputs.find(input => {
+                    const match = input.key === this.selectedInputKey;
+                    console.log(`Comparing "${input.key}" === "${this.selectedInputKey}": ${match}`);
+                    return match;
+                });
+                
+                if (!selectedInput) {
+                    console.error(`Input with key '${this.selectedInputKey}' not found in data`);
+                    console.error('Available input keys:', this.data.inputs.map(input => `"${input.key}"`));
+                    this.showNoInput();
+                    return;
+                }
+
+                console.log(`✓ Found matching input: ${selectedInput.name} (key: ${selectedInput.key}) with ${selectedInput.layers?.length || 0} layers`);
+
+                // Render layers instead of single input box
+                this.renderLayers(selectedInput);
+
+                // Update input info in status bar
+                this.updateInputInfo(selectedInput);
+            }
+
+            renderLayers(selectedInput) {
+                const container = document.getElementById('multiviewer');
+                const containerRect = container.getBoundingClientRect();
+                
+                console.log(`Rendering layers for input: ${selectedInput.name}`);
+                console.log('Container dimensions:', { width: containerRect.width, height: containerRect.height });
+                
+                if (!selectedInput.layers || selectedInput.layers.length === 0) {
+                    console.log('No layers found, showing fallback message');
+                    this.showFallbackMessage(selectedInput);
+                    return;
+                }
+
+                // Filter out full-screen layers, Layer10, and sort by z-order
+                const filteredLayers = selectedInput.layers.filter(layer => {
+                    // Remove Layer10 (index=10) - not needed for multiviewer
+                    if (layer.index === 10) {
+                        console.log(`Filtering out Layer10: ${layer.input_name} (index=${layer.index})`);
+                        return false;
+                    }
+                    
+                    // Remove layers that cover the full screen (1920x1080) as they're usually background/overlay layers
+                    const isFullScreen = layer.width >= 1920 && layer.height >= 1080;
+                    if (isFullScreen) {
+                        console.log(`Filtering out full-screen layer: ${layer.input_name} (${layer.width}x${layer.height})`);
+                        return false;
+                    }
+                    
+                    return true;
+                });
+                
+                const sortedLayers = filteredLayers.sort((a, b) => a.zorder - b.zorder);
+                console.log('Sorted layers by z-order:', sortedLayers.map(l => ({ 
+                    index: l.index, 
+                    zorder: l.zorder, 
+                    name: l.input_name,
+                    position: { x: l.x, y: l.y, width: l.width, height: l.height },
+                    panZoom: { panx: l.panx, pany: l.pany, zoom: l.zoom }
+                })));
+
+                // Use full container size (no margins, fill the entire viewport)
+                const vmixWidth = 1920;
+                const vmixHeight = 1080;
+
+                // Check for typical 2x2 layout patterns
+                if (sortedLayers.length === 4) {
+                    const positions = sortedLayers.map(l => ({ x: l.x, y: l.y, w: l.width, h: l.height, name: l.input_name }));
+                    console.log('Detected 4-layer layout - positions:', positions);
+                    
+                    // Check if this looks like a 2x2 grid
+                    const halfWidth = vmixWidth / 2;
+                    const halfHeight = vmixHeight / 2;
+                    console.log(`Expected 2x2 dimensions: ${halfWidth}x${halfHeight}`);
+                    
+                    const is2x2 = positions.every(p => 
+                        Math.abs(p.w - halfWidth) <= 5 && Math.abs(p.h - halfHeight) <= 5
+                    );
+                    console.log('Is 2x2 grid layout:', is2x2);
+                    
+                    if (is2x2) {
+                        console.log('✓ Confirmed 2x2 grid layout');
+                        // Expected positions: (0,0), (960,0), (0,540), (960,540)
+                        const expectedPositions = [
+                            { x: 0, y: 0, name: 'Top-Left' },
+                            { x: halfWidth, y: 0, name: 'Top-Right' },
+                            { x: 0, y: halfHeight, name: 'Bottom-Left' },
+                            { x: halfWidth, y: halfHeight, name: 'Bottom-Right' }
+                        ];
+                        
+                        expectedPositions.forEach(expected => {
+                            const actual = positions.find(p => 
+                                Math.abs(p.x - expected.x) <= 5 && Math.abs(p.y - expected.y) <= 5
+                            );
+                            if (actual) {
+                                console.log(`${expected.name} (${expected.x},${expected.y}): ${actual.name}`);
+                            } else {
+                                console.warn(`${expected.name} position (${expected.x},${expected.y}) not found`);
+                            }
+                        });
+                    }
+                }
+                
+                // 1920x1080前提でコンテナサイズにフィットさせるスケールを計算
+                const scaleX = containerRect.width / vmixWidth;   // 横方向スケール
+                const scaleY = containerRect.height / vmixHeight; // 縦方向スケール
+                const scale = Math.min(scaleX, scaleY);           // アスペクト比を保持
+                
+                const scaledWidth = vmixWidth * scale;
+                const scaledHeight = vmixHeight * scale;
+                const offsetX = (containerRect.width - scaledWidth) / 2;  // 中央揃え
+                const offsetY = (containerRect.height - scaledHeight) / 2; // 中央揃え
+                
+                console.log('Scaling details:', { 
+                    containerSize: { width: containerRect.width, height: containerRect.height },
+                    vmixSize: { width: vmixWidth, height: vmixHeight },
+                    scale, 
+                    scaledSize: { width: scaledWidth, height: scaledHeight },
+                    offset: { x: offsetX, y: offsetY }
+                });
+
+                // Set container to match vMix canvas size
+                container.style.backgroundColor = 'transparent';
+                container.style.position = 'relative';
+                container.style.width = '100vw';
+                container.style.height = '100vh';
+
+                sortedLayers.forEach((layer, index) => {
+                    console.log(`\n=== Processing layer ${index + 1} ===`);
+                    console.log(`Name: ${layer.input_name}`);
+                    console.log(`Original position: x=${layer.x}, y=${layer.y}`);
+                    console.log(`Original size: width=${layer.width}, height=${layer.height}`);
+                    console.log(`Pan/Zoom: panx=${layer.panx}, pany=${layer.pany}, zoom=${layer.zoom}`);
+                    
+                    const layerElement = this.createLayerElement(layer, scale, offsetX, offsetY, selectedInput);
+                    container.appendChild(layerElement);
+                    
+                    const finalX = layer.x * scale + offsetX;
+                    const finalY = layer.y * scale + offsetY;
+                    const finalWidth = layer.width * scale;
+                    const finalHeight = layer.height * scale;
+                    
+                    console.log(`Final position: x=${finalX}, y=${finalY}`);
+                    console.log(`Final size: width=${finalWidth}, height=${finalHeight}`);
+                });
+            }
+
+            createLayerElement(layer, scale, offsetX, offsetY, selectedInput) {
+                const layerDiv = document.createElement('div');
+                layerDiv.className = 'layer-container';
+                
+                // シンプルな番号ベースの判定（キーではなく番号で比較）
+                const activeInputNumber = this.data?.active_input_key ? parseInt(this.data.active_input_key) : null;
+                const previewInputNumber = this.data?.preview_input_key ? parseInt(this.data.preview_input_key) : null;
+                
+                // レイヤーの入力番号と比較
+                const isActive = activeInputNumber && layer.input_number === activeInputNumber;
+                const isPreview = previewInputNumber && layer.input_number === previewInputNumber;
+                
+                if (isActive) {
+                    layerDiv.classList.add('active');
+                    console.log(`  Layer ${layer.input_name} is ACTIVE (number: ${layer.input_number} === ${activeInputNumber})`);
+                } else if (isPreview) {
+                    layerDiv.classList.add('preview');
+                    console.log(`  Layer ${layer.input_name} is PREVIEW (number: ${layer.input_number} === ${previewInputNumber})`);
+                } else {
+                    console.log(`  Layer ${layer.input_name} is normal (number: ${layer.input_number}, active: ${activeInputNumber}, preview: ${previewInputNumber})`);
+                }
+                
+                // vMixのpositionをコンテナにフィットさせる（1920x1080前提）
+                const scaledX = Math.round(layer.x * scale + offsetX);
+                const scaledY = Math.round(layer.y * scale + offsetY);
+                const scaledWidth = Math.round(layer.width * scale);
+                const scaledHeight = Math.round(layer.height * scale);
+                
+                console.log(`Applying styles to ${layer.input_name}:`);
+                console.log(`  Original size: ${layer.width}x${layer.height}`);
+                console.log(`  Scale factor: ${scale}`);
+                console.log(`  Final size: ${scaledWidth}x${scaledHeight}`);
+                console.log(`  Position: left=${scaledX}px, top=${scaledY}px`);
+                console.log(`  vMix zoom: ${layer.zoom}, pan: ${layer.panx}, ${layer.pany}`);
+                
+                // Set exact positioning - use border-box to include border in dimensions
+                layerDiv.style.position = 'absolute';
+                layerDiv.style.left = `${scaledX}px`;
+                layerDiv.style.top = `${scaledY}px`;
+                layerDiv.style.width = `${scaledWidth}px`;
+                layerDiv.style.height = `${scaledHeight}px`;
+                layerDiv.style.zIndex = layer.zorder.toString();
+                layerDiv.style.margin = '0';
+                layerDiv.style.padding = '0';
+                layerDiv.style.boxSizing = 'border-box';
+                // Border is now set via CSS classes (4px thick, white or red for active)
+                layerDiv.style.backgroundColor = 'transparent';
+                
+                // Check actual computed size after applying styles
+                setTimeout(() => {
+                    const rect = layerDiv.getBoundingClientRect();
+                    console.log(`${layer.input_name} computed size: ${rect.width}x${rect.height}`);
+                }, 0);
+                
+                // Apply only pan transform - ignore zoom to maintain exact sizing
+                // Zoom is already factored into the vMix coordinates, applying it again causes double-zoom
+                let transform = '';
+                if (layer.panx !== 0 || layer.pany !== 0) {
+                    transform += `translate(${Math.round(layer.panx * scale)}px, ${Math.round(layer.pany * scale)}px) `;
+                }
+                
+                // Don't apply zoom as CSS transform - it's already reflected in the layer coordinates
+                // The user reported that zoom=0.5 was causing incorrect sizing when applied as transform
+                console.log(`  Transform applied: ${transform || 'none'} (zoom ${layer.zoom} ignored for sizing)`);
+                
+                if (transform) {
+                    layerDiv.style.transform = transform;
+                }
+                
+                layerDiv.innerHTML = `
+                    <div class="layer-content">
+                        <div class="layer-title">${this.escapeHtml(layer.input_name)}</div>
+                    </div>
+                `;
+                
+                return layerDiv;
+            }
+
+            showFallbackMessage(selectedInput) {
+                const container = document.getElementById('multiviewer');
+                const fallbackDiv = document.createElement('div');
+                fallbackDiv.className = 'input-box';
+                fallbackDiv.style.position = 'absolute';
+                fallbackDiv.style.left = '50%';
+                fallbackDiv.style.top = '50%';
+                fallbackDiv.style.transform = 'translate(-50%, -50%)';
+                
+                fallbackDiv.innerHTML = `
+                    <div class="input-number">${selectedInput.number}</div>
+                    <div class="input-title">${this.escapeHtml(selectedInput.name)}</div>
+                    <div class="input-state">${this.escapeHtml(selectedInput.state)}</div>
+                    <div style="margin-top: 20px; color: #888; font-size: 14px;">
+                        No layers configured
+                    </div>
+                `;
+                
+                container.appendChild(fallbackDiv);
+            }
+
+            createInputBox(input) {
+                const box = document.createElement('div');
+                box.className = 'input-box';
+                
+                // Add state classes based on input number (for active/preview)
+                if (input.number === this.data.active_input) {
+                    box.classList.add('active');
+                } else if (input.number === this.data.preview_input) {
+                    box.classList.add('preview');
+                }
+                
+                if (input.state && input.state.toLowerCase() === 'playing') {
+                    box.classList.add('playing');
+                }
+
+                box.innerHTML = `
+                    <div class="input-number">${input.number}</div>
+                    <div class="input-title">${this.escapeHtml(input.name || `Input ${input.number}`)}</div>
+                    <div class="input-state">${this.escapeHtml(input.state || 'Unknown')}</div>
+                `;
+
+                return box;
+            }
+
+            updateInputInfo(input) {
+                const inputInfo = document.getElementById('input-info');
+                if (inputInfo) {
+                    inputInfo.textContent = `Input ${input.number}: ${input.name}`;
+                }
+            }
+
+            escapeHtml(text) {
+                const div = document.createElement('div');
+                div.textContent = text;
+                return div.innerHTML;
+            }
+
+            updateConnectionStatus(connected) {
+                const indicator = document.getElementById('status-indicator');
+                const text = document.getElementById('connection-text');
+                
+                if (connected) {
+                    indicator.className = 'status-indicator connected';
+                    text.textContent = `Connected to ${this.selectedConnection}`;
+                } else {
+                    indicator.className = 'status-indicator disconnected';
+                    text.textContent = 'Disconnected';
+                }
+            }
+
+            updateTimestamp() {
+                if (this.data && this.data.timestamp) {
+                    const timestamp = document.getElementById('timestamp');
+                    const date = new Date(this.data.timestamp);
+                    timestamp.textContent = `Updated: ${date.toLocaleTimeString()}`;
+                }
+            }
+
+            showMultiviewer() {
+                document.getElementById('multiviewer').style.display = 'flex';
+                document.getElementById('status-bar').style.display = 'flex';
+            }
+
+            hideLoading() {
+                document.getElementById('loading').style.display = 'none';
+            }
+
+            showError(message) {
+                document.getElementById('loading').style.display = 'none';
+                document.getElementById('multiviewer').style.display = 'none';
+                document.getElementById('no-input').style.display = 'none';
+                document.getElementById('error').style.display = 'flex';
+                document.getElementById('error-message').textContent = message;
+            }
+
+            showNoInput() {
+                document.getElementById('loading').style.display = 'none';
+                document.getElementById('multiviewer').style.display = 'none';
+                document.getElementById('error').style.display = 'none';
+                document.getElementById('no-input').style.display = 'flex';
+            }
+        }
+
+        // Initialize multiviewer when page loads
+        document.addEventListener('DOMContentLoaded', () => {
+            new Multiviewer();
+        });
+    </script>
+</body>
+</html>

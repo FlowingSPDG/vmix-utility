@@ -17,6 +17,19 @@ export interface AppInfo {
   [key: string]: any;
 }
 
+export interface UpdateInfo {
+  available: boolean;
+  current_version: string;
+  latest_version?: string;
+  body?: string;
+}
+
+export interface Connection {
+  host: string;
+  port: number;
+  label: string;
+}
+
 /**
  * Service for application settings and configuration operations
  */
@@ -119,6 +132,42 @@ export const settingsService = {
       });
     } catch (error) {
       console.error('Failed to update connection label:', error);
+      throw error;
+    }
+  },
+
+  /**
+   * Get all connections
+   */
+  async getAllConnections(): Promise<Connection[]> {
+    try {
+      return await invoke<Connection[]>('get_all_connections');
+    } catch (error) {
+      console.error('Failed to get all connections:', error);
+      throw error;
+    }
+  },
+
+  /**
+   * Check for updates
+   */
+  async checkForUpdates(): Promise<UpdateInfo> {
+    try {
+      return await invoke<UpdateInfo>('check_for_updates');
+    } catch (error) {
+      console.error('Failed to check for updates:', error);
+      throw error;
+    }
+  },
+
+  /**
+   * Install update
+   */
+  async installUpdate(): Promise<void> {
+    try {
+      await invoke('install_update');
+    } catch (error) {
+      console.error('Failed to install update:', error);
       throw error;
     }
   },

@@ -22,6 +22,7 @@ import ShortcutIcon from '@mui/icons-material/Shortcut';
 import CreateIcon from '@mui/icons-material/Create';
 import ViewListIcon from '@mui/icons-material/ViewList';
 import PlaylistPlayIcon from '@mui/icons-material/PlaylistPlay';
+import ViewModuleIcon from '@mui/icons-material/ViewModule';
 import SettingsIcon from '@mui/icons-material/Settings';
 import CodeIcon from '@mui/icons-material/Code';
 
@@ -30,8 +31,10 @@ import ShortcutGenerator from '../pages/ShortcutGenerator';
 import BlankGenerator from '../pages/BlankGenerator';
 import InputManager from '../pages/InputManager';
 import ListManager from '../pages/ListManager';
+import Multiviewer from '../pages/Multiviewer';
 import Settings from '../pages/Settings';
 import Developer from '../pages/Developer';
+import { NavigationProvider } from '../hooks/useNavigation';
 
 const drawerWidth = 240;
 
@@ -84,6 +87,11 @@ const Layout = () => {
       component: <ListManager /> 
     },
     { 
+      text: 'Multiviewer', 
+      icon: <ViewModuleIcon />, 
+      component: <Multiviewer /> 
+    },
+    { 
       text: 'Settings', 
       icon: <SettingsIcon />, 
       component: <Settings /> 
@@ -94,6 +102,17 @@ const Layout = () => {
       component: <Developer /> 
     },
   ];
+
+  // Navigation functions
+  const navigateToSettings = () => {
+    setSelectedIndex(6); // Settings is at index 6
+  };
+
+  const navigateToPage = (pageIndex: number) => {
+    if (pageIndex >= 0 && pageIndex < navItems.length) {
+      setSelectedIndex(pageIndex);
+    }
+  };
 
   const drawer = (
     <div>
@@ -127,7 +146,8 @@ const Layout = () => {
   );
 
   return (
-    <Box sx={{ display: 'flex' }}>
+    <NavigationProvider navigateToSettings={navigateToSettings} navigateToPage={navigateToPage}>
+      <Box sx={{ display: 'flex' }}>
       <CssBaseline />
       <AppBar
         position="fixed"
@@ -193,6 +213,7 @@ const Layout = () => {
         {navItems[selectedIndex].component}
       </Box>
     </Box>
+    </NavigationProvider>
   );
 };
 

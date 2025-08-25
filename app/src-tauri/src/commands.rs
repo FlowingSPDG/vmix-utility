@@ -1255,3 +1255,78 @@ pub async fn scan_network_for_vmix_command(
         }
     }
 }
+
+// Multiviewer commands
+#[tauri::command]
+pub async fn get_multiviewer_config(state: State<'_, AppState>) -> Result<crate::types::MultiviewerConfig, String> {
+    app_log!(debug, "Getting multiviewer configuration");
+    Ok(state.get_multiviewer_config())
+}
+
+#[tauri::command]
+pub async fn update_multiviewer_config(
+    config: crate::types::MultiviewerConfig,
+    state: State<'_, AppState>
+) -> Result<(), String> {
+    app_log!(info, "Updating multiviewer configuration: enabled={}, port={}", 
+        config.enabled, config.port);
+    
+    match state.update_multiviewer_config(config).await {
+        Ok(_) => {
+            app_log!(info, "Multiviewer configuration updated successfully");
+            Ok(())
+        }
+        Err(e) => {
+            app_log!(error, "Failed to update multiviewer configuration: {}", e);
+            Err(format!("Failed to update multiviewer configuration: {}", e))
+        }
+    }
+}
+
+#[tauri::command]
+pub async fn start_multiviewer_server(state: State<'_, AppState>) -> Result<(), String> {
+    app_log!(info, "Starting multiviewer server");
+    
+    match state.start_multiviewer_server().await {
+        Ok(_) => {
+            app_log!(info, "Multiviewer server started successfully");
+            Ok(())
+        }
+        Err(e) => {
+            app_log!(error, "Failed to start multiviewer server: {}", e);
+            Err(format!("Failed to start multiviewer server: {}", e))
+        }
+    }
+}
+
+#[tauri::command]
+pub async fn stop_multiviewer_server(state: State<'_, AppState>) -> Result<(), String> {
+    app_log!(info, "Stopping multiviewer server");
+    state.stop_multiviewer_server();
+    app_log!(info, "Multiviewer server stopped");
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn get_multiviewer_url(state: State<'_, AppState>) -> Result<String, String> {
+    let config = state.get_multiviewer_config();
+    
+    if !config.enabled {
+        return Err("Multiviewer is not enabled".to_string());
+    }
+    
+    // Get the selected connection to determine the appropriate IP address
+    let selected_connection = config.selected_connection.as_ref()
+        .ok_or("No vMix connection selected")?;
+    
+    // Get all connections to find the selected one
+    let connections = state.get_connections();
+    let selected_vmix = connections.iter()
+        .find(|conn| conn.host == *selected_connection)
+        .ok_or("Selected vMix connection not found")?;
+    
+    // Use the connection's host IP for the multiviewer URL
+    let url = format!("http://{}:{}/multiviewers", selected_vmix.host, config.port);
+    app_log!(info, "Multiviewer URL for {}: {}", selected_vmix.host, url);
+    Ok(url)
+}
