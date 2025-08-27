@@ -9,7 +9,8 @@ use crate::logging::LOGGING_CONFIG;
 use crate::app_log;
 use crate::network_scanner::{get_network_interfaces, scan_network_for_vmix, NetworkInterface, VmixScanResult};
 use std::collections::HashMap;
-use tauri::{AppHandle, Manager, State, Emitter, WebviewUrl, WebviewWindowBuilder};
+use tauri::{AppHandle, Manager, State, WebviewUrl, WebviewWindowBuilder, Emitter};
+
 
 // Shared builder function to build VideoList inputs from vmix-rs model
 pub fn build_video_lists_from_vmix(vmix_state: &vmix_rs::models::Vmix) -> Vec<VmixVideoListInput> {
@@ -584,36 +585,83 @@ pub async fn get_vmix_statuses(state: State<'_, AppState>) -> Result<Vec<VmixCon
     };
     let mut statuses = Vec::new();
 
-    // Process HTTP connections
-    for vmix in http_connections.iter() {
-        let status = vmix.get_status().await.unwrap_or(false);
-        let active_input = vmix.get_active_input().await.unwrap_or(0);
-        let preview_input = vmix.get_preview_input().await.unwrap_or(0);
-        let host = vmix.host().to_string();
-        
-        // Get version, edition, and preset information
-        let (version, edition, preset) = match vmix.get_vmix_data().await {
-            Ok(vmix_data) => (vmix_data.version, vmix_data.edition, vmix_data.preset),
-            Err(_) => ("Unknown".to_string(), "Unknown".to_string(), None)
-        };
-        
-        let label = {
-            let labels = state.connection_labels.lock().unwrap();
-            labels.get(&host).cloned().unwrap_or_else(|| format!("{} (HTTP)", host))
-        };
-        
-        statuses.push(VmixConnection {
-            host,
-            port: vmix.port(),
-            label,
-            status: if status { "Connected".to_string() } else { "Disconnected".to_string() },
-            active_input,
-            preview_input,
-            connection_type: ConnectionType::Http,
-            version,
-            edition,
-            preset,
-        });
+    // Process HTTP connections in parallel with timeout
+    let http_futures: Vec<_> = http_connections.iter().map(|vmix| {
+        let vmix_clone = vmix.clone();
+        async move {
+            let host = vmix_clone.host().to_string();
+            let host_for_timeout = host.clone();
+            
+            // Use tokio::timeout to prevent hanging
+            match tokio::time::timeout(std::time::Duration::from_millis(1000), async {
+                let status = vmix_clone.get_status().await.unwrap_or(false);
+                let active_input = vmix_clone.get_active_input().await.unwrap_or(0);
+                let preview_input = vmix_clone.get_preview_input().await.unwrap_or(0);
+                
+                // Get version, edition, and preset information
+                let (version, edition, preset) = match vmix_clone.get_vmix_data().await {
+                    Ok(vmix_data) => (vmix_data.version, vmix_data.edition, vmix_data.preset),
+                    Err(_) => ("Unknown".to_string(), "Unknown".to_string(), None)
+                };
+                
+                (host, status, active_input, preview_input, version, edition, preset)
+            }).await {
+                Ok(result) => Some(result),
+                Err(_) => {
+                    println!("Timeout getting status for {}", host_for_timeout);
+                    None
+                }
+            }
+        }
+    }).collect();
+
+    // Wait for all HTTP connections with timeout
+    let http_results = tokio::time::timeout(
+        std::time::Duration::from_millis(2000),
+        futures::future::join_all(http_futures)
+    ).await.unwrap_or_else(|_| vec![None; http_connections.len()]);
+
+    // Process HTTP results
+    for (i, result) in http_results.into_iter().enumerate() {
+        if let Some((host, status, active_input, preview_input, version, edition, preset)) = result {
+            let label = {
+                let labels = state.connection_labels.lock().unwrap();
+                labels.get(&host).cloned().unwrap_or_else(|| format!("{} (HTTP)", host))
+            };
+            
+            statuses.push(VmixConnection {
+                host,
+                port: http_connections[i].port(),
+                label,
+                status: if status { "Connected".to_string() } else { "Disconnected".to_string() },
+                active_input,
+                preview_input,
+                connection_type: ConnectionType::Http,
+                version,
+                edition,
+                preset,
+            });
+        } else {
+            // Add disconnected status for timed out connections
+            let host = http_connections[i].host().to_string();
+            let label = {
+                let labels = state.connection_labels.lock().unwrap();
+                labels.get(&host).cloned().unwrap_or_else(|| format!("{} (HTTP)", host))
+            };
+            
+            statuses.push(VmixConnection {
+                host,
+                port: http_connections[i].port(),
+                label,
+                status: "Disconnected".to_string(),
+                active_input: 0,
+                preview_input: 0,
+                connection_type: ConnectionType::Http,
+                version: "Unknown".to_string(),
+                edition: "Unknown".to_string(),
+                preset: None,
+            });
+        }
     }
     
     // Process TCP connections

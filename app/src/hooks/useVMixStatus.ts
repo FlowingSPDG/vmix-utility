@@ -8,6 +8,8 @@ interface VMixStatusContextType {
   connections: VmixConnection[];
   autoRefreshConfigs: Record<string, AutoRefreshConfig>;
   loading: boolean;
+  inputsLoading: Record<string, boolean>; // Track loading state for each host's inputs
+  videoListsLoading: Record<string, boolean>; // Track loading state for each host's video lists
   inputs: Record<string, VmixInput[]>; // inputs by host
   videoLists: Record<string, VmixVideoListInput[]>; // video lists by host
   connectVMix: (host: string, port?: number, connectionType?: 'Http' | 'Tcp') => Promise<VmixConnection>;
@@ -30,12 +32,15 @@ export const VMixStatusProvider = ({ children }: { children: React.ReactNode }) 
   const [inputs, setInputs] = useState<Record<string, VmixInput[]>>({});
   const [videoLists, setVideoLists] = useState<Record<string, VmixVideoListInput[]>>({});
   const [loading, setLoading] = useState(false);
+  const [inputsLoading, setInputsLoading] = useState<Record<string, boolean>>({});
+  const [videoListsLoading, setVideoListsLoading] = useState<Record<string, boolean>>({});
   
   // Track optimistically removed connections to ignore status updates temporarily
   const [optimisticallyRemovedHosts, setOptimisticallyRemovedHosts] = useState<Set<string>>(new Set());
 
   const fetchInputsForHost = useCallback(async (host: string) => {
     try {
+      setInputsLoading(prev => ({ ...prev, [host]: true }));
       const vmixInputs = await vmixService.getVMixInputs(host);
       setInputs(prev => ({
         ...prev,
@@ -43,11 +48,14 @@ export const VMixStatusProvider = ({ children }: { children: React.ReactNode }) 
       }));
     } catch (error) {
       console.error(`Failed to fetch inputs for ${host}:`, error);
+    } finally {
+      setInputsLoading(prev => ({ ...prev, [host]: false }));
     }
   }, []);
 
   const fetchVideoListsForHost = useCallback(async (host: string) => {
     try {
+      setVideoListsLoading(prev => ({ ...prev, [host]: true }));
       const vmixVideoLists = await vmixService.getVMixVideoLists(host);
       setVideoLists(prev => ({
         ...prev,
@@ -55,6 +63,8 @@ export const VMixStatusProvider = ({ children }: { children: React.ReactNode }) 
       }));
     } catch (error) {
       console.error(`Failed to fetch video lists for ${host}:`, error);
+    } finally {
+      setVideoListsLoading(prev => ({ ...prev, [host]: false }));
     }
   }, []);
 
@@ -64,11 +74,13 @@ export const VMixStatusProvider = ({ children }: { children: React.ReactNode }) 
       const statuses = await vmixService.getVMixStatuses();
       setConnections(statuses);
       
-      // Fetch inputs and video lists for all connected hosts
+      // Fetch inputs and video lists for all connected hosts asynchronously
+      // Don't wait for these to complete - let them run in background
       for (const connection of statuses) {
         if (connection.status === 'Connected') {
-          await fetchInputsForHost(connection.host);
-          await fetchVideoListsForHost(connection.host);
+          // Fire and forget - don't await
+          fetchInputsForHost(connection.host);
+          fetchVideoListsForHost(connection.host);
         }
       }
     } catch (error) {
@@ -235,15 +247,15 @@ export const VMixStatusProvider = ({ children }: { children: React.ReactNode }) 
   // Load initial connections and configs with retry
   useEffect(() => {
     const loadInitialData = async () => {
-      // Wait a bit for backend initialization to complete
-      await new Promise(resolve => setTimeout(resolve, 100));
+      // Reduced wait time for faster initialization
+      await new Promise(resolve => setTimeout(resolve, 50));
       
       try {
         await loadConnections();
         await loadAutoRefreshConfigs();
       } catch (error) {
-        console.error('Initial data load failed, retrying in 1 second...', error);
-        // Retry after 1 second if initial load fails
+        console.error('Initial data load failed, retrying in 500ms...', error);
+        // Reduced retry delay for better UX
         setTimeout(async () => {
           try {
             await loadConnections();
@@ -251,7 +263,7 @@ export const VMixStatusProvider = ({ children }: { children: React.ReactNode }) 
           } catch (retryError) {
             console.error('Retry failed:', retryError);
           }
-        }, 1000);
+        }, 500);
       }
     };
 
@@ -423,6 +435,8 @@ export const VMixStatusProvider = ({ children }: { children: React.ReactNode }) 
     connections: connections.filter(conn => !optimisticallyRemovedHosts.has(conn.host)),
     autoRefreshConfigs,
     loading,
+    inputsLoading,
+    videoListsLoading,
     inputs,
     videoLists,
     connectVMix,

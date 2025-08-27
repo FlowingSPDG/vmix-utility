@@ -114,7 +114,7 @@ const Connections: React.FC = () => {
   useEffect(() => {
     const timer = setTimeout(() => {
       refreshConnections();
-    }, 200); // Reduced from 500ms to 200ms for faster initial load
+    }, 100); // Further reduced for faster initial load
     
     return () => clearTimeout(timer);
   }, [refreshConnections]);
@@ -125,7 +125,7 @@ const Connections: React.FC = () => {
       if (isInitialLoading) {
         setIsInitialLoading(false);
       }
-    }, 1500); // Reduced from 3000ms to 1500ms for better UX
+    }, 800); // Further reduced for better UX
 
     return () => clearTimeout(timeout);
   }, [isInitialLoading]);

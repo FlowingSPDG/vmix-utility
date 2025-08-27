@@ -164,7 +164,7 @@ async fn check_vmix_http_api(addr: SocketAddr) -> Result<()> {
     let client = VmixClientWrapper::new(&host, port);
     
     // 短いタイムアウトでXMLを取得・パースできた場合のみ成功とみなす
-    match tokio::time::timeout(Duration::from_secs(3), client.get_vmix_data()).await {
+    match tokio::time::timeout(Duration::from_secs(1), client.get_vmix_data()).await {
         Ok(Ok(_xml)) => Ok(()),
         Ok(Err(e)) => Err(anyhow::anyhow!("HTTP API XML error: {}", e)),
         Err(_) => Err(anyhow::anyhow!("HTTP API timeout")),

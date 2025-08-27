@@ -1,6 +1,6 @@
 use tauri::tray::TrayIconBuilder;
 use tauri::{
-    menu::{Menu, MenuItem}, Emitter, Manager
+    menu::{Menu, MenuItem}, Manager
 };
 use tauri_plugin_dialog::{DialogExt, MessageDialogButtons, MessageDialogKind};
 
