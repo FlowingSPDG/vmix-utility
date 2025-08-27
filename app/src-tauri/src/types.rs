@@ -199,6 +199,7 @@ pub struct VmixConnection {
     pub connection_type: ConnectionType,
     pub version: String,
     pub edition: String,
+    pub preset: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

@@ -11,6 +11,7 @@ export interface VmixConnection {
   connection_type: 'Http' | 'Tcp';
   version: string;
   edition: string;
+  preset?: string;
 }
 
 export interface VmixInput {

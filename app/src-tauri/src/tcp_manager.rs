@@ -225,6 +225,7 @@ impl TcpVmixManager {
                                         connection_type: ConnectionType::Tcp,
                                         version: vmix_xml.version,
                                         edition: vmix_xml.edition,
+                                        preset: vmix_xml.preset,
                                     };
                                     
                                     // Update the status cache
@@ -299,6 +300,7 @@ impl TcpVmixManager {
                                                 connection_type: ConnectionType::Tcp,
                                                 version: status.version.clone(),
                                                 edition: status.edition.clone(),
+                                                preset: status.preset.clone(),
                                             };
                                             
                                             // Update cache
@@ -362,6 +364,7 @@ impl TcpVmixManager {
                                         connection_type: ConnectionType::Tcp,
                                         version: cached.version.clone(),
                                         edition: cached.edition.clone(),
+                                        preset: cached.preset.clone(),
                                     }
                                 } else {
                                     VmixConnection {
@@ -374,6 +377,7 @@ impl TcpVmixManager {
                                         connection_type: ConnectionType::Tcp,
                                         version: "".to_string(),
                                         edition: "".to_string(),
+                                        preset: None,
                                     }
                                 }
                             };

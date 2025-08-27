@@ -54,6 +54,7 @@ interface Connection {
   connectionType: 'Http' | 'Tcp';
   version: string;
   edition: string;
+  preset?: string;
 }
 
 const Connections: React.FC = () => {
@@ -98,6 +99,7 @@ const Connections: React.FC = () => {
       connectionType: conn.connection_type,
       version: conn.version,
       edition: conn.edition,
+      preset: conn.preset,
     }));
     
     setConnections(newConnections);
@@ -449,6 +451,7 @@ const Connections: React.FC = () => {
               <TableCell>Status</TableCell>
               <TableCell>Version</TableCell>
               <TableCell>Edition</TableCell>
+              <TableCell>Preset</TableCell>
               <TableCell>Active Input</TableCell>
               <TableCell>Preview Input</TableCell>
               <TableCell>Auto-Refresh</TableCell>
@@ -458,7 +461,7 @@ const Connections: React.FC = () => {
           <TableBody>
             {(globalLoading) && connections.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={10} align="center" sx={{ py: 4 }}>
+                <TableCell colSpan={11} align="center" sx={{ py: 4 }}>
                   <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
                     <CircularProgress />
                     <Typography variant="body2" color="textSecondary">
@@ -469,7 +472,7 @@ const Connections: React.FC = () => {
               </TableRow>
             ) : connections.length === 0 && backgroundConnections.size === 0 ? (
               <TableRow>
-                <TableCell colSpan={10} align="center">
+                <TableCell colSpan={11} align="center">
                   <Typography color="textSecondary">
                     No vMix connections. Add a connection to get started.
                   </Typography>
@@ -490,6 +493,7 @@ const Connections: React.FC = () => {
                   connectionType: 'Http' as const, // Default type, will be updated when connection is established
                   version: 'Connecting...',
                   edition: 'Connecting...',
+                  preset: undefined,
                 }))
               ].map((connection) => (
                 <TableRow key={connection.id}>
@@ -555,6 +559,9 @@ const Connections: React.FC = () => {
                   </TableCell>
                   <TableCell>
                     <Typography variant="body2">{connection.edition}</Typography>
+                  </TableCell>
+                  <TableCell>
+                    <Typography variant="body2">{connection.preset || '-'}</Typography>
                   </TableCell>
                   <TableCell>{connection.activeInput}</TableCell>
                   <TableCell>{connection.previewInput}</TableCell>
