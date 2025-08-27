@@ -33,7 +33,8 @@ import {
   Backdrop,
   Card,
   CardContent,
-  DialogContentText
+  DialogContentText,
+  Snackbar
 } from '@mui/material';
 import AddIcon from '@mui/icons-material/Add';
 import DeleteIcon from '@mui/icons-material/Delete';
@@ -63,7 +64,6 @@ const Connections: React.FC = () => {
   const [newHost, setNewHost] = useState('');
   const [newPort, setNewPort] = useState(8088);
   const [newConnectionType, setNewConnectionType] = useState<'Http' | 'Tcp'>('Http');
-  const [connecting, setConnecting] = useState(false);
   const [labelDialogOpen, setLabelDialogOpen] = useState(false);
   const [editingConnection, setEditingConnection] = useState<Connection | null>(null);
   const [newLabel, setNewLabel] = useState('');
@@ -80,6 +80,10 @@ const Connections: React.FC = () => {
   const [isScanning, setIsScanning] = useState(false);
   const [scanDialogOpen, setScanDialogOpen] = useState(false);
   const [scanError, setScanError] = useState<string | null>(null);
+
+  // Background connection state
+  const [backgroundConnections, setBackgroundConnections] = useState<Set<string>>(new Set());
+  const [connectionNotifications, setConnectionNotifications] = useState<Array<{host: string, success: boolean, message: string}>>([]);
 
   // Transform global connections to local format
   useEffect(() => {
@@ -98,7 +102,7 @@ const Connections: React.FC = () => {
     
     setConnections(newConnections);
     
-    // Mark initial loading as complete when we have connections or after a timeout
+    // Mark initial loading as complete when we have connections or after a shorter timeout
     if (isInitialLoading && (!globalLoading || newConnections.length > 0)) {
       setIsInitialLoading(false);
     }
@@ -108,21 +112,30 @@ const Connections: React.FC = () => {
   useEffect(() => {
     const timer = setTimeout(() => {
       refreshConnections();
-    }, 500); // Wait a bit for initial load
+    }, 200); // Reduced from 500ms to 200ms for faster initial load
     
     return () => clearTimeout(timer);
   }, [refreshConnections]);
 
-  // Set a timeout for initial loading
+  // Set a shorter timeout for initial loading
   useEffect(() => {
     const timeout = setTimeout(() => {
       if (isInitialLoading) {
         setIsInitialLoading(false);
       }
-    }, 3000); // Max 3 seconds for initial loading
+    }, 1500); // Reduced from 3000ms to 1500ms for better UX
 
     return () => clearTimeout(timeout);
   }, [isInitialLoading]);
+
+  // Clear old notifications
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setConnectionNotifications(prev => prev.slice(1));
+    }, 5000);
+
+    return () => clearTimeout(timer);
+  }, [connectionNotifications]);
 
   const handleClickOpen = () => {
     setOpen(true);
@@ -148,17 +161,40 @@ const Connections: React.FC = () => {
       return;
     }
     
-    setConnecting(true);
-    setError(null);
+    // Close dialog immediately for better UX
+    handleClose();
+    
+    // Add to background connections set
+    setBackgroundConnections(prev => new Set([...prev, trimmedHost]));
+    
+    // Start background connection process
+    const portToUse = newConnectionType === 'Tcp' ? 8099 : newPort;
+    
     try {
-      const portToUse = newConnectionType === 'Tcp' ? 8099 : newPort;
       await connectVMix(trimmedHost, portToUse, newConnectionType);
+      
+      // Add success notification
+      setConnectionNotifications(prev => [...prev, {
+        host: trimmedHost,
+        success: true,
+        message: `Successfully connected to ${trimmedHost}`
+      }]);
     } catch (error) {
       console.error('Failed to connect:', error);
-      setError(`Failed to connect to ${trimmedHost}: ${error}`);
+      
+      // Add error notification
+      setConnectionNotifications(prev => [...prev, {
+        host: trimmedHost,
+        success: false,
+        message: `Failed to connect to ${trimmedHost}: ${error}`
+      }]);
     } finally {
-      setConnecting(false);
-      handleClose();
+      // Remove from background connections
+      setBackgroundConnections(prev => {
+        const updated = new Set(prev);
+        updated.delete(trimmedHost);
+        return updated;
+      });
     }
   };
 
@@ -237,22 +273,71 @@ const Connections: React.FC = () => {
   };
 
   const handleConnectFromScan = async (ipAddress: string) => {
+    // Close scan dialog immediately for better UX
+    setScanDialogOpen(false);
+    
+    // Add to background connections set
+    setBackgroundConnections(prev => new Set([...prev, ipAddress]));
+    
     try {
       await connectVMix(ipAddress, 8088, 'Http');
-      setScanDialogOpen(false);
+      
+      // Add success notification
+      setConnectionNotifications(prev => [...prev, {
+        host: ipAddress,
+        success: true,
+        message: `Successfully connected to ${ipAddress}`
+      }]);
     } catch (error) {
       console.error('Failed to connect to scanned vMix:', error);
-      setScanError(`Failed to connect to ${ipAddress}: ${error}`);
+      
+      // Add error notification
+      setConnectionNotifications(prev => [...prev, {
+        host: ipAddress,
+        success: false,
+        message: `Failed to connect to ${ipAddress}: ${error}`
+      }]);
+    } finally {
+      // Remove from background connections
+      setBackgroundConnections(prev => {
+        const updated = new Set(prev);
+        updated.delete(ipAddress);
+        return updated;
+      });
     }
   };
 
   const handleReconnect = async (connection: Connection) => {
     setError(null);
+    
+    // Add to background connections set
+    setBackgroundConnections(prev => new Set([...prev, connection.host]));
+    
     try {
       await connectVMix(connection.host, connection.port, connection.connectionType);
+      
+      // Add success notification
+      setConnectionNotifications(prev => [...prev, {
+        host: connection.host,
+        success: true,
+        message: `Successfully reconnected to ${connection.host}`
+      }]);
     } catch (error) {
       console.error('Failed to reconnect:', error);
-      setError(`Failed to reconnect to ${connection.host}: ${error}`);
+      
+      // Add error notification
+      setConnectionNotifications(prev => [...prev, {
+        host: connection.host,
+        success: false,
+        message: `Failed to reconnect to ${connection.host}: ${error}`
+      }]);
+    } finally {
+      // Remove from background connections
+      setBackgroundConnections(prev => {
+        const updated = new Set(prev);
+        updated.delete(connection.host);
+        return updated;
+      });
     }
   };
 
@@ -312,7 +397,10 @@ const Connections: React.FC = () => {
             Loading vMix Connections
           </Typography>
           <Typography variant="body2" color="textSecondary">
-            Checking connection status and loading saved configurations...
+            {connections.length > 0 
+              ? `Found ${connections.length} saved connection${connections.length > 1 ? 's' : ''}`
+              : 'Checking for saved connections...'
+            }
           </Typography>
         </CardContent>
       </Card>
@@ -379,7 +467,7 @@ const Connections: React.FC = () => {
                   </Box>
                 </TableCell>
               </TableRow>
-            ) : connections.length === 0 ? (
+            ) : connections.length === 0 && backgroundConnections.size === 0 ? (
               <TableRow>
                 <TableCell colSpan={10} align="center">
                   <Typography color="textSecondary">
@@ -388,7 +476,22 @@ const Connections: React.FC = () => {
                 </TableCell>
               </TableRow>
             ) : (
-              connections.map((connection) => (
+              [
+                ...connections,
+                // Add background connections that are being established
+                ...Array.from(backgroundConnections).map((host, index) => ({
+                  id: -(index + 1), // Temporary negative ID for background connections
+                  host,
+                  port: 8088, // Default port, will be updated when connection is established
+                  label: `${host} (Connecting...)`,
+                  status: 'Reconnecting' as const,
+                  activeInput: 0,
+                  previewInput: 0,
+                  connectionType: 'Http' as const, // Default type, will be updated when connection is established
+                  version: 'Connecting...',
+                  edition: 'Connecting...',
+                }))
+              ].map((connection) => (
                 <TableRow key={connection.id}>
                   <TableCell>
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
@@ -422,14 +525,28 @@ const Connections: React.FC = () => {
                   </TableCell>
                   <TableCell>
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                      <Chip 
-                        label={connection.status}
-                        color={connection.status === 'Connected' ? 'success' : connection.status === 'Reconnecting' ? 'warning' : 'error'}
-                        variant="outlined"
-                        size="small"
-                      />
-                      {connection.status === 'Reconnecting' && (
-                        <CircularProgress size={16} />
+                      {backgroundConnections.has(connection.host) ? (
+                        <>
+                          <Chip 
+                            label="Connecting..."
+                            color="warning"
+                            variant="outlined"
+                            size="small"
+                          />
+                          <CircularProgress size={16} />
+                        </>
+                      ) : (
+                        <>
+                          <Chip 
+                            label={connection.status}
+                            color={connection.status === 'Connected' ? 'success' : connection.status === 'Reconnecting' ? 'warning' : 'error'}
+                            variant="outlined"
+                            size="small"
+                          />
+                          {connection.status === 'Reconnecting' && (
+                            <CircularProgress size={16} />
+                          )}
+                        </>
                       )}
                     </Box>
                   </TableCell>
@@ -528,23 +645,34 @@ const Connections: React.FC = () => {
                     )}
                   </TableCell>
                   <TableCell align="right">
-                    {connection.status === 'Disconnected' ? (
-                      <IconButton
-                        color="primary"
-                        onClick={() => handleReconnect(connection)}
-                        title="Reconnect"
-                      >
-                        <ReconnectIcon />
-                      </IconButton>
+                    {backgroundConnections.has(connection.host) ? (
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                        <CircularProgress size={16} />
+                        <Typography variant="caption" color="textSecondary">
+                          Connecting...
+                        </Typography>
+                      </Box>
                     ) : (
-                      <></>
+                      <>
+                        {connection.status === 'Disconnected' ? (
+                          <IconButton
+                            color="primary"
+                            onClick={() => handleReconnect(connection)}
+                            title="Reconnect"
+                          >
+                            <ReconnectIcon />
+                          </IconButton>
+                        ) : (
+                          <></>
+                        )}
+                        <IconButton 
+                          color="error" 
+                          onClick={() => handleDelete(connection.id)}
+                        >
+                          <DeleteIcon />
+                        </IconButton>
+                      </>
                     )}
-                    <IconButton 
-                      color="error" 
-                      onClick={() => handleDelete(connection.id)}
-                    >
-                      <DeleteIcon />
-                    </IconButton>
                   </TableCell>
                 </TableRow>
               ))
@@ -568,7 +696,6 @@ const Connections: React.FC = () => {
             onChange={(e) => setNewHost(e.target.value)}
             placeholder="192.168.1.6 or localhost"
             helperText="Enter the IP address or hostname of your vMix instance"
-            disabled={connecting}
             sx={{ mb: 2 }}
           />
           <TextField
@@ -586,7 +713,7 @@ const Connections: React.FC = () => {
             }}
             placeholder={newConnectionType === 'Tcp' ? "8099" : "8088"}
             helperText={newConnectionType === 'Tcp' ? "TCP API port (fixed: 8099)" : "HTTP API port (default: 8088)"}
-            disabled={connecting || newConnectionType === 'Tcp'}
+            disabled={newConnectionType === 'Tcp'}
             InputProps={{
               inputProps: {
                 min: 1,
@@ -605,13 +732,11 @@ const Connections: React.FC = () => {
                 value="Http"
                 control={<Radio />}
                 label="HTTP API"
-                disabled={connecting}
               />
               <FormControlLabel
                 value="Tcp"
                 control={<Radio />}
                 label="TCP API (Experimental)"
-                disabled={connecting}
               />
             </RadioGroup>
           </FormControl>
@@ -622,16 +747,15 @@ const Connections: React.FC = () => {
           )}
         </DialogContent>
         <DialogActions>
-          <Button onClick={handleClose} disabled={connecting}>
+          <Button onClick={handleClose}>
             Cancel
           </Button>
           <Button 
             onClick={handleAdd} 
             variant="contained" 
-            disabled={!newHost.trim() || connecting}
-            startIcon={connecting ? <CircularProgress size={16} /> : null}
+            disabled={!newHost.trim()}
           >
-            {connecting ? 'Connecting...' : 'Add Connection'}
+            Add Connection
           </Button>
         </DialogActions>
       </Dialog>
@@ -803,6 +927,23 @@ const Connections: React.FC = () => {
           </Button>
         </DialogActions>
       </Dialog>
+
+      {/* Connection Notifications */}
+      {connectionNotifications.length > 0 && (
+        <Snackbar
+          open={true}
+          autoHideDuration={5000}
+          onClose={() => setConnectionNotifications(prev => prev.slice(1))}
+          anchorOrigin={{ vertical: 'bottom', horizontal: 'left' }}
+        >
+          <Alert
+            severity={connectionNotifications[0].success ? 'success' : 'error'}
+            sx={{ mb: 1 }}
+          >
+            {connectionNotifications[0].message}
+          </Alert>
+        </Snackbar>
+      )}
     </Box>
   );
 };
