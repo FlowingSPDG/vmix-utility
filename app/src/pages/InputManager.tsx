@@ -237,8 +237,8 @@ const InputManager = () => {
     return [];
   }, [selectedConnection, globalInputs]);
 
-  // Show loading if no connections or no data yet
-  const isLoading = connections.length === 0 || (selectedConnection && !globalInputs[selectedConnection]);
+  // Show loading only when we have a selected connection but no data yet
+  const isLoading = selectedConnection && !globalInputs[selectedConnection];
 
 
   const handleEditClick = useCallback((input: Input) => {
@@ -367,7 +367,7 @@ const InputManager = () => {
     }));
   }, [sortedInputs, editingData, operationLoading]);
 
-  // Show skeleton loading state while loading
+  // Show skeleton loading state only when we have a selected connection but no data yet
   if (isLoading) {
     return (
       <Box sx={{ p: 3 }}>
@@ -422,73 +422,90 @@ const InputManager = () => {
           </Alert>
         )}
 
+        {connections.length === 0 && (
+          <Alert severity="info" sx={{ mb: spacing.spacing }}>
+            No vMix connections available. Please connect to a vMix instance first.
+          </Alert>
+        )}
+
       </Paper>
       
-      <TableContainer component={Paper}>
-        <Table>
-          <TableHead>
-            <TableRow>
-              <TableCell sx={{ width: '60px', minWidth: '60px' }}>
-                <TableSortLabel
-                  active={orderBy === 'number'}
-                  direction={orderBy === 'number' ? order : 'asc'}
-                  onClick={() => handleRequestSort('number')}
-                >
-                  #
-                </TableSortLabel>
-              </TableCell>
-              <TableCell sx={{ minWidth: '160px' }}>
-                <TableSortLabel
-                  active={orderBy === 'title'}
-                  direction={orderBy === 'title' ? order : 'asc'}
-                  onClick={() => handleRequestSort('title')}
-                >
-                  Title
-                </TableSortLabel>
-              </TableCell>
-              <TableCell sx={{ width: '120px', minWidth: '120px' }}>
-                <TableSortLabel
-                  active={orderBy === 'type'}
-                  direction={orderBy === 'type' ? order : 'asc'}
-                  onClick={() => handleRequestSort('type')}
-                >
-                  Type
-                </TableSortLabel>
-              </TableCell>
-              <TableCell sx={{ width: '100px', minWidth: '100px' }}>State</TableCell>
-              <TableCell sx={{ width: '140px', minWidth: '140px' }}>Key</TableCell>
-              <TableCell sx={{ width: '80px', minWidth: '80px' }}>Actions</TableCell>
-            </TableRow>
-          </TableHead>
-          <TableBody>
-            {inputs.length === 0 ? (
+      {connections.length === 0 ? (
+        <Paper sx={{ p: spacing.cardPadding * 2, textAlign: 'center' }}>
+          <Typography variant="h6" color="textSecondary" gutterBottom>
+            No vMix Connections Available
+          </Typography>
+          <Typography variant="body2" color="textSecondary">
+            Please connect to a vMix instance from the Connections page to manage inputs.
+          </Typography>
+        </Paper>
+      ) : (
+        <TableContainer component={Paper}>
+          <Table>
+            <TableHead>
               <TableRow>
-                <TableCell colSpan={6} align="center">
-                  <Typography color="textSecondary">
-                    {selectedConnection ? 'No inputs found' : 'Select a vMix connection to view inputs'}
-                  </Typography>
+                <TableCell sx={{ width: '60px', minWidth: '60px' }}>
+                  <TableSortLabel
+                    active={orderBy === 'number'}
+                    direction={orderBy === 'number' ? order : 'asc'}
+                    onClick={() => handleRequestSort('number')}
+                  >
+                    #
+                  </TableSortLabel>
                 </TableCell>
+                <TableCell sx={{ minWidth: '160px' }}>
+                  <TableSortLabel
+                    active={orderBy === 'title'}
+                    direction={orderBy === 'title' ? order : 'asc'}
+                    onClick={() => handleRequestSort('title')}
+                  >
+                    Title
+                  </TableSortLabel>
+                </TableCell>
+                <TableCell sx={{ width: '120px', minWidth: '120px' }}>
+                  <TableSortLabel
+                    active={orderBy === 'type'}
+                    direction={orderBy === 'type' ? order : 'asc'}
+                    onClick={() => handleRequestSort('type')}
+                  >
+                    Type
+                  </TableSortLabel>
+                </TableCell>
+                <TableCell sx={{ width: '100px', minWidth: '100px' }}>State</TableCell>
+                <TableCell sx={{ width: '140px', minWidth: '140px' }}>Key</TableCell>
+                <TableCell sx={{ width: '80px', minWidth: '80px' }}>Actions</TableCell>
               </TableRow>
-            ) : (
-              inputRowData.map((rowData) => (
-                <InputRow
-                  key={rowData.input.key}
-                  input={rowData.input}
-                  isEditing={rowData.isEditing}
-                  editingValue={rowData.editingValue}
-                  isLoading={rowData.isLoading}
-                  onEditClick={handleEditClick}
-                  onSaveClick={handleSaveClick}
-                  onCancelClick={handleCancelClick}
-                  onDeleteClick={handleDeleteClick}
-                  onTitleChange={handleTitleChange}
-                  onCopyKey={handleCopyKey}
-                />
-              ))
-            )}
-          </TableBody>
-        </Table>
-      </TableContainer>
+            </TableHead>
+            <TableBody>
+              {inputs.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={6} align="center">
+                    <Typography color="textSecondary">
+                      {selectedConnection ? 'No inputs found' : 'Select a vMix connection to view inputs'}
+                    </Typography>
+                  </TableCell>
+                </TableRow>
+              ) : (
+                inputRowData.map((rowData) => (
+                  <InputRow
+                    key={rowData.input.key}
+                    input={rowData.input}
+                    isEditing={rowData.isEditing}
+                    editingValue={rowData.editingValue}
+                    isLoading={rowData.isLoading}
+                    onEditClick={handleEditClick}
+                    onSaveClick={handleSaveClick}
+                    onCancelClick={handleCancelClick}
+                    onDeleteClick={handleDeleteClick}
+                    onTitleChange={handleTitleChange}
+                    onCopyKey={handleCopyKey}
+                  />
+                ))
+              )}
+            </TableBody>
+          </Table>
+        </TableContainer>
+      )}
       
       {/* Toast Notification */}
       <Snackbar 
@@ -505,21 +522,23 @@ const InputManager = () => {
           {toast.message}
         </Alert>
       </Snackbar>
-      <Box sx={{ mt: 2, display: 'flex', justifyContent: 'flex-end' }}>
-        <Button
-          variant="contained"
-          color="primary"
-          onClick={async () => {
-            for (const key of Object.keys(editingData)) {
-              await handleSaveClick(key);
-            }
-            setEditingData({});
-          }}
-          disabled={Object.keys(editingData).length === 0}
-        >
-          Apply All Changes
-        </Button>
-      </Box>
+      {connections.length > 0 && (
+        <Box sx={{ mt: 2, display: 'flex', justifyContent: 'flex-end' }}>
+          <Button
+            variant="contained"
+            color="primary"
+            onClick={async () => {
+              for (const key of Object.keys(editingData)) {
+                await handleSaveClick(key);
+              }
+              setEditingData({});
+            }}
+            disabled={Object.keys(editingData).length === 0}
+          >
+            Apply All Changes
+          </Button>
+        </Box>
+      )}
       
       <Dialog
         open={deleteDialogOpen}

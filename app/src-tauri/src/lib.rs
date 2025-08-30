@@ -123,7 +123,6 @@ pub fn run() {
             let app_handle_clone = app_handle.clone();
             let app_handle_refresh = app_handle.clone();
             let app_handle_update = app_handle.clone();
-            let app_handle_multiviewer = app_handle.clone();
 
             // system tray icon
             let show_i = MenuItem::with_id(app, "show", "Show", true, None::<&str>)?;
@@ -133,6 +132,7 @@ pub fn run() {
 
             let _tray = TrayIconBuilder::new()
                 .menu(&menu)
+                .icon(app.default_window_icon().unwrap().clone())
                 .show_menu_on_left_click(false)
                 .on_tray_icon_event(|tray, event| {
                     match event {
@@ -184,14 +184,6 @@ pub fn run() {
             tauri::async_runtime::spawn(async move {
                 let app_state = app_handle_clone.state::<AppState>();
                 app_state.start_auto_refresh_task(app_handle_refresh);
-            });
-            
-            // Start multiviewer server after initialization
-            tauri::async_runtime::spawn(async move {
-                let app_state = app_handle_multiviewer.state::<AppState>();
-                if let Err(e) = app_state.start_multiviewer_server().await {
-                    app_log!(error, "Failed to start multiviewer server: {}", e);
-                }
             });
             
             // Check for updates on startup

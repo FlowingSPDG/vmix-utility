@@ -238,6 +238,37 @@ SOFTWARE.`}
           </Paper>
         </Grid2>
 
+        {/* Special Thanks */}
+        <Grid2 size={12}>
+          <Paper sx={{ p: 3 }}>
+            <Typography variant="h6" gutterBottom>
+              Special Thanks
+            </Typography>
+            
+            <List>
+              <ListItem sx={{ pl: 0 }}>
+                <ListItemIcon>
+                  <Avatar sx={{ bgcolor: 'primary.main' }}>
+                    <Code />
+                  </Avatar>
+                </ListItemIcon>
+                <ListItemText
+                  primary={
+                    <Link
+                      component="button"
+                      onClick={() => openInBrowser('https://x.com/guleruun')}
+                      sx={{ textDecoration: 'underline', cursor: 'pointer' }}
+                    >
+                      GuleruuN
+                    </Link>
+                  }
+                  secondary="Logo Designer - Created the beautiful vmix-utility logo"
+                />
+              </ListItem>
+            </List>
+          </Paper>
+        </Grid2>
+
         {/* Additional Links */}
         <Grid2 size={12}>
           <Paper sx={{ p: 3 }}>

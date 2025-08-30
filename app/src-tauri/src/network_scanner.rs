@@ -5,6 +5,8 @@ use anyhow::Result;
 use std::sync::Arc;
 use tokio::sync::Semaphore;
 use crate::http_client::VmixClientWrapper;
+use std::result::Result as StdResult;
+use network_interface::{NetworkInterface as NativeNetworkInterface, NetworkInterfaceConfig};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct NetworkInterface {
@@ -24,124 +26,39 @@ pub struct VmixScanResult {
 }
 
 pub fn get_network_interfaces() -> Result<Vec<NetworkInterface>> {
+    // network-interfaceライブラリを使用してプラットフォームネイティブにネットワークインターフェースを取得
+    let native_interfaces = NativeNetworkInterface::show()
+        .map_err(|e| anyhow::anyhow!("Failed to get network interfaces: {}", e))?;
+    
     let mut interfaces = Vec::new();
     
-    // Windows環境でのネットワークインターフェース取得
-    #[cfg(target_os = "windows")]
-    {
-        use std::process::Command;
-        
-        let output = Command::new("ipconfig")
-            .output()
-            .map_err(|e| anyhow::anyhow!("Failed to execute ipconfig: {}", e))?;
-        
-        let output_str = String::from_utf8_lossy(&output.stdout);
-        let lines: Vec<&str> = output_str.lines().collect();
-        
-        let mut current_interface = None;
-        
-        for line in lines {
-            let line = line.trim();
-            
-            // アダプター名の検出
-            if line.ends_with(":") && !line.starts_with(" ") {
-                if let Some(interface) = current_interface.take() {
-                    interfaces.push(interface);
-                }
-                current_interface = Some(NetworkInterface {
-                    name: line.trim_end_matches(':').to_string(),
-                    ip_address: String::new(),
-                    subnet: String::new(),
-                    is_up: false,
-                });
-            }
-            
-            // IPv4アドレスの検出
-            if let Some(interface) = &mut current_interface {
-                if line.contains("IPv4") && line.contains(":") {
-                    if let Some(ip_part) = line.split(':').nth(1) {
-                        let ip = ip_part.trim();
-                        if !ip.is_empty() && ip != "(Preferred)" {
-                            interface.ip_address = ip.to_string();
-                            // サブネットを推定（通常は.1-.254の範囲）
-                            if let Some(parts) = ip.split('.').collect::<Vec<&str>>().get(0..3) {
-                                interface.subnet = format!("{}.{}.{}", parts[0], parts[1], parts[2]);
-                            }
-                            interface.is_up = true;
-                        }
-                    }
-                }
-            }
-        }
-        
-        // 最後のインターフェースを追加
-        if let Some(interface) = current_interface {
-            interfaces.push(interface);
-        }
-    }
-    
-    // Linux/macOS環境でのネットワークインターフェース取得
-    #[cfg(not(target_os = "windows"))]
-    {
-        use std::process::Command;
-        
-        let output = Command::new("ip")
-            .args(["addr", "show"])
-            .output()
-            .map_err(|e| anyhow::anyhow!("Failed to execute ip addr: {}", e))?;
-        
-        let output_str = String::from_utf8_lossy(&output.stdout);
-        let lines: Vec<&str> = output_str.lines().collect();
-        
-        let mut current_interface = None;
-        
-        for line in lines {
-            let line = line.trim();
-            
-            // インターフェース名の検出
-            if line.contains(':') && !line.starts_with(" ") {
-                if let Some(interface) = current_interface.take() {
-                    interfaces.push(interface);
-                }
+    for native_iface in native_interfaces {
+        // IPv4アドレスのみを処理
+        for addr in &native_iface.addr {
+            if let network_interface::Addr::V4(ipv4_addr) = addr {
+                let ip_str = ipv4_addr.ip.to_string();
                 
-                let parts: Vec<&str> = line.split(':').collect();
-                if parts.len() >= 2 {
-                    let name = parts[1].trim();
-                    current_interface = Some(NetworkInterface {
-                        name: name.to_string(),
-                        ip_address: String::new(),
-                        subnet: String::new(),
-                        is_up: true,
-                    });
+                // より厳密なIPv4アドレスのバリデーション
+                if is_valid_ipv4_address(&ip_str) && is_usable_ipv4_address(&ip_str) {
+                    // サブネットを推定
+                    let subnet = if let Some(parts) = ip_str.split('.').collect::<Vec<&str>>().get(0..3) {
+                        format!("{}.{}.{}", parts[0], parts[1], parts[2])
+                    } else {
+                        continue;
+                    };
+                    
+                    let interface = NetworkInterface {
+                        name: native_iface.name.clone(),
+                        ip_address: ip_str,
+                        subnet,
+                        is_up: true, // network-interfaceライブラリは有効なインターフェースのみを返す
+                    };
+                    
+                    interfaces.push(interface);
                 }
             }
-            
-            // IPv4アドレスの検出
-            if let Some(interface) = &mut current_interface {
-                if line.contains("inet ") && !line.contains("inet6") {
-                    let parts: Vec<&str> = line.split_whitespace().collect();
-                    if parts.len() >= 2 {
-                        let ip_with_mask = parts[1];
-                        if let Some(ip) = ip_with_mask.split('/').next() {
-                            interface.ip_address = ip.to_string();
-                            // サブネットを推定
-                            if let Some(parts) = ip.split('.').collect::<Vec<&str>>().get(0..3) {
-                                interface.subnet = format!("{}.{}.{}", parts[0], parts[1], parts[2]);
-                            }
-                        }
-                    }
-                }
-            }
-        }
-        
-        // 最後のインターフェースを追加
-        if let Some(interface) = current_interface {
-            interfaces.push(interface);
         }
     }
-    
-    // 有効なIPアドレスを持つインターフェースのみをフィルタ
-    interfaces.retain(|iface| !iface.ip_address.is_empty() && iface.is_up);
     
     Ok(interfaces)
 }
@@ -247,9 +164,56 @@ async fn check_vmix_http_api(addr: SocketAddr) -> Result<()> {
     let client = VmixClientWrapper::new(&host, port);
     
     // 短いタイムアウトでXMLを取得・パースできた場合のみ成功とみなす
-    match tokio::time::timeout(Duration::from_secs(3), client.get_vmix_data()).await {
+    match tokio::time::timeout(Duration::from_secs(1), client.get_vmix_data()).await {
         Ok(Ok(_xml)) => Ok(()),
         Ok(Err(e)) => Err(anyhow::anyhow!("HTTP API XML error: {}", e)),
         Err(_) => Err(anyhow::anyhow!("HTTP API timeout")),
     }
+}
+
+/// IPv4アドレスの形式が正しいかチェック
+fn is_valid_ipv4_address(ip: &str) -> bool {
+    let parts: Vec<&str> = ip.split('.').collect();
+    if parts.len() != 4 {
+        return false;
+    }
+    
+    for part in parts {
+        match part.parse::<u8>() {
+            Ok(_) => continue,
+            Err(_) => return false,
+        }
+    }
+    
+    true
+}
+
+/// 使用可能なIPv4アドレスかチェック（ループバック、リンクローカル、マルチキャストアドレスを除外）
+fn is_usable_ipv4_address(ip: &str) -> bool {
+    // ループバックアドレス (127.0.0.0/8)
+    if ip.starts_with("127.") {
+        return false;
+    }
+    
+    // リンクローカルアドレス (169.254.0.0/16)
+    if ip.starts_with("169.254.") {
+        return false;
+    }
+    
+    // マルチキャストアドレス (224.0.0.0/4)
+    if let Ok(parts) = ip.split('.').map(|p| p.parse::<u8>()).collect::<StdResult<Vec<u8>, _>>() {
+        if parts.len() == 4 && parts[0] >= 224 && parts[0] <= 239 {
+            return false;
+        }
+    }
+    
+    // ブロードキャストアドレス (255.255.255.255)
+    if ip == "255.255.255.255" {
+        return false;
+    }
+    
+    // プライベートアドレス（10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16）は使用可能
+    // vMixは通常プライベートネットワークで動作するため
+    
+    true
 }
