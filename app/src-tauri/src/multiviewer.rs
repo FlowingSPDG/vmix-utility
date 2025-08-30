@@ -54,6 +54,8 @@ pub struct MultiviewerServer {
     broadcast_tx: Arc<Mutex<Option<broadcast::Sender<MultiviewerData>>>>,
     // キャッシュ：接続ごとのactive/preview key状態を保存
     cache: Arc<Mutex<std::collections::HashMap<String, (Option<String>, Option<String>)>>>,
+    // position用のキャッシュ："host:port" -> Vec<MultiviewerLayer> (直接データを保持)
+    position_cache: Arc<Mutex<std::collections::HashMap<String, Vec<MultiviewerLayer>>>>,
 }
 
 impl MultiviewerServer {
@@ -64,6 +66,7 @@ impl MultiviewerServer {
             server_handle: Arc::new(Mutex::new(None)),
             broadcast_tx: Arc::new(Mutex::new(None)),
             cache: Arc::new(Mutex::new(std::collections::HashMap::new())),
+            position_cache: Arc::new(Mutex::new(std::collections::HashMap::new())),
         }
     }
 
@@ -112,8 +115,8 @@ impl MultiviewerServer {
             // Send initial data
             tokio::spawn({
                 let broadcast_tx = broadcast_tx_clone.clone();
-                let app_state = Arc::clone(&app_state_clone);
-                let config = config.clone();
+                let _app_state = Arc::clone(&app_state_clone);
+                let _config = config.clone();
                 
                 async move {
                     // For initial broadcast, we don't have a specific input key, so skip it
@@ -293,22 +296,38 @@ impl MultiviewerServer {
             }
         };
         
-        if has_change {
-            let multiviewer_data = MultiviewerData {
-                inputs: vec![], // Empty inputs - frontend already has layer data
-                active_input_key: active_key.clone(),
-                preview_input_key: preview_key.clone(),
-                timestamp: std::time::SystemTime::now()
-                    .duration_since(std::time::UNIX_EPOCH)
-                    .unwrap()
-                    .as_millis() as u64,
+        // position変更もチェック（selected_inputに対して）
+        app_log!(info, "MULTIVIEWER: Checking position changes for {}", updated_connection.host);
+        let position_changed = self.check_position_changes(&updated_connection).await;
+        app_log!(info, "MULTIVIEWER: Position changed: {}", position_changed);
+        
+        if has_change || position_changed {
+            // position変更がある場合はレイヤー情報も含めて送信
+            let multiviewer_data = if position_changed {
+                // position変更時はフルデータを送信
+                self.get_full_multiviewer_data_for_broadcast(&updated_connection).await
+            } else {
+                // active/preview変更のみの場合は簡略データ
+                MultiviewerData {
+                    inputs: vec![], // Empty inputs - frontend already has layer data
+                    active_input_key: active_key.clone(),
+                    preview_input_key: preview_key.clone(),
+                    timestamp: std::time::SystemTime::now()
+                        .duration_since(std::time::UNIX_EPOCH)
+                        .unwrap()
+                        .as_millis() as u64,
+                }
             };
             
             if let Some(tx) = self.broadcast_tx.lock().unwrap().as_ref() {
                 match tx.send(multiviewer_data) {
                     Ok(_) => {
-                        app_log!(info, "MULTIVIEWER: ✅ Successfully broadcasted update for {} - Active: {:?}, Preview: {:?}", 
-                            updated_connection.host, active_key, preview_key);
+                        if position_changed {
+                            app_log!(info, "MULTIVIEWER: ✅ Successfully broadcasted POSITION UPDATE for {}", updated_connection.host);
+                        } else {
+                            app_log!(info, "MULTIVIEWER: ✅ Successfully broadcasted active/preview update for {} - Active: {:?}, Preview: {:?}", 
+                                updated_connection.host, active_key, preview_key);
+                        }
                     }
                     Err(e) => {
                         app_log!(error, "MULTIVIEWER: ❌ Failed to broadcast update: {}", e);
@@ -316,6 +335,229 @@ impl MultiviewerServer {
                 }
             }
         }
+    }
+    
+    // position変曲をチェックする関数
+    async fn check_position_changes(&self, updated_connection: &crate::types::VmixConnection) -> bool {
+        let config = self.config.lock().unwrap().clone();
+        
+        app_log!(info, "MULTIVIEWER: Checking position changes - config.selected_connection: {:?}", config.selected_connection);
+        
+        // selected_connectionがある場合はそれをチェック、ない場合はすべての接続をチェック
+        if let Some(ref selected_connection) = config.selected_connection {
+            let host = if selected_connection.contains(':') {
+                selected_connection.split(':').next().unwrap_or(selected_connection)
+            } else {
+                selected_connection
+            };
+            
+            app_log!(info, "MULTIVIEWER: Parsed host: '{}', checking against updated host: '{}'", host, updated_connection.host);
+            
+            // 更新された接続が選択された接続と同じかチェック
+            if host == updated_connection.host {
+                app_log!(info, "MULTIVIEWER: Host matches, checking position changes");
+                return self.check_selected_input_position_changes(&updated_connection).await;
+            } else {
+                app_log!(info, "MULTIVIEWER: Host mismatch, skipping position check");
+            }
+        } else {
+            // selected_connectionがない場合は、とりあえずチェックしてみる（デバッグ用）
+            app_log!(info, "MULTIVIEWER: No selected_connection, checking position changes anyway for {}", updated_connection.host);
+            return self.check_selected_input_position_changes(&updated_connection).await;
+        }
+        
+        false
+    }
+    
+    // 選択されたInputのposition変更をチェック
+    async fn check_selected_input_position_changes(&self, connection: &crate::types::VmixConnection) -> bool {
+        let vmix_client = {
+            let http_connections = self.app_state.http_connections.lock().unwrap();
+            http_connections.iter().find(|c| c.host() == connection.host).cloned()
+        };
+        
+        if let Some(ref client) = vmix_client {
+            match client.get_raw_vmix_state().await {
+                Ok(vmix_state) => {
+                    // multiviewer入力を検索してレイヤー情報を取得
+                    if let Some(multiviewer_input) = vmix_state.inputs.input.iter()
+                        .find(|inp| inp.input_type.to_lowercase() == "multiviewer") {
+                        
+                        let current_layers = self.extract_layers_from_input(&vmix_state, &multiviewer_input.key).await;
+                        let cache_key = format!("{}:{}", connection.host, connection.port);
+                        
+                        app_log!(info, "MULTIVIEWER: Checking position changes for {} with {} layers", 
+                            cache_key, current_layers.len());
+                        
+                        let mut position_cache = self.position_cache.lock().unwrap();
+                        let cached_layers = position_cache.get(&cache_key);
+                        
+                        let has_changed = match cached_layers {
+                            Some(cached) => {
+                                let changed = self.compare_layer_positions(cached, &current_layers);
+                                if changed {
+                                    app_log!(info, "MULTIVIEWER: ✅ Position change detected for {} - updating cache", cache_key);
+                                } else {
+                                    app_log!(info, "MULTIVIEWER: No position changes for {}", cache_key);
+                                }
+                                changed
+                            },
+                            None => {
+                                app_log!(info, "MULTIVIEWER: First time position check for {} - caching {} layers", cache_key, current_layers.len());
+                                true // 初回は常に変更あり
+                            }
+                        };
+                        
+                        if has_changed {
+                            position_cache.insert(cache_key, current_layers);
+                        }
+                        
+                        has_changed
+                    } else {
+                        app_log!(warn, "MULTIVIEWER: No multiviewer input found for position check");
+                        false
+                    }
+                }
+                Err(e) => {
+                    app_log!(error, "MULTIVIEWER: Failed to get vMix state for position check: {}", e);
+                    false
+                }
+            }
+        } else {
+            app_log!(warn, "MULTIVIEWER: No vMix client found for position check");
+            false
+        }
+    }
+    
+    // レイヤーのposition情報を比較
+    fn compare_layer_positions(&self, cached: &[MultiviewerLayer], current: &[MultiviewerLayer]) -> bool {
+        if cached.len() != current.len() {
+            app_log!(info, "MULTIVIEWER: Layer count changed: {} -> {}", cached.len(), current.len());
+            return true;
+        }
+        
+        for (i, (cached_layer, current_layer)) in cached.iter().zip(current.iter()).enumerate() {
+            // position、size、pan、zoomを比較
+            if cached_layer.x != current_layer.x ||
+               cached_layer.y != current_layer.y ||
+               cached_layer.width != current_layer.width ||
+               cached_layer.height != current_layer.height ||
+               cached_layer.panx != current_layer.panx ||
+               cached_layer.pany != current_layer.pany ||
+               cached_layer.zoom != current_layer.zoom {
+                
+                app_log!(info, "MULTIVIEWER: Layer {} position changed:", i);
+                app_log!(info, "  Old: x={}, y={}, w={}, h={}, panx={}, pany={}, zoom={}", 
+                    cached_layer.x, cached_layer.y, cached_layer.width, cached_layer.height,
+                    cached_layer.panx, cached_layer.pany, cached_layer.zoom);
+                app_log!(info, "  New: x={}, y={}, w={}, h={}, panx={}, pany={}, zoom={}", 
+                    current_layer.x, current_layer.y, current_layer.width, current_layer.height,
+                    current_layer.panx, current_layer.pany, current_layer.zoom);
+                
+                return true;
+            }
+        }
+        
+        false
+    }
+    
+    // 入力からレイヤー情報を抽出
+    async fn extract_layers_from_input(&self, vmix_state: &vmix_rs::models::Vmix, input_key: &str) -> Vec<MultiviewerLayer> {
+        app_log!(info, "MULTIVIEWER: Searching for input with key: {}", input_key);
+        if let Some(selected_input) = vmix_state.inputs.input.iter().find(|inp| inp.key == input_key) {
+            app_log!(info, "MULTIVIEWER: Found multiviewer input with {} overlays", selected_input.overlay.len());
+            selected_input.overlay.iter()
+                .filter(|overlay| {
+                    let index = overlay.index.parse::<i32>().unwrap_or(0);
+                    index != 10 // Layer10を除外
+                })
+                .map(|overlay| {
+                    // position情報をpositionフィールド経由で取得
+                    let (x, y, width, height, panx, pany, zoom) = if let Some(position) = &overlay.position {
+                        (
+                            position.x.as_ref().and_then(|x| x.parse::<f64>().ok()).unwrap_or(0.0),
+                            position.y.as_ref().and_then(|y| y.parse::<f64>().ok()).unwrap_or(0.0),
+                            position.width.as_ref().and_then(|w| w.parse::<f64>().ok()).unwrap_or(1920.0),
+                            position.height.as_ref().and_then(|h| h.parse::<f64>().ok()).unwrap_or(1080.0),
+                            position.pan_x.as_ref().and_then(|px| px.parse::<f64>().ok()).unwrap_or(0.0),
+                            position.pan_y.as_ref().and_then(|py| py.parse::<f64>().ok()).unwrap_or(0.0),
+                            position.zoom_x.as_ref().and_then(|z| z.parse::<f64>().ok()).unwrap_or(1.0),
+                        )
+                    } else {
+                        (0.0, 0.0, 1920.0, 1080.0, 0.0, 0.0, 1.0)
+                    };
+                    let zorder = 0; // zorderはposition構造体にないため0固定
+                    
+                    let index = overlay.index.parse::<i32>().unwrap_or(0);
+                    
+                    app_log!(debug, "MULTIVIEWER: Layer {} - x={}, y={}, w={}, h={}, key={}", 
+                        index, x, y, width, height, overlay.key);
+                    
+                    // 入力情報を取得
+                    let (layer_input_key, layer_input_name, layer_input_number) = if !overlay.key.is_empty() {
+                        if let Some(key_input) = vmix_state.inputs.input.iter().find(|inp| inp.key == overlay.key) {
+                            let input_number = key_input.number.parse::<i32>().unwrap_or(0);
+                            (key_input.key.clone(), key_input.title.clone(), input_number)
+                        } else {
+                            (overlay.key.clone(), format!("Input {}", overlay.key), 0)
+                        }
+                    } else {
+                        ("unknown".to_string(), "Unknown Layer".to_string(), 0)
+                    };
+                    
+                    MultiviewerLayer {
+                        index,
+                        x,
+                        y,
+                        width,
+                        height,
+                        crop: None,
+                        zorder,
+                        panx,
+                        pany,
+                        zoom,
+                        input_key: layer_input_key,
+                        input_name: layer_input_name,
+                        input_number: layer_input_number,
+                    }
+                }).collect()
+        } else {
+            app_log!(warn, "MULTIVIEWER: No input found with key: {}", input_key);
+            // デバッグ用：利用可能な入力をログに出力
+            for (i, inp) in vmix_state.inputs.input.iter().enumerate() {
+                app_log!(debug, "MULTIVIEWER: Available input {}: key='{}', type='{}'", i, inp.key, inp.input_type);
+            }
+            Vec::new()
+        }
+    }
+    
+    // position変更時に送信するフルデータを取得
+    async fn get_full_multiviewer_data_for_broadcast(&self, connection: &crate::types::VmixConnection) -> MultiviewerData {
+        let config = self.config.lock().unwrap().clone();
+        
+        if let Some(ref _selected_connection) = config.selected_connection {
+            // 選択された入力のキーを取得（簡化のため、実際はコンフィグから取得するべき）
+            // ここでは仮に最初のmultiviewer入力を使用
+            let vmix_client = {
+                let http_connections = self.app_state.http_connections.lock().unwrap();
+                http_connections.iter().find(|c| c.host() == connection.host).cloned()
+            };
+            
+            if let Some(ref client) = vmix_client {
+                if let Ok(vmix_state) = client.get_raw_vmix_state().await {
+                    // multiviewer入力を検索
+                    if let Some(multiviewer_input) = vmix_state.inputs.input.iter()
+                        .find(|inp| inp.input_type.to_lowercase() == "multiviewer") {
+                        
+                        return Self::convert_vmix_inputs_to_multiviewer_data(
+                            &self.app_state, connection, &multiviewer_input.key).await;
+                    }
+                }
+            }
+        }
+        
+        // フォールバック
+        Self::create_empty_multiviewer_data()
     }
 
     // Convert vMix inputs to multiviewer data with layer information

@@ -500,8 +500,12 @@
                                 console.log('FRONTEND: Using WebSocket data since no layer data available');
                                 this.data = wsData;
                             } else {
-                                // Update active/preview input keys from WebSocket while keeping layer data
-                                if (wsData.active_input_key !== undefined || wsData.preview_input_key !== undefined) {
+                                // position更新の場合（inputsデータが含まれている）
+                                if (wsData.inputs && wsData.inputs.length > 0) {
+                                    console.log('FRONTEND: ✅ Updating POSITION data from WebSocket - full layer update');
+                                    this.data = wsData; // フルデータ更新
+                                } else if (wsData.active_input_key !== undefined || wsData.preview_input_key !== undefined) {
+                                    // active/previewのみの場合
                                     console.log('FRONTEND: ✅ Updating active/preview keys from WebSocket:', {
                                         oldActiveKey: this.data.active_input_key,
                                         newActiveKey: wsData.active_input_key,
@@ -512,7 +516,7 @@
                                     this.data.preview_input_key = wsData.preview_input_key;
                                     this.data.timestamp = wsData.timestamp;
                                 } else {
-                                    console.log('FRONTEND: No active/preview key data in WebSocket message');
+                                    console.log('FRONTEND: No update data in WebSocket message');
                                 }
                             }
                             
@@ -819,7 +823,8 @@
                 layerDiv.style.top = `${scaledY}px`;
                 layerDiv.style.width = `${scaledWidth}px`;
                 layerDiv.style.height = `${scaledHeight}px`;
-                layerDiv.style.zIndex = layer.zorder.toString();
+                // Layer1が下（z-index=1）、Layer9が上（z-index=9）
+                layerDiv.style.zIndex = layer.index.toString();
                 layerDiv.style.margin = '0';
                 layerDiv.style.padding = '0';
                 layerDiv.style.boxSizing = 'border-box';
