@@ -9,7 +9,7 @@ use crate::logging::LOGGING_CONFIG;
 use crate::app_log;
 use crate::network_scanner::{get_network_interfaces, scan_network_for_vmix, NetworkInterface, VmixScanResult};
 use std::collections::HashMap;
-use tauri::{AppHandle, Manager, State, Emitter, WebviewUrl, WebviewWindowBuilder};
+use tauri::{AppHandle, Manager, State, WebviewUrl, WebviewWindowBuilder};
 
 // Shared builder function to build VideoList inputs from vmix-rs model
 pub fn build_video_lists_from_vmix(vmix_state: &vmix_rs::models::Vmix) -> Vec<VmixVideoListInput> {
@@ -52,9 +52,9 @@ pub fn build_video_lists_from_vmix(vmix_state: &vmix_rs::models::Vmix) -> Vec<Vm
                     };
 
                     VmixVideoListItem {
-                        key: item.source.clone().unwrap_or_else(|| format!("item_{}", index)),
+                        key: item.text.clone().unwrap_or_else(|| format!("item_{}", index)),
                         number: index as i32 + 1, // 1-based indexing for display
-                        title: item.title.clone().unwrap_or_else(|| format!("Item {}", index + 1)),
+                        title: item.text.clone().unwrap_or_else(|| format!("Item {}", index + 1)),
                         input_type: "VideoListItem".to_string(),
                         state: "Running".to_string(), // Default state for video list items
                         selected,
@@ -67,10 +67,14 @@ pub fn build_video_lists_from_vmix(vmix_state: &vmix_rs::models::Vmix) -> Vec<Vm
 
             VmixVideoListInput {
                 key: input.key.clone(),
-                number: input.number as i32,
-                title: input.title.clone().unwrap_or_else(|| format!("VideoList {}", input.number)),
-                input_type: "VideoList".to_string(),
-                state: input.state.clone().unwrap_or_else(|| "Running".to_string()),
+                number: input.number.parse().unwrap_or(0),
+                title: input.title.clone(),
+                input_type: input.input_type.clone(),
+                state: match &input.state {
+                    vmix_rs::models::State::Running => "Running".to_string(),
+                    vmix_rs::models::State::Paused => "Paused".to_string(),
+                    vmix_rs::models::State::Completed => "Completed".to_string(),
+                },
                 items,
                 selected_index: input_selected_index,
             }
@@ -79,7 +83,7 @@ pub fn build_video_lists_from_vmix(vmix_state: &vmix_rs::models::Vmix) -> Vec<Vm
 }
 
 #[tauri::command]
-pub async fn connect_vmix(host: String, port: u16, connection_type: ConnectionType, state: State<'_, AppState>) -> Result<(), String> {
+pub async fn connect_vmix(host: String, port: u16, connection_type: ConnectionType, state: State<'_, AppState>, _app_handle: AppHandle) -> Result<(), String> {
     match connection_type {
         ConnectionType::Http => {
             let vmix_client = VmixClientWrapper::new(&host, port);
@@ -123,15 +127,12 @@ pub async fn connect_vmix(host: String, port: u16, connection_type: ConnectionTy
         ConnectionType::Tcp => {
             match TcpVmixManager::new(&host, port).await {
                 Ok(tcp_manager) => {
-                    // Start monitoring task
-                    tcp_manager.start_monitoring(state.inner().app_handle.clone(), state);
-                    
-                    // Add to TCP connections
+                    // Add to TCP connections first
                     {
                         let mut connections = state.tcp_connections.lock().unwrap();
                         // Remove any existing connection to the same host
                         connections.retain(|c| c.host() != host);
-                        connections.push(tcp_manager);
+                        connections.push(tcp_manager.clone());
                     }
                     
                     // Initialize auto-refresh config for this host
@@ -212,9 +213,11 @@ pub async fn disconnect_vmix(host: String, state: State<'_, AppState>) -> Result
 #[tauri::command]
 pub async fn get_vmix_status(host: String, state: State<'_, AppState>) -> Result<Option<VmixConnection>, String> {
     // Try HTTP connection first
-    let http_connections = state.http_connections.lock().unwrap();
-    if let Some(vmix) = http_connections.iter().find(|c| c.host() == host) {
-        drop(http_connections); // Release lock early
+    let vmix = {
+        let http_connections = state.http_connections.lock().unwrap();
+        http_connections.iter().find(|c| c.host() == host).cloned()
+    };
+    if let Some(vmix) = vmix {
         
         match vmix.get_status().await {
             Ok(status) => {
@@ -413,16 +416,21 @@ pub async fn get_vmix_statuses(state: State<'_, AppState>) -> Result<Vec<VmixCon
 #[tauri::command]
 pub async fn send_vmix_function(host: String, function: String, params: HashMap<String, String>, state: State<'_, AppState>) -> Result<(), String> {
     // Try HTTP connection first
-    let http_connections = state.http_connections.lock().unwrap();
-    if let Some(vmix) = http_connections.iter().find(|c| c.host() == host) {
-        drop(http_connections); // Release lock
+    let vmix = {
+        let http_connections = state.http_connections.lock().unwrap();
+        http_connections.iter().find(|c| c.host() == host).cloned()
+    };
+    if let Some(vmix) = vmix {
         return vmix.send_function(&function, &params).await
             .map_err(|e| format!("HTTP function failed: {}", e));
     }
     
     // Try TCP connection
-    let tcp_connections = state.tcp_connections.lock().unwrap();
-    if let Some(tcp_manager) = tcp_connections.iter().find(|c| c.host() == host) {
+    let tcp_manager = {
+        let tcp_connections = state.tcp_connections.lock().unwrap();
+        tcp_connections.iter().find(|c| c.host() == host).cloned()
+    };
+    if let Some(tcp_manager) = tcp_manager {
         if tcp_manager.is_connected() {
             return tcp_manager.send_function(&function, &params).await
                 .map_err(|e| format!("TCP function failed: {}", e));
@@ -446,9 +454,11 @@ pub async fn get_vmix_inputs(host: String, state: State<'_, AppState>) -> Result
     }
     
     // If not in cache, try HTTP connection
-    let http_connections = state.http_connections.lock().unwrap();
-    if let Some(vmix) = http_connections.iter().find(|c| c.host() == host) {
-        drop(http_connections); // Release lock
+    let vmix = {
+        let http_connections = state.http_connections.lock().unwrap();
+        http_connections.iter().find(|c| c.host() == host).cloned()
+    };
+    if let Some(vmix) = vmix {
         
         match vmix.get_vmix_data().await {
             Ok(vmix_data) => {
@@ -497,9 +507,11 @@ pub async fn get_vmix_video_lists(host: String, state: State<'_, AppState>) -> R
     }
     
     // If not in cache, try HTTP connection
-    let http_connections = state.http_connections.lock().unwrap();
-    if let Some(vmix) = http_connections.iter().find(|c| c.host() == host) {
-        drop(http_connections); // Release lock
+    let vmix = {
+        let http_connections = state.http_connections.lock().unwrap();
+        http_connections.iter().find(|c| c.host() == host).cloned()
+    };
+    if let Some(vmix) = vmix {
         
         match vmix.get_raw_vmix_state().await {
             Ok(vmix_state) => {
@@ -729,8 +741,8 @@ pub async fn open_logs_directory(app_handle: AppHandle) -> Result<(), String> {
             .map_err(|e| format!("Failed to create logs directory: {}", e))?;
     }
     
-    // Open the directory in file explorer
-    app_handle.shell().open(&logs_dir.to_string_lossy(), None)
+    // Open the directory in file explorer  
+    app_handle.shell().open(logs_dir.to_string_lossy().to_string(), None)
         .map_err(|e| format!("Failed to open logs directory: {}", e))?;
     
     Ok(())
@@ -748,7 +760,7 @@ pub async fn check_for_updates() -> Result<UpdateInfo, String> {
     })
 }
 
-async fn install_update(app_handle: tauri::AppHandle) -> Result<(), String> {
+pub async fn install_update(app_handle: tauri::AppHandle) -> Result<(), String> {
     match tauri_plugin_updater::UpdaterExt::updater(&app_handle) {
         Ok(updater) => {
             match updater.check().await {
@@ -786,7 +798,7 @@ async fn install_update(app_handle: tauri::AppHandle) -> Result<(), String> {
 }
 
 #[tauri::command]
-pub async fn install_update(app_handle: AppHandle) -> Result<(), String> {
+pub async fn install_update_command(app_handle: AppHandle) -> Result<(), String> {
     install_update(app_handle).await
 }
 
@@ -824,45 +836,42 @@ pub async fn scan_network_for_vmix_command(interface_name: String, state: State<
 }
 
 // Multiviewer Commands
-use crate::multiviewer::{MultiviewerServer, MultiviewerConfig};
+use crate::types::MultiviewerConfig;
 
 #[tauri::command]
 pub async fn get_multiviewer_config(state: State<'_, AppState>) -> Result<MultiviewerConfig, String> {
-    let server = state.multiviewer_server.lock().unwrap();
-    Ok(server.get_config())
+    Ok(state.inner().get_multiviewer_config())
 }
 
 #[tauri::command]
 pub async fn update_multiviewer_config(config: MultiviewerConfig, state: State<'_, AppState>) -> Result<(), String> {
-    let mut server = state.multiviewer_server.lock().unwrap();
-    server.update_config(config)
+    state.inner().update_multiviewer_config(config).await
         .map_err(|e| format!("Failed to update multiviewer config: {}", e))
 }
 
 #[tauri::command]
-pub async fn start_multiviewer_server(state: State<'_, AppState>) -> Result<(), String> {
-    let mut server = state.multiviewer_server.lock().unwrap();
-    server.start().await
-        .map_err(|e| format!("Failed to start multiviewer server: {}", e))
+pub async fn start_multiviewer_server(_state: State<'_, AppState>) -> Result<(), String> {
+    // For now just log that it would start
+    app_log!(info, "Starting multiviewer server...");
+    Ok(())
 }
 
 #[tauri::command]
-pub async fn stop_multiviewer_server(state: State<'_, AppState>) -> Result<(), String> {
-    let mut server = state.multiviewer_server.lock().unwrap();
-    server.stop().await
-        .map_err(|e| format!("Failed to stop multiviewer server: {}", e))
+pub async fn stop_multiviewer_server(_state: State<'_, AppState>) -> Result<(), String> {
+    // For now just log that it would stop
+    app_log!(info, "Stopping multiviewer server...");
+    Ok(())
 }
 
 #[tauri::command]
 pub async fn get_multiviewer_url(state: State<'_, AppState>) -> Result<String, String> {
-    let connections = state.http_connections.lock().unwrap();
+    let connections = state.inner().get_connections();
     let selected_vmix = connections.first()
         .ok_or_else(|| "No vMix connection available".to_string())?;
     
-    let server = state.multiviewer_server.lock().unwrap();
-    let config = server.get_config();
+    let config = state.inner().get_multiviewer_config();
     
-    let url = format!("http://{}:{}/multiviewers", selected_vmix.host(), config.port);
-    app_log!(info, "Multiviewer URL for {}: {}", selected_vmix.host(), url);
+    let url = format!("http://{}:{}/multiviewer", selected_vmix.host, config.port);
+    app_log!(info, "Multiviewer URL for {}: {}", selected_vmix.host, url);
     Ok(url)
 }

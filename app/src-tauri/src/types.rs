@@ -21,6 +21,21 @@ pub struct Inputs {
 }
 
 #[derive(Debug, Deserialize)]
+pub struct InputOverlay {
+    #[serde(rename = "@index")]
+    pub index: String,
+    pub x: f32,
+    pub y: f32,
+    pub width: f32,
+    pub height: f32,
+    pub crop: bool,
+    pub zorder: i32,
+    pub panx: f32,
+    pub pany: f32,
+    pub zoom: f32,
+}
+
+#[derive(Debug, Deserialize)]
 pub struct Input {
     #[serde(rename = "@key")]
     pub key: String,
@@ -34,6 +49,8 @@ pub struct Input {
     pub input_type: Option<String>,
     #[serde(rename = "@state")]
     pub state: Option<String>,
+    #[serde(rename = "overlay", default)]
+    pub overlays: Vec<InputOverlay>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -86,9 +103,37 @@ pub struct ConnectionConfig {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AppConfig {
+    #[serde(default)]
+    pub version: String,
     pub connections: Vec<ConnectionConfig>,
     pub app_settings: Option<AppSettings>,
     pub logging_config: Option<LoggingConfig>,
+}
+
+// Config version and migration support
+pub fn default_config_version() -> String {
+    "1.0".to_string()
+}
+
+impl AppConfig {
+    pub fn migrate(&mut self) {
+        // Set version if empty
+        if self.version.is_empty() {
+            self.version = default_config_version();
+        }
+        
+        // Perform any necessary migrations based on version
+        match self.version.as_str() {
+            "" | "0.1" => {
+                // Legacy config migration
+                app_log!(info, "Migrating config from legacy to v1.0");
+                self.version = "1.0".to_string();
+            }
+            _ => {
+                // Config is up to date
+            }
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -158,6 +203,8 @@ pub struct AppSettings {
     pub theme: ThemeMode,
     #[serde(default)]
     pub ui_density: UIDensity,
+    #[serde(default)]
+    pub multiviewer: MultiviewerConfig,
 }
 
 impl Default for AppSettings {
@@ -167,6 +214,7 @@ impl Default for AppSettings {
             default_vmix_port: 8088,
             theme: ThemeMode::Auto,
             ui_density: UIDensity::default(),
+            multiviewer: MultiviewerConfig::default(),
         }
     }
 }
@@ -303,4 +351,24 @@ pub struct VmixVideoListInput {
     pub state: String,
     pub items: Vec<VmixVideoListItem>,
     pub selected_index: Option<i32>, // Currently selected item index in the list
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MultiviewerConfig {
+    pub enabled: bool,
+    pub port: u16,
+    pub overlay_text: String,
+    #[serde(default)]
+    pub selected_connection: String,
+}
+
+impl Default for MultiviewerConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            port: 8089,
+            overlay_text: "vMix Multiviewer".to_string(),
+            selected_connection: String::new(),
+        }
+    }
 }

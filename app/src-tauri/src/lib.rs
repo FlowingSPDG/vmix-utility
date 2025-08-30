@@ -23,7 +23,7 @@ async fn check_for_updates_with_dialog(app_handle: tauri::AppHandle, show_no_upd
                             if result {
                                 let app_handle_clone = app_handle.clone();
                                 tauri::async_runtime::spawn(async move {
-                                    let _ = install_update(app_handle_clone).await;
+                                    let _ = commands::install_update(app_handle_clone).await;
                                 });
                             }
                         });
@@ -59,7 +59,7 @@ pub mod tcp_manager;
 pub mod state;
 pub mod commands;
 pub mod network_scanner;
-pub mod multiviewer;
+// pub mod multiviewer;
 
 // Re-export commonly used types
 pub use state::AppState;
@@ -220,7 +220,7 @@ pub fn run() {
             get_app_info,
             open_logs_directory,
             check_for_updates,
-            install_update,
+            install_update_command,
             get_network_interfaces_command,
             scan_network_for_vmix_command,
             get_multiviewer_config,

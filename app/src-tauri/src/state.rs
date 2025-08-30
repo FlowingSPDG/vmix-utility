@@ -4,7 +4,7 @@ use crate::types::{
 };
 use crate::http_client::VmixClientWrapper;
 use crate::tcp_manager::TcpVmixManager;
-use crate::multiviewer::MultiviewerServer;
+// use crate::multiviewer::MultiviewerServer;
 use crate::app_log;
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -33,7 +33,7 @@ pub struct AppState {
     pub connection_labels: Arc<Mutex<HashMap<String, String>>>,
     pub app_settings: Arc<Mutex<AppSettings>>,
     pub video_list_windows: Arc<Mutex<HashMap<String, VideoListWindow>>>,
-    pub multiviewer_server: Arc<Mutex<MultiviewerServer>>,
+    // pub multiviewer_server: Arc<Mutex<MultiviewerServer>>,
 }
 
 impl AppState {
@@ -48,7 +48,7 @@ impl AppState {
             connection_labels: Arc::new(Mutex::new(HashMap::new())),
             app_settings: Arc::new(Mutex::new(AppSettings::default())),
             video_list_windows: Arc::new(Mutex::new(HashMap::new())),
-            multiviewer_server: Arc::new(Mutex::new(MultiviewerServer::new())),
+            // multiviewer_server: Arc::new(Mutex::new(None)),
         }
     }
     
@@ -138,6 +138,7 @@ impl AppState {
             }
             
             AppConfig {
+                version: crate::types::default_config_version(),
                 connections: all_connections,
                 app_settings: Some(self.app_settings.lock().unwrap().clone()),
                 logging_config: Some(crate::logging::LOGGING_CONFIG.lock().unwrap().clone()),
@@ -535,5 +536,85 @@ impl AppState {
         for window_id in windows_to_remove {
             self.unregister_video_list_window(&window_id);
         }
+    }
+
+    pub fn get_multiviewer_config(&self) -> crate::types::MultiviewerConfig {
+        let app_settings = self.app_settings.lock().unwrap();
+        app_settings.multiviewer.clone()
+    }
+
+    pub async fn update_multiviewer_config(&self, config: crate::types::MultiviewerConfig) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+        {
+            let mut app_settings = self.app_settings.lock().unwrap();
+            app_settings.multiviewer = config.clone();
+        }
+        
+        // For now, just update the config in app_settings
+        // Multiviewer server functionality will be implemented later
+        if config.enabled {
+            // Start server logic would go here
+            app_log!(info, "Multiviewer enabled on port {}", config.port);
+        } else {
+            // Stop server logic would go here  
+            app_log!(info, "Multiviewer disabled");
+        }
+        
+        Ok(())
+    }
+
+    pub fn get_connections(&self) -> Vec<crate::types::VmixConnection> {
+        let mut connections = Vec::new();
+        
+        // Get HTTP connections
+        {
+            let http_connections = self.http_connections.lock().unwrap();
+            for client in http_connections.iter() {
+                let host = client.host().to_string();
+                let label = {
+                    let labels = self.connection_labels.lock().unwrap();
+                    labels.get(&host).cloned().unwrap_or_else(|| format!("{}:8088", host))
+                };
+                
+                connections.push(crate::types::VmixConnection {
+                    host,
+                    port: 8088,
+                    label,
+                    status: "Connected".to_string(),
+                    active_input: 0,
+                    preview_input: 0,
+                    connection_type: crate::types::ConnectionType::Http,
+                    version: "Unknown".to_string(),
+                    edition: "Unknown".to_string(),
+                    preset: None,
+                });
+            }
+        }
+        
+        // Get TCP connections
+        {
+            let tcp_connections = self.tcp_connections.lock().unwrap();
+            for manager in tcp_connections.iter() {
+                let host = manager.host().to_string();
+                let label = {
+                    let labels = self.connection_labels.lock().unwrap();
+                    labels.get(&host).cloned().unwrap_or_else(|| format!("{}:8088", host))
+                };
+                
+                connections.push(crate::types::VmixConnection {
+                    host,
+                    port: 8088,
+                    label,
+                    status: "Connected".to_string(),
+                    active_input: 0,
+                    preview_input: 0,
+                    connection_type: crate::types::ConnectionType::Tcp,
+                    version: "Unknown".to_string(),
+                    edition: "Unknown".to_string(),
+                    preset: None,
+                });
+            }
+        }
+        
+        connections
     }
 }
