@@ -687,7 +687,14 @@ pub async fn save_settings(host: String, port: u16, state: State<'_, AppState>, 
 }
 
 #[tauri::command]
-pub async fn set_logging_config(config: LoggingConfig) -> Result<(), String> {
+pub async fn set_logging_config(level: String, save_to_file: bool) -> Result<(), String> {
+    let config = LoggingConfig {
+        enabled: true,
+        level,
+        save_to_file,
+        file_path: None,
+    };
+    
     let mut logging_config = LOGGING_CONFIG.lock().unwrap();
     *logging_config = config;
     app_log!(info, "Updated logging configuration");
