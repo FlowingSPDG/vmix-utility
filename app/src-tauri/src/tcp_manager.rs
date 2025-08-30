@@ -21,10 +21,6 @@ pub struct TcpVmixManager {
     shutdown_signal: Arc<std::sync::atomic::AtomicBool>,
 }
 
-// Ensure TcpVmixManager is Send and Sync
-unsafe impl Send for TcpVmixManager {}
-unsafe impl Sync for TcpVmixManager {}
-
 impl TcpVmixManager {
     pub async fn new(host: &str, port: u16) -> Result<Self> {
         use std::net::ToSocketAddrs;
@@ -92,7 +88,6 @@ impl TcpVmixManager {
                 let config = refresh_config.unwrap_or_else(|| crate::types::AutoRefreshConfig {
                     enabled: true,
                     duration: 3,
-                    duration_unit: crate::types::DurationUnit::Seconds,
                 });
                 
                 // Only send XML if auto-refresh is enabled and enough time has passed
@@ -128,7 +123,6 @@ impl TcpVmixManager {
         let inputs_cache = Arc::clone(&state.inputs_cache);
         let video_lists_cache = Arc::clone(&state.video_lists_cache);
         let last_status_cache = Arc::clone(&state.last_status_cache);
-        let multiviewer_server = Arc::clone(&state.multiviewer_server);
         
         tokio::spawn(async move {
             while !response_shutdown.load(std::sync::atomic::Ordering::Relaxed) {
@@ -231,6 +225,7 @@ impl TcpVmixManager {
                                         connection_type: ConnectionType::Tcp,
                                         version: vmix_xml.version,
                                         edition: vmix_xml.edition,
+                                        preset: vmix_xml.preset,
                                     };
                                     
                                     // Update the status cache
@@ -243,11 +238,6 @@ impl TcpVmixManager {
                                     // Send status update to frontend
                                     let _ = app_handle.emit("vmix-status-updated", &connection_status);
                                     app_log!(debug, "TCP: Sent initial vmix-status-updated event from XML response");
-                                    
-                                    // Notify multiviewer server of vMix status update (event-driven)
-                                    if let Some(multiviewer) = multiviewer_server.lock().unwrap().as_ref() {
-                                        multiviewer.on_vmix_status_update(&connection_status);
-                                    }
                                 }
                             }
                             RecvCommand::ACTS(acts_event) => {
@@ -310,6 +300,7 @@ impl TcpVmixManager {
                                                 connection_type: ConnectionType::Tcp,
                                                 version: status.version.clone(),
                                                 edition: status.edition.clone(),
+                                                preset: status.preset.clone(),
                                             };
                                             
                                             // Update cache
@@ -322,11 +313,6 @@ impl TcpVmixManager {
                                             let _ = app_handle.emit("vmix-status-updated", &updated_connection);
                                             app_log!(debug, "TCP: ACTS event triggered immediate status update - Active: {}, Preview: {}", 
                                                 updated_connection.active_input, updated_connection.preview_input);
-                                            
-                                            // Notify multiviewer server of vMix status update from ACTS (real-time)
-                                            if let Some(multiviewer) = multiviewer_server.lock().unwrap().as_ref() {
-                                                multiviewer.on_vmix_status_update(&updated_connection);
-                                            }
                                         }
                                     }
                                 }
@@ -378,6 +364,7 @@ impl TcpVmixManager {
                                         connection_type: ConnectionType::Tcp,
                                         version: cached.version.clone(),
                                         edition: cached.edition.clone(),
+                                        preset: cached.preset.clone(),
                                     }
                                 } else {
                                     VmixConnection {
@@ -390,6 +377,7 @@ impl TcpVmixManager {
                                         connection_type: ConnectionType::Tcp,
                                         version: "".to_string(),
                                         edition: "".to_string(),
+                                        preset: None,
                                     }
                                 }
                             };
@@ -397,11 +385,6 @@ impl TcpVmixManager {
                             // Emit disconnection event
                             let _ = app_handle.emit("vmix-status-updated", &disconnected_connection);
                             app_log!(info, "Emitted vmix-status-updated disconnection event for {}", response_host);
-                            
-                            // Notify multiviewer server of disconnection
-                            if let Some(multiviewer) = multiviewer_server.lock().unwrap().as_ref() {
-                                multiviewer.on_vmix_status_update(&disconnected_connection);
-                            }
                             
                             // Signal shutdown to stop XML sender task
                             response_shutdown.store(true, std::sync::atomic::Ordering::Relaxed);

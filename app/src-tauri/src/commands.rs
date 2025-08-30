@@ -50,22 +50,13 @@ pub fn build_video_lists_from_vmix(vmix_state: &vmix_rs::models::Vmix) -> Vec<Vm
                             }
                         }
                     };
-                    
-                    app_log!(debug, "VideoList item {}: text='{}', enabled_attr={:?} -> {}, selected_attr={:?}, input_selected_index={:?}, final_selected={}", 
-                        index, 
-                        item.text.as_deref().unwrap_or(""), 
-                        item.enabled.as_deref(), enabled,
-                        item.selected.as_deref(),
-                        input_selected_index,
-                        selected
-                    );
-                    
+
                     VmixVideoListItem {
-                        key: format!("{}_{}", input.key, index),
-                        number: 0, // VideoList items don't have input numbers
-                        title: item.text.clone().unwrap_or_default(),
+                        key: item.source.clone().unwrap_or_else(|| format!("item_{}", index)),
+                        number: index as i32 + 1, // 1-based indexing for display
+                        title: item.title.clone().unwrap_or_else(|| format!("Item {}", index + 1)),
                         input_type: "VideoListItem".to_string(),
-                        state: "Available".to_string(),
+                        state: "Running".to_string(), // Default state for video list items
                         selected,
                         enabled,
                     }
@@ -73,406 +64,134 @@ pub fn build_video_lists_from_vmix(vmix_state: &vmix_rs::models::Vmix) -> Vec<Vm
             } else {
                 Vec::new()
             };
-            
-            // Find the final selected index (0-based) for the VmixVideoListInput
-            let selected_index = items.iter()
-                .position(|item| item.selected)
-                .map(|pos| pos as i32);
-            
+
             VmixVideoListInput {
                 key: input.key.clone(),
-                number: input.number.parse().unwrap_or(0),
-                title: input.title.clone(),
-                input_type: input.input_type.clone(),
-                state: "Running".to_string(), // Default state for VideoList
+                number: input.number as i32,
+                title: input.title.clone().unwrap_or_else(|| format!("VideoList {}", input.number)),
+                input_type: "VideoList".to_string(),
+                state: input.state.clone().unwrap_or_else(|| "Running".to_string()),
                 items,
-                selected_index,
+                selected_index: input_selected_index,
             }
         })
         .collect()
 }
 
-// Additional Tauri command for sending vMix functions
 #[tauri::command]
-pub async fn send_vmix_function(
-    state: State<'_, AppState>, 
-    host: String, 
-    port: Option<u16>, 
-    function_name: String, 
-    params: Option<HashMap<String, String>>
-) -> Result<String, String> {
-    let params_map = params.unwrap_or_default();
-    
-    app_log!(info, "Sending vMix function command: {} to host: {}", function_name, host);
-    
-    // First check if connection exists (HTTP or TCP)
-    let http_connection = {
-        let http_connections = state.http_connections.lock().unwrap();
-        http_connections.iter().find(|c| c.host() == host).cloned()
-    };
-    
-    let tcp_connection = {
-        let tcp_connections = state.tcp_connections.lock().unwrap();
-        tcp_connections.iter().find(|c| c.host() == host).cloned()
-    };
-    
-    if let Some(vmix) = http_connection {
-        // Use existing HTTP connection
-        match vmix.send_function(&function_name, &params_map).await {
-            Ok(_) => {
-                app_log!(info, "vMix function command sent successfully via HTTP: {}", function_name);
-                Ok("Function sent successfully".to_string())
-            }
-            Err(e) => {
-                app_log!(error, "Failed to send vMix function command via HTTP: {} - {}", function_name, e);
-                Err(e.to_string())
-            }
-        }
-    } else if let Some(tcp) = tcp_connection {
-        // Use existing TCP connection
-        match tcp.send_function(&function_name, &params_map).await {
-            Ok(_) => {
-                app_log!(info, "vMix function command sent successfully via TCP: {}", function_name);
-                Ok("Function sent successfully".to_string())
-            }
-            Err(e) => {
-                app_log!(error, "Failed to send vMix function command via TCP: {} - {}", function_name, e);
-                Err(e.to_string())
-            }
-        }
-    } else {
-        // No existing connection, create new HTTP connection (default)
-        let port = port.unwrap_or(8088);
-        let new_vmix = VmixClientWrapper::new(&host, port);
-        match new_vmix.send_function(&function_name, &params_map).await {
-            Ok(_) => {
-                app_log!(info, "vMix function command sent successfully to new HTTP connection: {}", function_name);
-                Ok("Function sent successfully".to_string())
-            }
-            Err(e) => {
-                app_log!(error, "Failed to send vMix function command to new HTTP connection: {} - {}", function_name, e);
-                Err(e.to_string())
-            }
-        }
-    }
-}
-
-// Command to get vMix inputs
-#[tauri::command]
-pub async fn get_vmix_inputs(
-    state: State<'_, AppState>, 
-    host: String, 
-    port: Option<u16>
-) -> Result<Vec<VmixInput>, String> {
-    // Find existing HTTP connection
-    let http_vmix = {
-        let http_connections = state.http_connections.lock().unwrap();
-        http_connections.iter().find(|c| c.host() == host).cloned()
-    };
-    
-    // For TCP connections, use cached data
-    let tcp_exists = {
-        let tcp_connections = state.tcp_connections.lock().unwrap();
-        tcp_connections.iter().any(|c| c.host() == host)
-    };
-    
-    if tcp_exists {
-        // TCP接続の場合はキャッシュから取得
-        let cached_inputs = {
-            let inputs_cache = state.inputs_cache.lock().unwrap();
-            inputs_cache.get(&host).cloned().unwrap_or_default()
-        };
-        return Ok(cached_inputs);
-    }
-    
-    let vmix_data = match http_vmix {
-        Some(vmix) => vmix.get_vmix_data().await.map_err(|e| e.to_string())?,
-        None => {
-            // Try to establish new HTTP connection
-            let port = port.unwrap_or(8088);
-            let vmix = VmixClientWrapper::new(&host, port);
-            vmix.get_vmix_data().await.map_err(|e| e.to_string())?
-        }
-    };
-    
-    let inputs: Vec<VmixInput> = vmix_data.inputs.input.iter().map(|input| {
-        VmixInput {
-            key: input.key.clone(),
-            number: input.number.parse().unwrap_or(0),
-            title: input.title.clone(),
-            short_title: input.short_title.clone(),
-            input_type: input.input_type.clone().unwrap_or_else(|| "Unknown".to_string()),
-            state: input.state.clone().unwrap_or_else(|| "Unknown".to_string()),
-        }
-    }).collect();
-    
-    Ok(inputs)
-}
-
-// Command to get vMix VideoList inputs
-#[tauri::command]
-pub async fn get_vmix_video_lists(
-    state: State<'_, AppState>, 
-    app_handle: AppHandle,
-    host: String, 
-    port: Option<u16>
-) -> Result<Vec<VmixVideoListInput>, String> {
-    // Find existing HTTP connection
-    let http_vmix = {
-        let http_connections = state.http_connections.lock().unwrap();
-        http_connections.iter().find(|c| c.host() == host).cloned()
-    };
-    
-    // For TCP connections, use cached data
-    let tcp_exists = {
-        let tcp_connections = state.tcp_connections.lock().unwrap();
-        tcp_connections.iter().any(|c| c.host() == host)
-    };
-    
-    if tcp_exists {
-        // TCP接続の場合はキャッシュから取得（今後実装）
-        app_log!(debug, "TCP connection detected for {}, returning empty VideoList for now", host);
-        return Ok(Vec::new());
-    }
-    
-    // Get raw vmix-rs state and use shared builder function
-    let vmix_state = match http_vmix {
-        Some(vmix) => {
-            vmix.get_raw_vmix_state().await.map_err(|e| e.to_string())?
-        },
-        None => {
-            // Try to establish new HTTP connection
-            let port = port.unwrap_or(8088);
-            let vmix = VmixClientWrapper::new(&host, port);
-            vmix.get_raw_vmix_state().await.map_err(|e| e.to_string())?
-        }
-    };
-
-    // Use shared builder function
-    let video_lists = build_video_lists_from_vmix(&vmix_state);
-    
-    app_log!(debug, "Retrieved {} VideoLists for host: {}", video_lists.len(), host);
-    
-    // Check if VideoLists data has changed using cache comparison
-    let video_lists_changed = {
-        let mut cache_guard = state.video_lists_cache.lock().unwrap();
-        let has_changed = cache_guard.get(&host)
-            .map(|cached_video_lists| {
-                let changed = cached_video_lists != &video_lists;
-                app_log!(debug, "VideoLists comparison for {}: cached={}, new={}, changed={}", 
-                    host, cached_video_lists.len(), video_lists.len(), changed);
-                changed
-            })
-            .unwrap_or_else(|| {
-                app_log!(debug, "No cached VideoLists for {}, treating as changed", host);
-                true
-            }); // If no cache exists, consider it as changed
-        
-        // Update cache with new data
-        cache_guard.insert(host.clone(), video_lists.clone());
-        app_log!(debug, "Updated VideoLists cache for {} with {} items", host, video_lists.len());
-        has_changed
-    };
-    
-    // Only emit update event if VideoLists have actually changed
-    if video_lists_changed {
-        let event_payload = serde_json::json!({
-            "host": host,
-            "videoLists": video_lists
-        });
-        
-        match app_handle.emit("vmix-videolists-updated", &event_payload) {
-            Ok(_) => app_log!(info, "Successfully emitted vmix-videolists-updated event for host: {} with {} lists", 
-                host, video_lists.len()),
-            Err(e) => app_log!(error, "Failed to emit vmix-videolists-updated event for host: {} - {}", host, e),
-        }
-    } else {
-        app_log!(debug, "VideoLists unchanged for host: {} ({} lists), skipping event emission", 
-            host, video_lists.len());
-    }
-    
-    Ok(video_lists)
-}
-
-// Command to select VideoList item
-#[tauri::command]
-pub async fn select_video_list_item(
-    state: State<'_, AppState>,
-    host: String,
-    input_number: i32,
-    item_index: i32
-) -> Result<(), String> {
-    let params = vec![
-        ("Input".to_string(), input_number.to_string()),
-        ("Value".to_string(), (item_index + 1).to_string()), // Convert to 1-based index for vMix
-    ].into_iter().collect();
-    
-    // Use the SelectIndex function to select item
-    send_vmix_function(state, host, None, "SelectIndex".to_string(), Some(params)).await.map(|_| ())
-}
-
-
-#[tauri::command]
-pub async fn connect_vmix(
-    state: State<'_, AppState>, 
-    app_handle: AppHandle, 
-    host: String, 
-    port: Option<u16>, 
-    connection_type: ConnectionType
-) -> Result<VmixConnection, String> {
-    let port = port.unwrap_or(8088);
-    app_log!(info, "Attempting to connect to vMix at {}:{} via {:?}", host, port, connection_type);
-    
+pub async fn connect_vmix(host: String, port: u16, connection_type: ConnectionType, state: State<'_, AppState>) -> Result<(), String> {
     match connection_type {
         ConnectionType::Http => {
-            let vmix = VmixClientWrapper::new(&host, port);
-            let _status = vmix.get_status().await.map_err(|e| {
-                app_log!(error, "Failed to establish HTTP connection to {}: {}", host, e);
-                e.to_string()
-            })?;
+            let vmix_client = VmixClientWrapper::new(&host, port);
             
-            let status = vmix.get_status().await.unwrap_or(false);
-            
-            if status {
-                app_log!(info, "Successfully connected to vMix at {} via HTTP", host);
-            } else {
-                app_log!(warn, "Failed to connect to vMix at {} via HTTP", host);
-            }
-            
-            // Check if this host is already connected (HTTP)
-            {
-                let mut http_connections = state.http_connections.lock().unwrap();
-                
-                if let Some(existing_index) = http_connections.iter().position(|c| c.host() == host) {
-                    // Replace existing connection (for reconnection)
-                    http_connections[existing_index] = vmix;
-                    app_log!(debug, "Replaced existing HTTP connection for {}", host);
-                } else {
-                    // Add new connection
-                    http_connections.push(vmix);
-                    app_log!(debug, "Added new HTTP connection for {}", host);
-                }
+            match vmix_client.get_status().await {
+                Ok(is_connected) => {
+                    if is_connected {
+                        // Add to HTTP connections
+                        {
+                            let mut connections = state.http_connections.lock().unwrap();
+                            // Remove any existing connection to the same host
+                            connections.retain(|c| c.host() != host);
+                            connections.push(vmix_client);
+                        }
+                        
+                        // Initialize auto-refresh config for this host
+                        {
+                            let mut auto_configs = state.auto_refresh_configs.lock().unwrap();
+                            if !auto_configs.contains_key(&host) {
+                                auto_configs.insert(host.clone(), AutoRefreshConfig::default());
+                            }
+                        }
+                        
+                        // Set default label for this connection
+                        {
+                            let mut labels = state.connection_labels.lock().unwrap();
+                            if !labels.contains_key(&host) {
+                                labels.insert(host.clone(), format!("{} (HTTP)", host));
+                            }
+                        }
+                        
+                        app_log!(info, "Successfully connected to vMix at {}:{} via HTTP", host, port);
+                        Ok(())
+                    } else {
+                        Err(format!("Failed to establish HTTP connection to vMix at {}:{}", host, port))
+                    }
+                },
+                Err(e) => Err(format!("Failed to connect to vMix via HTTP: {}", e))
             }
         },
         ConnectionType::Tcp => {
-            let tcp_manager = TcpVmixManager::new(&host, port).await.map_err(|e| {
-                app_log!(error, "Failed to establish TCP connection to {}: {}", host, e);
-                e.to_string()
-            })?;
-            
-            if tcp_manager.is_connected() {
-                app_log!(info, "Successfully connected to vMix at {} via TCP", host);
-            } else {
-                app_log!(warn, "Failed to connect to vMix at {} via TCP", host);
-                return Err("TCP connection failed".to_string());
-            }
-            
-            // Start monitoring task
-            tcp_manager.start_monitoring(app_handle.clone(), state.clone());
-            
-            // Check if this host is already connected (TCP)
-            {
-                let mut tcp_connections = state.tcp_connections.lock().unwrap();
-                
-                if let Some(existing_index) = tcp_connections.iter().position(|c| c.host() == host) {
-                    // Shutdown existing connection and replace
-                    tcp_connections[existing_index].shutdown();
-                    tcp_connections[existing_index] = tcp_manager;
-                    app_log!(debug, "Replaced existing TCP connection for {}", host);
-                } else {
-                    // Add new connection
-                    tcp_connections.push(tcp_manager);
-                    app_log!(debug, "Added new TCP connection for {}", host);
-                }
+            match TcpVmixManager::new(&host, port).await {
+                Ok(tcp_manager) => {
+                    // Start monitoring task
+                    tcp_manager.start_monitoring(state.inner().app_handle.clone(), state);
+                    
+                    // Add to TCP connections
+                    {
+                        let mut connections = state.tcp_connections.lock().unwrap();
+                        // Remove any existing connection to the same host
+                        connections.retain(|c| c.host() != host);
+                        connections.push(tcp_manager);
+                    }
+                    
+                    // Initialize auto-refresh config for this host
+                    {
+                        let mut auto_configs = state.auto_refresh_configs.lock().unwrap();
+                        if !auto_configs.contains_key(&host) {
+                            auto_configs.insert(host.clone(), AutoRefreshConfig::default());
+                        }
+                    }
+                    
+                    // Set default label for this connection
+                    {
+                        let mut labels = state.connection_labels.lock().unwrap();
+                        if !labels.contains_key(&host) {
+                            labels.insert(host.clone(), format!("{} (TCP)", host));
+                        }
+                    }
+                    
+                    app_log!(info, "Successfully connected to vMix at {}:{} via TCP", host, port);
+                    Ok(())
+                },
+                Err(e) => Err(format!("Failed to connect to vMix via TCP: {}", e))
             }
         }
     }
-    
-    // Get connection info based on type
-    let (active_input, preview_input, status, version, edition) = match connection_type {
-        ConnectionType::Http => {
-            let info_vmix = VmixClientWrapper::new(&host, port);
-            let active = info_vmix.get_active_input().await.unwrap_or(0);
-            let preview = info_vmix.get_preview_input().await.unwrap_or(0);
-            let status = info_vmix.get_status().await.unwrap_or(false);
-            
-            // Get vMix data to extract version and edition information
-            let (version, edition) = match info_vmix.get_vmix_data().await {
-                Ok(vmix_data) => (vmix_data.version, vmix_data.edition),
-                Err(_) => ("Unknown".to_string(), "Unknown".to_string())
-            };
-            
-            (active, preview, status, version, edition)
-        },
-        ConnectionType::Tcp => {
-            // TCPの場合はバックグラウンドタスクで状態更新されるので初期値を返す
-            // version/editionはXMLレスポンスから後で更新される
-            (1, 1, true, "Unknown".to_string(), "Unknown".to_string())
-        }
-    };
-    
-    // Initialize or update auto-refresh config
-    {
-        let mut configs = state.auto_refresh_configs.lock().unwrap();
-        if !configs.contains_key(&host) {
-            configs.insert(host.clone(), AutoRefreshConfig::default());
-        }
-    }
-    
-    let label = {
-        let labels = state.connection_labels.lock().unwrap();
-        let default_label = match connection_type {
-            ConnectionType::Http => format!("{} (HTTP)", host),
-            ConnectionType::Tcp => format!("{} (TCP)", host),
-        };
-        labels.get(&host).cloned().unwrap_or(default_label)
-    };
-    
-    // Save configuration after connection change
-    let _ = state.save_config(&app_handle).await;
-    
-    Ok(VmixConnection {
-        host: host.clone(),
-        port,
-        label,
-        status: if status { "Connected".to_string() } else { "Disconnected".to_string() },
-        active_input,
-        preview_input,
-        connection_type: connection_type,
-        version,
-        edition,
-    })
 }
 
 #[tauri::command]
-pub async fn disconnect_vmix(
-    state: State<'_, AppState>, 
-    app_handle: AppHandle, 
-    host: String
-) -> Result<(), String> {
-    app_log!(info, "Disconnecting from vMix host: {}", host);
+pub async fn disconnect_vmix(host: String, state: State<'_, AppState>) -> Result<(), String> {
+    app_log!(info, "Disconnecting vMix at {}", host);
     
-    
-    // Disconnect from HTTP connections
+    // Remove from HTTP connections
     {
-        let mut http_connections = state.http_connections.lock().unwrap();
-        http_connections.retain(|c| c.host() != host);
-    }
-    
-    // Disconnect from TCP connections
-    {
-        let mut tcp_connections = state.tcp_connections.lock().unwrap();
-        if let Some(pos) = tcp_connections.iter().position(|c| c.host() == host) {
-            tcp_connections[pos].shutdown();
-            tcp_connections.remove(pos);
+        let mut connections = state.http_connections.lock().unwrap();
+        let before_count = connections.len();
+        connections.retain(|c| c.host() != host);
+        let after_count = connections.len();
+        if before_count != after_count {
+            app_log!(info, "Removed HTTP connection for {}", host);
         }
     }
     
-    // Clean up state
+    // Remove from TCP connections and shutdown
     {
-        let mut configs = state.auto_refresh_configs.lock().unwrap();
-        configs.remove(&host);
+        let mut connections = state.tcp_connections.lock().unwrap();
+        let mut to_remove = Vec::new();
+        for (index, conn) in connections.iter().enumerate() {
+            if conn.host() == host {
+                conn.shutdown();
+                to_remove.push(index);
+                app_log!(info, "Shutdown TCP connection for {}", host);
+            }
+        }
+        // Remove in reverse order to maintain indices
+        for index in to_remove.iter().rev() {
+            connections.remove(*index);
+        }
     }
+    
+    // Clean up cache data
     {
         let mut cache = state.last_status_cache.lock().unwrap();
         cache.remove(&host);
@@ -481,118 +200,157 @@ pub async fn disconnect_vmix(
         let mut inputs_cache = state.inputs_cache.lock().unwrap();
         inputs_cache.remove(&host);
     }
+    {
+        let mut video_lists_cache = state.video_lists_cache.lock().unwrap();
+        video_lists_cache.remove(&host);
+    }
     
-    // Emit connection removal event to frontend
-    let _ = app_handle.emit("vmix-connection-removed", serde_json::json!({"host": host}));
-    app_log!(info, "Emitted vmix-connection-removed event for host: {}", host);
-    
-    // Save configuration after disconnection
-    let _ = state.save_config(&app_handle).await;
-    
+    app_log!(info, "Successfully disconnected from vMix at {}", host);
     Ok(())
 }
 
 #[tauri::command]
-pub async fn get_vmix_status(
-    state: State<'_, AppState>, 
-    host: String, 
-    port: Option<u16>
-) -> Result<VmixConnection, String> {
-    let port = port.unwrap_or(8088);
-    
-    // Try to find in HTTP connections first
-    let http_result = {
-        let http_connections = state.http_connections.lock().unwrap();
-        http_connections.iter().find(|c| c.host() == host).cloned()
-    };
-    
-    // Try to find in TCP connections
-    let tcp_result = {
-        let tcp_connections = state.tcp_connections.lock().unwrap();
-        tcp_connections.iter().find(|c| c.host() == host).map(|c| (c.is_connected(), ConnectionType::Tcp))
-    };
-    
-    let (status, active_input, preview_input, conn_type, version, edition) = if let Some(vmix) = http_result {
-        let status = vmix.get_status().await.map_err(|e| e.to_string())?;
-        let active_input = vmix.get_active_input().await.unwrap_or(0);
-        let preview_input = vmix.get_preview_input().await.unwrap_or(0);
+pub async fn get_vmix_status(host: String, state: State<'_, AppState>) -> Result<Option<VmixConnection>, String> {
+    // Try HTTP connection first
+    let http_connections = state.http_connections.lock().unwrap();
+    if let Some(vmix) = http_connections.iter().find(|c| c.host() == host) {
+        drop(http_connections); // Release lock early
         
-        // Get version and edition information
-        let (version, edition) = match vmix.get_vmix_data().await {
-            Ok(vmix_data) => (vmix_data.version, vmix_data.edition),
-            Err(_) => ("Unknown".to_string(), "Unknown".to_string())
-        };
-        
-        (status, active_input, preview_input, ConnectionType::Http, version, edition)
-    } else if let Some((tcp_status, conn_type)) = tcp_result {
-        // TCPの場合はキャッシュから取得
-        let cached_connection = {
-            let cache = state.last_status_cache.lock().unwrap();
-            cache.get(&host).cloned()
-        };
-        
-        if let Some(cached) = cached_connection {
-            (tcp_status, cached.active_input, cached.preview_input, conn_type, cached.version, cached.edition)
-        } else {
-            (tcp_status, 1, 1, conn_type, "Unknown".to_string(), "Unknown".to_string())
+        match vmix.get_status().await {
+            Ok(status) => {
+                if status {
+                    let active_input = vmix.get_active_input().await.unwrap_or(1);
+                    let preview_input = vmix.get_preview_input().await.unwrap_or(1);
+                    
+                    let label = {
+                        let labels = state.connection_labels.lock().unwrap();
+                        labels.get(&host).cloned().unwrap_or_else(|| format!("{} (HTTP)", host))
+                    };
+                    
+                    // Get version/edition from vMix data
+                    let (version, edition, preset) = match vmix.get_vmix_data().await {
+                        Ok(data) => (data.version, data.edition, data.preset),
+                        Err(_) => ("Unknown".to_string(), "Unknown".to_string(), None)
+                    };
+                    
+                    let connection = VmixConnection {
+                        host: host.clone(),
+                        port: vmix.port(),
+                        label,
+                        status: "Connected".to_string(),
+                        active_input,
+                        preview_input,
+                        connection_type: ConnectionType::Http,
+                        version,
+                        edition,
+                        preset,
+                    };
+                    
+                    return Ok(Some(connection));
+                } else {
+                    let label = {
+                        let labels = state.connection_labels.lock().unwrap();
+                        labels.get(&host).cloned().unwrap_or_else(|| format!("{} (HTTP)", host))
+                    };
+                    
+                    let connection = VmixConnection {
+                        host: host.clone(),
+                        port: vmix.port(),
+                        label,
+                        status: "Disconnected".to_string(),
+                        active_input: 1,
+                        preview_input: 1,
+                        connection_type: ConnectionType::Http,
+                        version: "Unknown".to_string(),
+                        edition: "Unknown".to_string(),
+                        preset: None,
+                    };
+                    
+                    return Ok(Some(connection));
+                }
+            }
+            Err(_) => {
+                let label = {
+                    let labels = state.connection_labels.lock().unwrap();
+                    labels.get(&host).cloned().unwrap_or_else(|| format!("{} (HTTP)", host))
+                };
+                
+                let connection = VmixConnection {
+                    host: host.clone(),
+                    port: vmix.port(),
+                    label,
+                    status: "Disconnected".to_string(),
+                    active_input: 1,
+                    preview_input: 1,
+                    connection_type: ConnectionType::Http,
+                    version: "Unknown".to_string(),
+                    edition: "Unknown".to_string(),
+                    preset: None,
+                };
+                
+                return Ok(Some(connection));
+            }
         }
-    } else {
-        // 既存接続がない場合は新しいHTTP接続でテスト
-        let vmix = VmixClientWrapper::new(&host, port);
-        let status = vmix.get_status().await.map_err(|e| e.to_string())?;
-        let active_input = vmix.get_active_input().await.unwrap_or(0);
-        let preview_input = vmix.get_preview_input().await.unwrap_or(0);
+    }
+    
+    // Try TCP connection
+    let tcp_connections = state.tcp_connections.lock().unwrap();
+    if let Some(tcp_manager) = tcp_connections.iter().find(|c| c.host() == host) {
+        if tcp_manager.is_connected() {
+            // Get cached status from state for TCP connections
+            let cache = state.last_status_cache.lock().unwrap();
+            if let Some(cached_connection) = cache.get(&host) {
+                return Ok(Some(cached_connection.clone()));
+            }
+        }
         
-        // Get version and edition information
-        let (version, edition) = match vmix.get_vmix_data().await {
-            Ok(vmix_data) => (vmix_data.version, vmix_data.edition),
-            Err(_) => ("Unknown".to_string(), "Unknown".to_string())
+        let label = {
+            let labels = state.connection_labels.lock().unwrap();
+            labels.get(&host).cloned().unwrap_or_else(|| format!("{} (TCP)", host))
         };
         
-        (status, active_input, preview_input, ConnectionType::Http, version, edition)
-    };
+        let connection = VmixConnection {
+            host: host.clone(),
+            port: tcp_manager.port(),
+            label,
+            status: if tcp_manager.is_connected() { "Connected" } else { "Disconnected" }.to_string(),
+            active_input: 1,
+            preview_input: 1,
+            connection_type: ConnectionType::Tcp,
+            version: "Unknown".to_string(),
+            edition: "Unknown".to_string(),
+            preset: None,
+        };
+        
+        return Ok(Some(connection));
+    }
     
-    let label = {
-        let labels = state.connection_labels.lock().unwrap();
-        labels.get(&host).cloned().unwrap_or_else(|| host.clone())
-    };
-    
-    Ok(VmixConnection {
-        host: host.clone(),
-        port,
-        label,
-        status: if status { "Connected".to_string() } else { "Disconnected".to_string() },
-        active_input,
-        preview_input,
-        connection_type: conn_type,
-        version,
-        edition,
-    })
+    Ok(None)
 }
 
 #[tauri::command]
 pub async fn get_vmix_statuses(state: State<'_, AppState>) -> Result<Vec<VmixConnection>, String> {
-    let http_connections = {
-        let guard = state.http_connections.lock().unwrap();
-        guard.clone()
-    };
-    let tcp_connections = {
-        let guard = state.tcp_connections.lock().unwrap();
-        guard.iter().map(|c| (c.host().to_string(), c.port(), c.is_connected())).collect::<Vec<_>>()
-    };
     let mut statuses = Vec::new();
 
     // Process HTTP connections
+    let http_connections = state.http_connections.lock().unwrap().clone();
     for vmix in http_connections.iter() {
-        let status = vmix.get_status().await.unwrap_or(false);
-        let active_input = vmix.get_active_input().await.unwrap_or(0);
-        let preview_input = vmix.get_preview_input().await.unwrap_or(0);
         let host = vmix.host().to_string();
         
-        // Get version and edition information
-        let (version, edition) = match vmix.get_vmix_data().await {
-            Ok(vmix_data) => (vmix_data.version, vmix_data.edition),
-            Err(_) => ("Unknown".to_string(), "Unknown".to_string())
+        let (status, active_input, preview_input, version, edition, preset) = match vmix.get_status().await {
+            Ok(true) => {
+                let active = vmix.get_active_input().await.unwrap_or(1);
+                let preview = vmix.get_preview_input().await.unwrap_or(1);
+                
+                // Get version/edition from vMix data
+                let (ver, ed, pst) = match vmix.get_vmix_data().await {
+                    Ok(data) => (data.version, data.edition, data.preset),
+                    Err(_) => ("Unknown".to_string(), "Unknown".to_string(), None)
+                };
+                
+                (true, active, preview, ver, ed, pst)
+            },
+            _ => (false, 1, 1, "Unknown".to_string(), "Unknown".to_string(), None)
         };
         
         let label = {
@@ -610,36 +368,42 @@ pub async fn get_vmix_statuses(state: State<'_, AppState>) -> Result<Vec<VmixCon
             connection_type: ConnectionType::Http,
             version,
             edition,
+            preset,
         });
     }
     
     // Process TCP connections
-    for (host, port, tcp_status) in tcp_connections {
+    let tcp_connections = state.tcp_connections.lock().unwrap();
+    for tcp_manager in tcp_connections.iter() {
+        let host = tcp_manager.host().to_string();
+        let is_connected = tcp_manager.is_connected();
+        
         let label = {
             let labels = state.connection_labels.lock().unwrap();
             labels.get(&host).cloned().unwrap_or_else(|| format!("{} (TCP)", host))
         };
         
-        // TCPの詳細情報はキャッシュから取得
-        let (active_input, preview_input, version, edition) = {
+        // Get detailed info from cache if available
+        let (active_input, preview_input, version, edition, preset) = {
             let cache = state.last_status_cache.lock().unwrap();
             if let Some(cached) = cache.get(&host) {
-                (cached.active_input, cached.preview_input, cached.version.clone(), cached.edition.clone())
+                (cached.active_input, cached.preview_input, cached.version.clone(), cached.edition.clone(), cached.preset.clone())
             } else {
-                (1, 1, "Unknown".to_string(), "Unknown".to_string())
+                (1, 1, "Unknown".to_string(), "Unknown".to_string(), None)
             }
         };
         
         statuses.push(VmixConnection {
             host,
-            port,
+            port: tcp_manager.port(),
             label,
-            status: if tcp_status { "Connected".to_string() } else { "Disconnected".to_string() },
+            status: if is_connected { "Connected".to_string() } else { "Disconnected".to_string() },
             active_input,
             preview_input,
             connection_type: ConnectionType::Tcp,
             version,
             edition,
+            preset,
         });
     }
 
@@ -647,579 +411,388 @@ pub async fn get_vmix_statuses(state: State<'_, AppState>) -> Result<Vec<VmixCon
 }
 
 #[tauri::command]
-pub async fn set_auto_refresh_config(
-    state: State<'_, AppState>, 
-    host: String, 
-    config: AutoRefreshConfig
-) -> Result<(), String> {
-    state.auto_refresh_configs.lock().unwrap()
-        .insert(host, config);
+pub async fn send_vmix_function(host: String, function: String, params: HashMap<String, String>, state: State<'_, AppState>) -> Result<(), String> {
+    // Try HTTP connection first
+    let http_connections = state.http_connections.lock().unwrap();
+    if let Some(vmix) = http_connections.iter().find(|c| c.host() == host) {
+        drop(http_connections); // Release lock
+        return vmix.send_function(&function, &params).await
+            .map_err(|e| format!("HTTP function failed: {}", e));
+    }
+    
+    // Try TCP connection
+    let tcp_connections = state.tcp_connections.lock().unwrap();
+    if let Some(tcp_manager) = tcp_connections.iter().find(|c| c.host() == host) {
+        if tcp_manager.is_connected() {
+            return tcp_manager.send_function(&function, &params).await
+                .map_err(|e| format!("TCP function failed: {}", e));
+        } else {
+            return Err("TCP connection is not active".to_string());
+        }
+    }
+    
+    Err(format!("No connection found for host: {}", host))
+}
+
+#[tauri::command]
+pub async fn get_vmix_inputs(host: String, state: State<'_, AppState>) -> Result<Vec<VmixInput>, String> {
+    // Try to get from cache first
+    {
+        let cache = state.inputs_cache.lock().unwrap();
+        if let Some(cached_inputs) = cache.get(&host) {
+            app_log!(debug, "Retrieved {} inputs from cache for host: {}", cached_inputs.len(), host);
+            return Ok(cached_inputs.clone());
+        }
+    }
+    
+    // If not in cache, try HTTP connection
+    let http_connections = state.http_connections.lock().unwrap();
+    if let Some(vmix) = http_connections.iter().find(|c| c.host() == host) {
+        drop(http_connections); // Release lock
+        
+        match vmix.get_vmix_data().await {
+            Ok(vmix_data) => {
+                let inputs: Vec<VmixInput> = vmix_data.inputs.input.into_iter().map(|input| VmixInput {
+                    key: input.key,
+                    number: input.number.parse().unwrap_or(0),
+                    title: input.title,
+                    short_title: input.short_title,
+                    input_type: input.input_type.unwrap_or_default(),
+                    state: input.state.unwrap_or_default(),
+                }).collect();
+                
+                // Cache the result
+                {
+                    let mut cache = state.inputs_cache.lock().unwrap();
+                    cache.insert(host.clone(), inputs.clone());
+                }
+                
+                app_log!(debug, "Retrieved {} inputs via HTTP for host: {}", inputs.len(), host);
+                return Ok(inputs);
+            },
+            Err(e) => return Err(format!("Failed to get vMix inputs via HTTP: {}", e))
+        }
+    }
+    
+    // TCP connections use cached data only (populated by monitoring task)
+    let tcp_connections = state.tcp_connections.lock().unwrap();
+    if tcp_connections.iter().any(|c| c.host() == host) {
+        // For TCP, return empty if not cached - the monitoring task will populate it
+        app_log!(debug, "TCP connection found but no cached inputs for host: {}", host);
+        return Ok(Vec::new());
+    }
+    
+    Err(format!("No connection found for host: {}", host))
+}
+
+#[tauri::command]
+pub async fn get_vmix_video_lists(host: String, state: State<'_, AppState>) -> Result<Vec<VmixVideoListInput>, String> {
+    // Try to get from cache first
+    {
+        let cache = state.video_lists_cache.lock().unwrap();
+        if let Some(cached_video_lists) = cache.get(&host) {
+            app_log!(debug, "Retrieved {} VideoLists from cache for host: {}", cached_video_lists.len(), host);
+            return Ok(cached_video_lists.clone());
+        }
+    }
+    
+    // If not in cache, try HTTP connection
+    let http_connections = state.http_connections.lock().unwrap();
+    if let Some(vmix) = http_connections.iter().find(|c| c.host() == host) {
+        drop(http_connections); // Release lock
+        
+        match vmix.get_raw_vmix_state().await {
+            Ok(vmix_state) => {
+                // Use shared builder function for consistent VideoList parsing
+                let video_lists = build_video_lists_from_vmix(&vmix_state);
+                
+                // Cache the result
+                {
+                    let mut cache = state.video_lists_cache.lock().unwrap();
+                    cache.insert(host.clone(), video_lists.clone());
+                }
+                
+                app_log!(debug, "Retrieved {} VideoLists via HTTP for host: {}", video_lists.len(), host);
+                return Ok(video_lists);
+            },
+            Err(e) => return Err(format!("Failed to get vMix VideoLists via HTTP: {}", e))
+        }
+    }
+    
+    // TCP connections use cached data only (populated by monitoring task)
+    let tcp_connections = state.tcp_connections.lock().unwrap();
+    if tcp_connections.iter().any(|c| c.host() == host) {
+        // For TCP, return empty if not cached - the monitoring task will populate it
+        app_log!(debug, "TCP connection found but no cached VideoLists for host: {}", host);
+        return Ok(Vec::new());
+    }
+    
+    Err(format!("No connection found for host: {}", host))
+}
+
+#[tauri::command]
+pub async fn select_video_list_item(host: String, input_number: i32, item_index: i32, state: State<'_, AppState>) -> Result<(), String> {
+    let mut params = HashMap::new();
+    params.insert("Input".to_string(), input_number.to_string());
+    params.insert("SelectedIndex".to_string(), item_index.to_string());
+    
+    send_vmix_function(host, "SelectIndex".to_string(), params, state).await
+}
+
+#[tauri::command]
+pub async fn open_list_manager_window(app_handle: AppHandle) -> Result<(), String> {
+    let window_id = "list-manager";
+    
+    // Check if window already exists
+    if app_handle.get_webview_window(window_id).is_some() {
+        // Focus the existing window
+        if let Some(window) = app_handle.get_webview_window(window_id) {
+            let _ = window.set_focus();
+            app_log!(info, "Focused existing List Manager window");
+        }
+        return Ok(());
+    }
+    
+    // Create new window
+    let window = WebviewWindowBuilder::new(&app_handle, window_id, WebviewUrl::App("/#/list-manager".parse().unwrap()))
+        .title("vMix List Manager")
+        .inner_size(1000.0, 700.0)
+        .min_inner_size(800.0, 600.0)
+        .resizable(true)
+        .center()
+        .build()
+        .map_err(|e| format!("Failed to create List Manager window: {}", e))?;
+    
+    // Show the window
+    window.show().map_err(|e| format!("Failed to show List Manager window: {}", e))?;
+    
+    app_log!(info, "Opened List Manager window");
     Ok(())
 }
 
 #[tauri::command]
-pub async fn get_auto_refresh_config(
-    state: State<'_, AppState>, 
-    host: String
-) -> Result<AutoRefreshConfig, String> {
-    Ok(state.auto_refresh_configs.lock().unwrap()
-        .get(&host)
-        .cloned()
-        .unwrap_or_default())
-}
-
-#[tauri::command]
-pub async fn get_all_auto_refresh_configs(
-    state: State<'_, AppState>
-) -> Result<HashMap<String, AutoRefreshConfig>, String> {
-    Ok(state.auto_refresh_configs.lock().unwrap().clone())
-}
-
-#[tauri::command]
-pub async fn update_connection_label(
-    state: State<'_, AppState>,
-    app_handle: AppHandle,
-    host: String,
-    label: String
-) -> Result<(), String> {
-    state.connection_labels.lock().unwrap()
-        .insert(host, label);
+pub async fn open_video_list_window(host: String, list_key: String, list_title: String, app_handle: AppHandle, state: State<'_, AppState>) -> Result<(), String> {
+    let window_id = format!("video-list-{}-{}", host, list_key);
     
-    // Automatically save settings after label update
-    state.save_config(&app_handle).await?;
+    // Check if window already exists
+    if app_handle.get_webview_window(&window_id).is_some() {
+        // Focus the existing window
+        if let Some(window) = app_handle.get_webview_window(&window_id) {
+            let _ = window.set_focus();
+            app_log!(info, "Focused existing VideoList window: {}", window_id);
+        }
+        return Ok(());
+    }
     
+    // Create new window with URL parameters
+    let url = format!("/#/video-list?host={}&listKey={}", urlencoding::encode(&host), urlencoding::encode(&list_key));
+    let window = WebviewWindowBuilder::new(&app_handle, &window_id, WebviewUrl::App(url.parse().unwrap()))
+        .title(&format!("VideoList: {} - {}", host, list_title))
+        .inner_size(600.0, 800.0)
+        .min_inner_size(400.0, 500.0)
+        .resizable(true)
+        .center()
+        .build()
+        .map_err(|e| format!("Failed to create VideoList window: {}", e))?;
+    
+    // Show the window
+    window.show().map_err(|e| format!("Failed to show VideoList window: {}", e))?;
+    
+    // Register the window in state
+    state.register_video_list_window(window_id.clone(), host.clone(), list_key.clone(), list_title.clone());
+    
+    app_log!(info, "Opened VideoList window: {} for {}:{}", window_id, host, list_key);
     Ok(())
 }
 
 #[tauri::command]
-pub async fn get_connection_labels(
-    state: State<'_, AppState>
-) -> Result<HashMap<String, String>, String> {
-    Ok(state.connection_labels.lock().unwrap().clone())
+pub fn get_video_list_windows_diagnostic(state: State<'_, AppState>) -> Vec<String> {
+    let windows = state.video_list_windows.lock().unwrap();
+    windows.values().map(|w| format!("{}: {} - {} ({})", w.window_id, w.host, w.list_key, w.list_title)).collect()
 }
 
 #[tauri::command]
-pub async fn save_settings(
-    state: State<'_, AppState>,
-    app_handle: AppHandle
-) -> Result<(), String> {
+pub async fn set_auto_refresh_config(host: String, config: AutoRefreshConfig, state: State<'_, AppState>, app_handle: AppHandle) -> Result<(), String> {
+    {
+        let mut configs = state.auto_refresh_configs.lock().unwrap();
+        configs.insert(host.clone(), config);
+    }
+    
+    // Save configuration
+    if let Err(e) = state.save_config(&app_handle).await {
+        app_log!(warn, "Failed to save config after auto-refresh update: {}", e);
+    }
+    
+    app_log!(info, "Updated auto-refresh config for host: {}", host);
+    Ok(())
+}
+
+#[tauri::command]
+pub fn get_auto_refresh_config(host: String, state: State<'_, AppState>) -> AutoRefreshConfig {
+    let configs = state.auto_refresh_configs.lock().unwrap();
+    configs.get(&host).cloned().unwrap_or_default()
+}
+
+#[tauri::command]
+pub fn get_all_auto_refresh_configs(state: State<'_, AppState>) -> HashMap<String, AutoRefreshConfig> {
+    let configs = state.auto_refresh_configs.lock().unwrap();
+    configs.clone()
+}
+
+#[tauri::command]
+pub async fn update_connection_label(host: String, label: String, state: State<'_, AppState>, app_handle: AppHandle) -> Result<(), String> {
+    {
+        let mut labels = state.connection_labels.lock().unwrap();
+        labels.insert(host.clone(), label.clone());
+    }
+    
+    // Save configuration
+    if let Err(e) = state.save_config(&app_handle).await {
+        app_log!(warn, "Failed to save config after label update: {}", e);
+    }
+    
+    app_log!(info, "Updated label for host {}: {}", host, label);
+    Ok(())
+}
+
+#[tauri::command]
+pub fn get_connection_labels(state: State<'_, AppState>) -> HashMap<String, String> {
+    let labels = state.connection_labels.lock().unwrap();
+    labels.clone()
+}
+
+#[tauri::command] 
+pub async fn save_settings(host: String, port: u16, state: State<'_, AppState>, app_handle: AppHandle) -> Result<(), String> {
+    // Update app settings
+    {
+        let mut settings = state.app_settings.lock().unwrap();
+        settings.default_vmix_ip = host;
+        settings.default_vmix_port = port;
+    }
+    
+    // Save configuration
     state.save_config(&app_handle).await
 }
 
 #[tauri::command]
-pub async fn set_logging_config(app_handle: AppHandle, level: String, save_to_file: bool) -> Result<(), String> {
-    println!("Setting logging configuration - level: {}, save_to_file: {}", level, save_to_file);
-    
-    {
-        let mut config = LOGGING_CONFIG.lock().unwrap();
-        config.level = level.clone();
-        config.save_to_file = save_to_file;
-    } // ここでlockを解放
-    
-    // Save to config file
-    let app_state = app_handle.state::<AppState>();
-    app_state.save_config(&app_handle).await?;
-    
-    println!("Logging configuration updated and saved successfully");
-    
+pub async fn set_logging_config(config: LoggingConfig) -> Result<(), String> {
+    let mut logging_config = LOGGING_CONFIG.lock().unwrap();
+    *logging_config = config;
+    app_log!(info, "Updated logging configuration");
     Ok(())
 }
 
 #[tauri::command]
-pub async fn get_logging_config() -> Result<LoggingConfig, String> {
-    let config = LOGGING_CONFIG.lock().unwrap();
-    Ok(config.clone())
+pub fn get_logging_config() -> LoggingConfig {
+    LOGGING_CONFIG.lock().unwrap().clone()
 }
 
 #[tauri::command]
-pub async fn save_app_settings(
-    state: State<'_, AppState>,
-    app_handle: AppHandle,
-    settings: AppSettings
-) -> Result<(), String> {
-    app_log!(info, "Saving app settings: {:?}", settings);
-    
-    // Update app settings in state
+pub async fn save_app_settings(settings: AppSettings, state: State<'_, AppState>, app_handle: AppHandle) -> Result<(), String> {
     {
         let mut app_settings = state.app_settings.lock().unwrap();
         *app_settings = settings;
     }
     
-    // Save to config file
-    match state.save_config(&app_handle).await {
-        Ok(_) => {
-            app_log!(info, "App settings saved successfully");
-            Ok(())
-        }
-        Err(e) => {
-            app_log!(error, "Failed to save app settings: {}", e);
-            Err(e)
-        }
-    }
+    state.save_config(&app_handle).await
 }
 
 #[tauri::command]
-pub async fn get_app_settings(state: State<'_, AppState>) -> Result<AppSettings, String> {
+pub fn get_app_settings(state: State<'_, AppState>) -> AppSettings {
     let settings = state.app_settings.lock().unwrap();
-    Ok(settings.clone())
+    settings.clone()
 }
 
 #[tauri::command]
-pub async fn get_app_info(app_handle: AppHandle) -> Result<AppInfo, String> {
-    let version = app_handle.package_info().version.to_string();
-    let git_commit_hash = env!("GIT_COMMIT_HASH").to_string();
-    let git_branch = env!("GIT_BRANCH").to_string();
-    let build_timestamp = env!("BUILD_TIMESTAMP").to_string();
-    
-    Ok(AppInfo {
-        version,
-        git_commit_hash,
-        git_branch,
-        build_timestamp,
-    })
+pub fn get_app_info() -> AppInfo {
+    AppInfo {
+        version: env!("CARGO_PKG_VERSION").to_string(),
+        git_commit_hash: env!("GIT_COMMIT_HASH").to_string(),
+        git_branch: env!("GIT_BRANCH").to_string(),
+        build_timestamp: env!("BUILD_TIMESTAMP").to_string(),
+    }
 }
 
 #[tauri::command]
 pub async fn open_logs_directory(app_handle: AppHandle) -> Result<(), String> {
-    let app_data_dir = app_handle.path().app_data_dir().map_err(|e| e.to_string())?;
+    use tauri_plugin_shell::ShellExt;
+    
+    // Get the app data directory where logs are stored
+    let app_data_dir = app_handle.path().app_data_dir()
+        .map_err(|e| format!("Failed to get app data directory: {}", e))?;
+    
     let logs_dir = app_data_dir.join("logs");
     
     // Create logs directory if it doesn't exist
     if !logs_dir.exists() {
-        std::fs::create_dir_all(&logs_dir).map_err(|e| e.to_string())?;
+        tokio::fs::create_dir_all(&logs_dir).await
+            .map_err(|e| format!("Failed to create logs directory: {}", e))?;
     }
     
-    // Use tauri-plugin-opener to open the directory
-    tauri_plugin_opener::open_path(&logs_dir, None::<&str>).map_err(|e| e.to_string())?;
-    
-    println!("Opened logs directory: {:?}", logs_dir);
+    // Open the directory in file explorer
+    app_handle.shell().open(&logs_dir.to_string_lossy(), None)
+        .map_err(|e| format!("Failed to open logs directory: {}", e))?;
     
     Ok(())
 }
 
-// Command to open List Manager in a popup window
 #[tauri::command]
-pub async fn open_list_manager_window(app_handle: AppHandle) -> Result<(), String> {
-    app_log!(info, "Opening List Manager popup window");
-    
-    // Check if window already exists
-    if let Some(_) = app_handle.get_webview_window("list-manager") {
-        app_log!(info, "List Manager window already exists, focusing it");
-        // Focus existing window
-        if let Some(window) = app_handle.get_webview_window("list-manager") {
-            let _ = window.set_focus();
-        }
-        return Ok(());
-    }
-    
-    // Create new List Manager window
-    let webview_url = WebviewUrl::App("/list-manager".into());
-    
-    match WebviewWindowBuilder::new(&app_handle, "list-manager", webview_url)
-        .title("List Manager")
-        .inner_size(800.0, 600.0)
-        .min_inner_size(600.0, 400.0)
-        .resizable(true)
-        .build()
-    {
-        Ok(_) => {
-            app_log!(info, "List Manager popup window created successfully");
-            Ok(())
-        }
-        Err(e) => {
-            app_log!(error, "Failed to create List Manager popup window: {}", e);
-            Err(format!("Failed to create popup window: {}", e))
-        }
-    }
+pub async fn check_for_updates() -> Result<UpdateInfo, String> {
+    // This would integrate with your update checking logic
+    // For now, return a placeholder
+    Ok(UpdateInfo {
+        available: false,
+        current_version: env!("CARGO_PKG_VERSION").to_string(),
+        latest_version: None,
+        body: None,
+    })
 }
 
-// Command to open individual VideoList in a popup window
-#[tauri::command]
-pub async fn open_video_list_window(
-    app_handle: AppHandle,
-    state: tauri::State<'_, crate::state::AppState>,
-    host: String,
-    list_key: String,
-    list_title: String
-) -> Result<(), String> {
-    let start_time = std::time::Instant::now();
-    app_log!(info, "🚀 Opening VideoList popup window - Host: {}, List: {} ({})", host, list_key, list_title);
-    
-    // Log current window registry state for debugging
-    let current_windows = {
-        let windows = state.video_list_windows.lock().unwrap();
-        windows.len()
-    };
-    app_log!(debug, "📊 Current VideoList windows in registry: {}", current_windows);
-    
-    // Create base window ID based on host and list_key
-    let base_window_id = format!("video-list-{}-{}", 
-        urlencoding::encode(&host).replace("%", "").replace(".", "").replace(":", ""), 
-        list_key.replace(" ", "_").replace("(", "").replace(")", ""));
-    
-    let mut window_id = base_window_id.clone();
-    app_log!(debug, "🆔 Generated base window ID: {}", window_id);
-    
-    // First cleanup any stale window entries in the registry
-    let cleanup_start = std::time::Instant::now();
-    state.cleanup_stale_video_list_windows(&app_handle);
-    app_log!(debug, "🧹 Registry cleanup completed in {:?}", cleanup_start.elapsed());
-    
-    // Check if window already exists and is valid
-    if let Some(existing_window) = app_handle.get_webview_window(&window_id) {
-        app_log!(debug, "🔍 Found existing window with ID: {}", window_id);
-        
-        // Verify window is also registered in our state
-        let is_registered = state.get_video_list_window(&window_id).is_some();
-        app_log!(debug, "�� Window {} registry status: {}", window_id, if is_registered { "✅ Registered" } else { "❌ Not registered" });
-        
-        // Enhanced window validity check with multiple validation methods
-        let is_window_accessible = {
-            // Check basic window state
-            let is_visible = existing_window.is_visible().unwrap_or(false);
-            let is_minimized = existing_window.is_minimized().unwrap_or(true);
-            let is_closable = existing_window.is_closable().unwrap_or(false);
-            let is_decorated = existing_window.is_decorated().unwrap_or(false);
-            
-            app_log!(debug, "🔍 Window state: visible={}, minimized={}, closable={}, decorated={}", 
-                is_visible, is_minimized, is_closable, is_decorated);
-            
-            // Initial state checks
-            let basic_state_valid = is_visible && !is_minimized && is_closable;
-            
-            if !basic_state_valid {
-                app_log!(debug, "Window failed basic state validation");
-                false
-            } else {
-                // Test actual window interaction to verify accessibility
-                match existing_window.set_focus() {
-                    Ok(_) => {
-                        app_log!(debug, "Window focus test successful - window is accessible");
-                        true
-                    }
-                    Err(e) => {
-                        app_log!(warn, "Window focus test failed - window may be stale: {}", e);
-                        false
-                    }
-                }
-            }
-        };
-        
-        if is_window_accessible {
-            // Window is valid and accessible - reuse it
-            let total_time = start_time.elapsed();
-            app_log!(info, "✅ VideoList window already exists and is accessible, reusing window: {} (completed in {:?})", window_id, total_time);
-            
-            // Ensure window is properly visible and focused
-            if let Err(e) = existing_window.unminimize() {
-                app_log!(warn, "⚠️ Failed to unminimize existing VideoList window: {}", e);
-            }
-            if let Err(e) = existing_window.show() {
-                app_log!(warn, "⚠️ Failed to show existing VideoList window: {}", e);
-            }
-            
-            return Ok(());
-        } else {
-            // Window exists but is not accessible - try to clean it up
-            app_log!(warn, "VideoList window {} exists but is not accessible, attempting cleanup", window_id);
-            
-            // Attempt to close the stale window
-            if let Err(e) = existing_window.close() {
-                app_log!(warn, "Failed to close stale window {}: {}", window_id, e);
-            } else {
-                app_log!(info, "Successfully closed stale window: {}", window_id);
-            }
-            
-            // Small delay to ensure cleanup is complete
-            tokio::time::sleep(std::time::Duration::from_millis(100)).await;
-            
-            // Check if window still exists after cleanup attempt with retry logic
-            let mut cleanup_attempts = 0;
-            let max_cleanup_attempts = 3;
-            
-            while cleanup_attempts < max_cleanup_attempts {
-                if app_handle.get_webview_window(&window_id).is_none() {
-                    app_log!(info, "Stale window cleanup successful after {} attempts, reusing original window ID: {}", cleanup_attempts + 1, window_id);
-                    break;
-                }
-                
-                cleanup_attempts += 1;
-                if cleanup_attempts < max_cleanup_attempts {
-                    app_log!(warn, "Stale window {} still exists after cleanup attempt {}, retrying...", window_id, cleanup_attempts);
-                    
-                    // Try more aggressive cleanup
-                    if let Some(stale_window) = app_handle.get_webview_window(&window_id) {
-                        // Try to destroy the window more aggressively
-                        let _ = stale_window.hide();
-                        let _ = stale_window.close();
-                    }
-                    
-                    // Increase delay between attempts
-                    tokio::time::sleep(std::time::Duration::from_millis(200 * cleanup_attempts as u64)).await;
-                } else {
-                    app_log!(error, "Failed to cleanup stale window {} after {} attempts, generating new window ID", window_id, max_cleanup_attempts);
-                    
-                    // Generate a more robust unique window ID
-                    use std::time::{SystemTime, UNIX_EPOCH};
-                    let timestamp = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_millis();
-                    let process_id = std::process::id();
-                    let thread_id = std::thread::current().id();
-                    let unique_suffix = format!("{:?}", thread_id).chars().filter(|c| c.is_alphanumeric()).take(4).collect::<String>();
-                    window_id = format!("{}-{}-{}-{}", base_window_id, timestamp, process_id, unique_suffix);
-                    app_log!(info, "Generated robust new window ID to avoid persistent stale window conflict: {}", window_id);
-                    
-                    // Also clean up the registry entry for the old window
-                    state.unregister_video_list_window(&base_window_id);
-                }
-            }
-        }
-    } else {
-        app_log!(debug, "No existing window found with ID: {}", window_id);
-    }
-    
-    // Final validation: ensure the window ID is truly available
-    if app_handle.get_webview_window(&window_id).is_some() {
-        app_log!(warn, "Window ID {} still exists despite cleanup, generating final fallback ID", window_id);
-        use std::time::{SystemTime, UNIX_EPOCH};
-        let timestamp = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_nanos();
-        window_id = format!("{}-fallback-{}", base_window_id, timestamp);
-    }
-    
-    let creation_start = std::time::Instant::now();
-    app_log!(info, "🏗️ Creating new VideoList window with ID: {}", window_id);
-    
-    // Create URL with query parameters
-    let webview_url = WebviewUrl::App(format!("/list-manager?host={}&listKey={}", 
-        urlencoding::encode(&host), 
-        urlencoding::encode(&list_key)
-    ).into());
-    
-    let window_title = format!("VideoList: {}", list_title);
-    app_log!(debug, "🌐 Window URL: {:?}, Title: {}", webview_url, window_title);
-    
-    match WebviewWindowBuilder::new(&app_handle, &window_id, webview_url)
-        .title(&window_title)
-        .inner_size(600.0, 500.0)
-        .min_inner_size(400.0, 300.0)
-        .resizable(true)
-        .build()
-    {
-        Ok(window) => {
-            let creation_time = creation_start.elapsed();
-            let total_time = start_time.elapsed();
-            app_log!(info, "✅ VideoList popup window created successfully: {} (creation: {:?}, total: {:?})", window_title, creation_time, total_time);
-            
-            // Register the window in the state registry
-            state.register_video_list_window(
-                window_id.clone(),
-                host.clone(),
-                list_key.clone(),
-                list_title.clone()
-            );
-            app_log!(debug, "📝 Window registered in state registry");
-            
-            // Set up window close event handling
-            let app_handle_clone = app_handle.clone();
-            let window_id_clone = window_id.clone();
-            window.on_window_event(move |event| {
-                match event {
-                    tauri::WindowEvent::CloseRequested { .. } | tauri::WindowEvent::Destroyed => {
-                        app_log!(info, "🗑️ VideoList window closing/destroyed, unregistering: {}", window_id_clone);
-                        // Get state from app handle to avoid lifetime issues
-                        if let Some(state) = app_handle_clone.try_state::<crate::state::AppState>() {
-                            state.unregister_video_list_window(&window_id_clone);
-                        }
-                    }
-                    _ => {}
-                }
-            });
-            app_log!(debug, "🎭 Window event handlers set up");
-            
-            // Log final registry state
-            let final_windows = {
-                let windows = state.video_list_windows.lock().unwrap();
-                windows.len()
-            };
-            app_log!(debug, "📊 Final VideoList windows in registry: {}", final_windows);
-            
-            Ok(())
-        }
-        Err(e) => {
-            let total_time = start_time.elapsed();
-            app_log!(error, "❌ Failed to create VideoList popup window after {:?}: {}", total_time, e);
-            app_log!(debug, "🐛 Window creation failure details - ID: {}, Host: {}, ListKey: {}", window_id, host, list_key);
-            Err(format!("Failed to create popup window: {}", e))
-        }
-    }
-}
-
-// Diagnostic command for VideoList window troubleshooting
-#[tauri::command]
-pub async fn get_video_list_windows_diagnostic(
-    app_handle: AppHandle,
-    state: tauri::State<'_, crate::state::AppState>,
-) -> Result<serde_json::Value, String> {
-    app_log!(info, "🔧 Generating VideoList windows diagnostic information");
-    
-    let mut diagnostic = serde_json::Map::new();
-    
-    // Get registry information
-    let registry_info = {
-        let windows = state.video_list_windows.lock().unwrap();
-        let mut reg_info = serde_json::Map::new();
-        
-        reg_info.insert("total_registered".to_string(), serde_json::Value::Number(windows.len().into()));
-        
-        let mut windows_list = Vec::new();
-        for (window_id, window_info) in windows.iter() {
-            let mut window_data = serde_json::Map::new();
-            window_data.insert("window_id".to_string(), serde_json::Value::String(window_id.clone()));
-            window_data.insert("host".to_string(), serde_json::Value::String(window_info.host.clone()));
-            window_data.insert("list_key".to_string(), serde_json::Value::String(window_info.list_key.clone()));
-            window_data.insert("list_title".to_string(), serde_json::Value::String(window_info.list_title.clone()));
-            window_data.insert("created_ago_ms".to_string(), 
-                serde_json::Value::Number((window_info.created_at.elapsed().as_millis() as u64).into()));
-            
-            // Check if window actually exists in Tauri
-            let tauri_exists = app_handle.get_webview_window(window_id).is_some();
-            window_data.insert("exists_in_tauri".to_string(), serde_json::Value::Bool(tauri_exists));
-            
-            if let Some(tauri_window) = app_handle.get_webview_window(window_id) {
-                let mut tauri_state = serde_json::Map::new();
-                tauri_state.insert("visible".to_string(), serde_json::Value::Bool(tauri_window.is_visible().unwrap_or(false)));
-                tauri_state.insert("minimized".to_string(), serde_json::Value::Bool(tauri_window.is_minimized().unwrap_or(false)));
-                tauri_state.insert("closable".to_string(), serde_json::Value::Bool(tauri_window.is_closable().unwrap_or(false)));
-                tauri_state.insert("decorated".to_string(), serde_json::Value::Bool(tauri_window.is_decorated().unwrap_or(false)));
-                window_data.insert("tauri_state".to_string(), serde_json::Value::Object(tauri_state));
-            }
-            
-            windows_list.push(serde_json::Value::Object(window_data));
-        }
-        
-        reg_info.insert("windows".to_string(), serde_json::Value::Array(windows_list));
-        reg_info
-    };
-    
-    diagnostic.insert("registry".to_string(), serde_json::Value::Object(registry_info));
-    
-    // Get all Tauri windows (to identify orphaned windows)
-    let tauri_windows: Vec<String> = app_handle.webview_windows()
-        .into_iter()
-        .filter_map(|(label, _)| {
-            if label.starts_with("video-list-") {
-                Some(label)
-            } else {
-                None
-            }
-        })
-        .collect();
-    
-    diagnostic.insert("tauri_video_list_windows".to_string(), serde_json::Value::Array(
-        tauri_windows.into_iter().map(|s| serde_json::Value::String(s)).collect()
-    ));
-    
-    // System information
-    let mut system_info = serde_json::Map::new();
-    system_info.insert("timestamp".to_string(), serde_json::Value::String(
-        chrono::Utc::now().to_rfc3339()
-    ));
-    system_info.insert("process_id".to_string(), serde_json::Value::Number(std::process::id().into()));
-    
-    diagnostic.insert("system".to_string(), serde_json::Value::Object(system_info));
-    
-    app_log!(debug, "🔧 VideoList diagnostic completed");
-    Ok(serde_json::Value::Object(diagnostic))
-}
-
-#[tauri::command]
-pub async fn check_for_updates(app_handle: AppHandle) -> Result<UpdateInfo, String> {
-    app_log!(info, "Checking for updates...");
-    
-    let current_version = app_handle.package_info().version.to_string();
-    
-    // デバッグ情報: プラットフォーム情報を出力
-    app_log!(info, "Current platform: {:?}", std::env::consts::OS);
-    app_log!(info, "Current architecture: {:?}", std::env::consts::ARCH);
-    app_log!(info, "Target triple: {:?}", std::env::var("TARGET").unwrap_or_else(|_| "unknown".to_string()));
-    
-    match tauri_plugin_updater::UpdaterExt::updater(&app_handle) {
-        Ok(updater) => {
-            match updater.check().await {
-                Ok(Some(update)) => {
-                    app_log!(info, "Update available: {} -> {}", current_version, update.version);
-                    Ok(UpdateInfo {
-                        available: true,
-                        current_version,
-                        latest_version: Some(update.version.clone()),
-                        body: update.body.clone(),
-                    })
-                }
-                Ok(None) => {
-                    app_log!(info, "No updates available");
-                    Ok(UpdateInfo {
-                        available: false,
-                        current_version,
-                        latest_version: None,
-                        body: None,
-                    })
-                }
-                Err(e) => {
-                    app_log!(error, "Failed to check for updates: {}", e);
-                    Err(format!("Failed to check for updates: {}", e))
-                }
-            }
-        }
-        Err(e) => {
-            app_log!(error, "Failed to get updater instance: {}", e);
-            Err(format!("Failed to get updater instance: {}", e))
-        }
-    }
-}
-
-#[tauri::command]
-pub async fn install_update(app_handle: AppHandle) -> Result<(), String> {
-    app_log!(info, "Starting update installation...");
-    
+async fn install_update(app_handle: tauri::AppHandle) -> Result<(), String> {
     match tauri_plugin_updater::UpdaterExt::updater(&app_handle) {
         Ok(updater) => {
             match updater.check().await {
                 Ok(Some(update)) => {
                     app_log!(info, "Installing update: {}", update.version);
-                    match update.download_and_install(|chunk_length, content_length| {
-                        app_log!(debug, "Downloaded {} of {} bytes", chunk_length, content_length.unwrap_or(0));
-                    }, || {
-                        app_log!(info, "Update downloaded successfully, restarting application...");
-                    }).await {
-                        Ok(_) => {
-                            app_log!(info, "Update installed successfully");
-                            Ok(())
+                    
+                    // Download and install the update
+                    let mut downloaded = 0;
+                    
+                    // Download with progress updates
+                    update.download_and_install(
+                        |chunk_length, content_length| {
+                            downloaded += chunk_length;
+                            let progress = if let Some(total) = content_length {
+                                (downloaded as f64 / total as f64 * 100.0) as u32
+                            } else {
+                                0
+                            };
+                            app_log!(debug, "Download progress: {}%", progress);
+                        },
+                        || {
+                            app_log!(info, "Update downloaded, restarting application...");
                         }
-                        Err(e) => {
-                            app_log!(error, "Failed to install update: {}", e);
-                            Err(format!("Failed to install update: {}", e))
-                        }
-                    }
+                    ).await
+                    .map_err(|e| format!("Failed to download and install update: {}", e))?;
+                    
+                    Ok(())
                 }
-                Ok(None) => {
-                    Err("No update available".to_string())
-                }
-                Err(e) => {
-                    app_log!(error, "Failed to check for updates during installation: {}", e);
-                    Err(format!("Failed to check for updates: {}", e))
-                }
+                Ok(None) => Err("No updates available".to_string()),
+                Err(e) => Err(format!("Failed to check for updates: {}", e))
             }
         }
-        Err(e) => {
-            app_log!(error, "Failed to get updater instance for installation: {}", e);
-            Err(format!("Failed to get updater instance: {}", e))
-        }
+        Err(e) => Err(format!("Failed to get updater instance: {}", e))
     }
 }
 
 #[tauri::command]
+pub async fn install_update(app_handle: AppHandle) -> Result<(), String> {
+    install_update(app_handle).await
+}
+
+// Network Scanner Commands
+#[tauri::command]
 pub async fn get_network_interfaces_command() -> Result<Vec<NetworkInterface>, String> {
-    app_log!(info, "Getting network interfaces...");
-    
     match get_network_interfaces() {
         Ok(interfaces) => {
             app_log!(info, "Found {} network interfaces", interfaces.len());
@@ -1233,20 +806,14 @@ pub async fn get_network_interfaces_command() -> Result<Vec<NetworkInterface>, S
 }
 
 #[tauri::command]
-pub async fn scan_network_for_vmix_command(
-    interface_name: String,
-    state: State<'_, AppState>
-) -> Result<Vec<VmixScanResult>, String> {
-    app_log!(info, "Starting vMix network scan for interface: {}", interface_name);
+pub async fn scan_network_for_vmix_command(interface_name: String, state: State<'_, AppState>) -> Result<Vec<VmixScanResult>, String> {
+    app_log!(info, "Starting network scan for vMix on interface: {}", interface_name);
     
-    // セキュリティ警告をログに記録
-    app_log!(warn, "⚠️  NETWORK SCAN WARNING: Scanning network interface '{}' for vMix instances", interface_name);
-    app_log!(warn, "⚠️  This operation will attempt to connect to all IP addresses in the subnet");
-    
-    match scan_network_for_vmix(interface_name.clone(), &state).await {
+    match scan_network_for_vmix(interface_name.clone(), &*state).await {
         Ok(results) => {
             let vmix_count = results.iter().filter(|r| r.is_vmix).count();
-            app_log!(info, "Network scan completed for interface '{}': found {} vMix instances", interface_name, vmix_count);
+            app_log!(info, "Network scan completed on {}: {} hosts scanned, {} vMix instances found", 
+                interface_name, results.len(), vmix_count);
             Ok(results)
         }
         Err(e) => {
@@ -1256,77 +823,46 @@ pub async fn scan_network_for_vmix_command(
     }
 }
 
-// Multiviewer commands
+// Multiviewer Commands
+use crate::multiviewer::{MultiviewerServer, MultiviewerConfig};
+
 #[tauri::command]
-pub async fn get_multiviewer_config(state: State<'_, AppState>) -> Result<crate::types::MultiviewerConfig, String> {
-    app_log!(debug, "Getting multiviewer configuration");
-    Ok(state.get_multiviewer_config())
+pub async fn get_multiviewer_config(state: State<'_, AppState>) -> Result<MultiviewerConfig, String> {
+    let server = state.multiviewer_server.lock().unwrap();
+    Ok(server.get_config())
 }
 
 #[tauri::command]
-pub async fn update_multiviewer_config(
-    config: crate::types::MultiviewerConfig,
-    state: State<'_, AppState>
-) -> Result<(), String> {
-    app_log!(info, "Updating multiviewer configuration: enabled={}, port={}", 
-        config.enabled, config.port);
-    
-    match state.update_multiviewer_config(config).await {
-        Ok(_) => {
-            app_log!(info, "Multiviewer configuration updated successfully");
-            Ok(())
-        }
-        Err(e) => {
-            app_log!(error, "Failed to update multiviewer configuration: {}", e);
-            Err(format!("Failed to update multiviewer configuration: {}", e))
-        }
-    }
+pub async fn update_multiviewer_config(config: MultiviewerConfig, state: State<'_, AppState>) -> Result<(), String> {
+    let mut server = state.multiviewer_server.lock().unwrap();
+    server.update_config(config)
+        .map_err(|e| format!("Failed to update multiviewer config: {}", e))
 }
 
 #[tauri::command]
 pub async fn start_multiviewer_server(state: State<'_, AppState>) -> Result<(), String> {
-    app_log!(info, "Starting multiviewer server");
-    
-    match state.start_multiviewer_server().await {
-        Ok(_) => {
-            app_log!(info, "Multiviewer server started successfully");
-            Ok(())
-        }
-        Err(e) => {
-            app_log!(error, "Failed to start multiviewer server: {}", e);
-            Err(format!("Failed to start multiviewer server: {}", e))
-        }
-    }
+    let mut server = state.multiviewer_server.lock().unwrap();
+    server.start().await
+        .map_err(|e| format!("Failed to start multiviewer server: {}", e))
 }
 
 #[tauri::command]
 pub async fn stop_multiviewer_server(state: State<'_, AppState>) -> Result<(), String> {
-    app_log!(info, "Stopping multiviewer server");
-    state.stop_multiviewer_server();
-    app_log!(info, "Multiviewer server stopped");
-    Ok(())
+    let mut server = state.multiviewer_server.lock().unwrap();
+    server.stop().await
+        .map_err(|e| format!("Failed to stop multiviewer server: {}", e))
 }
 
 #[tauri::command]
 pub async fn get_multiviewer_url(state: State<'_, AppState>) -> Result<String, String> {
-    let config = state.get_multiviewer_config();
+    let connections = state.http_connections.lock().unwrap();
+    let selected_vmix = connections.first()
+        .ok_or_else(|| "No vMix connection available".to_string())?;
     
-    if !config.enabled {
-        return Err("Multiviewer is not enabled".to_string());
-    }
+    let server = state.multiviewer_server.lock().unwrap();
+    let config = server.get_config();
     
-    // Get the selected connection to determine the appropriate IP address
-    let selected_connection = config.selected_connection.as_ref()
-        .ok_or("No vMix connection selected")?;
-    
-    // Get all connections to find the selected one
-    let connections = state.get_connections();
-    let selected_vmix = connections.iter()
-        .find(|conn| conn.host == *selected_connection)
-        .ok_or("Selected vMix connection not found")?;
-    
-    // Use the connection's host IP for the multiviewer URL
-    let url = format!("http://{}:{}/multiviewers", selected_vmix.host, config.port);
-    app_log!(info, "Multiviewer URL for {}: {}", selected_vmix.host, url);
+    let url = format!("http://{}:{}/multiviewers", selected_vmix.host(), config.port);
+    app_log!(info, "Multiviewer URL for {}: {}", selected_vmix.host(), url);
     Ok(url)
 }

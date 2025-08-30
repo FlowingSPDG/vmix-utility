@@ -23,7 +23,6 @@ pub struct VideoListWindow {
     pub created_at: std::time::Instant,
 }
 
-#[derive(Clone)]
 pub struct AppState {
     pub http_connections: Arc<Mutex<Vec<VmixClientWrapper>>>,
     pub tcp_connections: Arc<Mutex<Vec<TcpVmixManager>>>,
@@ -34,12 +33,8 @@ pub struct AppState {
     pub connection_labels: Arc<Mutex<HashMap<String, String>>>,
     pub app_settings: Arc<Mutex<AppSettings>>,
     pub video_list_windows: Arc<Mutex<HashMap<String, VideoListWindow>>>,
-    pub multiviewer_server: Arc<Mutex<Option<MultiviewerServer>>>,
+    pub multiviewer_server: Arc<Mutex<MultiviewerServer>>,
 }
-
-// Ensure AppState is Send and Sync
-unsafe impl Send for AppState {}
-unsafe impl Sync for AppState {}
 
 impl AppState {
     pub fn new() -> Self {
@@ -53,7 +48,7 @@ impl AppState {
             connection_labels: Arc::new(Mutex::new(HashMap::new())),
             app_settings: Arc::new(Mutex::new(AppSettings::default())),
             video_list_windows: Arc::new(Mutex::new(HashMap::new())),
-            multiviewer_server: Arc::new(Mutex::new(None)),
+            multiviewer_server: Arc::new(Mutex::new(MultiviewerServer::new())),
         }
     }
     
@@ -143,7 +138,6 @@ impl AppState {
             }
             
             AppConfig {
-                version: crate::types::default_config_version(),
                 connections: all_connections,
                 app_settings: Some(self.app_settings.lock().unwrap().clone()),
                 logging_config: Some(crate::logging::LOGGING_CONFIG.lock().unwrap().clone()),
@@ -155,19 +149,6 @@ impl AppState {
         
         fs::write(&config_path, json_data).await.map_err(|e| e.to_string())?;
         println!("Config saved successfully");
-        
-        Ok(())
-    }
-
-    // Save a provided AppConfig to disk (used for migration)
-    async fn save_migrated_config(&self, config: &AppConfig, app_handle: &tauri::AppHandle) -> Result<(), String> {
-        let config_path = Self::get_config_path(app_handle).await?;
-        app_log!(info, "Saving migrated config to: {:?}", config_path);
-        
-        let json_data = serde_json::to_string_pretty(config).map_err(|e| e.to_string())?;
-        
-        fs::write(&config_path, json_data).await.map_err(|e| e.to_string())?;
-        app_log!(info, "Migrated configuration saved successfully");
         
         Ok(())
     }
@@ -183,30 +164,8 @@ impl AppState {
         let json_data = fs::read_to_string(&config_path).await.map_err(|e| e.to_string())?;
         println!("Config file content: {}", json_data);
         
-        let mut config: AppConfig = serde_json::from_str(&json_data).map_err(|e| e.to_string())?;
+        let config: AppConfig = serde_json::from_str(&json_data).map_err(|e| e.to_string())?;
         println!("Parsed config with {} connections", config.connections.len());
-        
-        // Check if migration is needed
-        let original_version = config.version.clone();
-        let current_version = crate::types::default_config_version();
-        let needs_migration = config.version.is_empty() || config.version != current_version;
-        
-        if needs_migration {
-            app_log!(info, "Configuration migration needed: {} -> {}", 
-                if original_version.is_empty() { "legacy".to_string() } else { original_version.clone() },
-                current_version);
-            config.migrate();
-            
-            // Save the migrated configuration back to disk
-            app_log!(info, "Saving migrated configuration to disk");
-            if let Err(e) = self.save_migrated_config(&config, app_handle).await {
-                app_log!(error, "Failed to save migrated configuration: {}", e);
-            } else {
-                app_log!(info, "Configuration successfully migrated from {} to {}", 
-                    if original_version.is_empty() { "legacy".to_string() } else { original_version },
-                    config.version);
-            }
-        }
         
         // Clear existing connections
         {
@@ -280,7 +239,6 @@ impl AppState {
         let inputs_cache = Arc::clone(&self.inputs_cache);
         let video_lists_cache = Arc::clone(&self.video_lists_cache);
         let labels = Arc::clone(&self.connection_labels);
-        let multiviewer_server = Arc::clone(&self.multiviewer_server);
 
         tokio::spawn(async move {
             let mut interval = interval(Duration::from_secs(1));
@@ -370,16 +328,16 @@ impl AppState {
                                 None
                             };
 
-                            // Preserve version/edition from cache if they exist, otherwise get from vMix data
-                            let (version, edition) = if let Some(ref data) = vmix_data_opt {
-                                (data.version.clone(), data.edition.clone())
+                            // Preserve version/edition/preset from cache if they exist, otherwise get from vMix data
+                            let (version, edition, preset) = if let Some(ref data) = vmix_data_opt {
+                                (data.version.clone(), data.edition.clone(), data.preset.clone())
                             } else {
                                 // If no data available (failed request or disconnected), preserve cached values
                                 let cache_guard = cache.lock().unwrap();
                                 if let Some(cached) = cache_guard.get(&host) {
-                                    (cached.version.clone(), cached.edition.clone())
+                                    (cached.version.clone(), cached.edition.clone(), cached.preset.clone())
                                 } else {
-                                    ("Unknown".to_string(), "Unknown".to_string())
+                                    ("Unknown".to_string(), "Unknown".to_string(), None)
                                 }
                             };
 
@@ -393,6 +351,7 @@ impl AppState {
                                 connection_type: ConnectionType::Http,
                                 version,
                                 edition,
+                                preset,
                             };
 
                             // Get current inputs for comparison
@@ -438,18 +397,6 @@ impl AppState {
                             // Always emit event for connection updates
                             if status_changed {
                                 let _ = app_handle.emit("vmix-status-updated", &new_connection);
-                                
-                                // Notify multiviewer server of vMix status update (event-driven, no polling)
-                                if let Some(multiviewer) = multiviewer_server.lock().unwrap().as_ref() {
-                                    app_log!(info, "STATE: Calling multiviewer.on_vmix_status_update for {} - Active: {}, Preview: {}", 
-                                        new_connection.host, new_connection.active_input, new_connection.preview_input);
-                                    multiviewer.on_vmix_status_update(&new_connection);
-                                } else {
-                                    app_log!(warn, "STATE: No multiviewer server available for status update");
-                                }
-                            } else {
-                                app_log!(debug, "STATE: No status change for {} - Active: {}, Preview: {}", 
-                                    new_connection.host, new_connection.active_input, new_connection.preview_input);
                             }
 
                             // Also check and emit VideoLists updates
@@ -588,152 +535,5 @@ impl AppState {
         for window_id in windows_to_remove {
             self.unregister_video_list_window(&window_id);
         }
-    }
-
-    // Multiviewer server management methods
-    pub async fn start_multiviewer_server(&self) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-        // Get config first and drop the guard before any await
-        let multiviewer_config = {
-            let app_settings = self.app_settings.lock().unwrap();
-            app_settings.multiviewer.clone()
-        };
-        
-        if !multiviewer_config.enabled {
-            app_log!(info, "Multiviewer is disabled, not starting server");
-            return Ok(());
-        }
-
-        // Stop existing server if running
-        self.stop_multiviewer_server();
-
-        // Create new server
-        let app_state_arc = Arc::new(self.clone());
-        let server = MultiviewerServer::new(app_state_arc);
-        
-        // Update server config
-        server.update_config(multiviewer_config.clone()).await?;
-        
-        // Start the server
-        server.start().await?;
-        
-        // Store the server
-        {
-            let mut server_guard = self.multiviewer_server.lock().unwrap();
-            *server_guard = Some(server);
-        }
-        
-        app_log!(info, "Multiviewer server started on port {}", multiviewer_config.port);
-        Ok(())
-    }
-
-    pub fn stop_multiviewer_server(&self) {
-        // Take the server out of the mutex before await
-        let server = {
-            let mut server_guard = self.multiviewer_server.lock().unwrap();
-            server_guard.take()
-        };
-        
-        if let Some(server) = server {
-            server.stop();
-            app_log!(info, "Multiviewer server stopped");
-        }
-    }
-
-    pub async fn update_multiviewer_config(&self, config: crate::types::MultiviewerConfig) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-        // Update app settings first
-        {
-            let mut app_settings = self.app_settings.lock().unwrap();
-            app_settings.multiviewer = config.clone();
-        }
-        
-        // Update existing server if running
-        let has_server = {
-            let server_guard = self.multiviewer_server.lock().unwrap();
-            server_guard.is_some()
-        };
-        
-        if has_server {
-            // Take the server temporarily to avoid holding the mutex during async operation
-            let server = {
-                let mut server_guard = self.multiviewer_server.lock().unwrap();
-                server_guard.take()
-            };
-            
-            if let Some(server) = server {
-                server.update_config(config.clone()).await?;
-                
-                // Put the server back
-                let mut server_guard = self.multiviewer_server.lock().unwrap();
-                *server_guard = Some(server);
-            }
-        }
-        
-        // Restart server if needed
-        if config.enabled {
-            self.start_multiviewer_server().await?;
-        } else {
-            self.stop_multiviewer_server();
-        }
-        
-        Ok(())
-    }
-
-    pub fn get_multiviewer_config(&self) -> crate::types::MultiviewerConfig {
-        let app_settings = self.app_settings.lock().unwrap();
-        app_settings.multiviewer.clone()
-    }
-
-    pub fn get_connections(&self) -> Vec<crate::types::VmixConnection> {
-        let mut connections = Vec::new();
-        
-        // Get HTTP connections
-        {
-            let http_connections = self.http_connections.lock().unwrap();
-            for client in http_connections.iter() {
-                let host = client.host().to_string();
-                let label = {
-                    let labels = self.connection_labels.lock().unwrap();
-                    labels.get(&host).cloned().unwrap_or_else(|| format!("{}:8088", host))
-                };
-                
-                connections.push(crate::types::VmixConnection {
-                    host,
-                    port: 8088,
-                    label,
-                    status: "Connected".to_string(),
-                    active_input: 0,
-                    preview_input: 0,
-                    connection_type: crate::types::ConnectionType::Http,
-                    version: "Unknown".to_string(),
-                    edition: "Unknown".to_string(),
-                });
-            }
-        }
-        
-        // Get TCP connections
-        {
-            let tcp_connections = self.tcp_connections.lock().unwrap();
-            for manager in tcp_connections.iter() {
-                let host = manager.host().to_string();
-                let label = {
-                    let labels = self.connection_labels.lock().unwrap();
-                    labels.get(&host).cloned().unwrap_or_else(|| format!("{}:8088", host))
-                };
-                
-                connections.push(crate::types::VmixConnection {
-                    host,
-                    port: 8088,
-                    label,
-                    status: "Connected".to_string(),
-                    active_input: 0,
-                    preview_input: 0,
-                    connection_type: crate::types::ConnectionType::Tcp,
-                    version: "Unknown".to_string(),
-                    edition: "Unknown".to_string(),
-                });
-            }
-        }
-        
-        connections
     }
 }
