@@ -9,7 +9,8 @@ use crate::logging::LOGGING_CONFIG;
 use crate::app_log;
 use crate::network_scanner::{get_network_interfaces, scan_network_for_vmix, NetworkInterface, VmixScanResult};
 use std::collections::HashMap;
-use tauri::{AppHandle, Manager, State, Emitter, WebviewUrl, WebviewWindowBuilder};
+use tauri::{AppHandle, Manager, State, WebviewUrl, WebviewWindowBuilder, Emitter};
+
 
 // Shared builder function to build VideoList inputs from vmix-rs model
 pub fn build_video_lists_from_vmix(vmix_state: &vmix_rs::models::Vmix) -> Vec<VmixVideoListInput> {
@@ -294,6 +295,8 @@ pub async fn get_vmix_video_lists(
     Ok(video_lists)
 }
 
+
+
 // Command to select VideoList item
 #[tauri::command]
 pub async fn select_video_list_item(
@@ -389,25 +392,25 @@ pub async fn connect_vmix(
     }
     
     // Get connection info based on type
-    let (active_input, preview_input, status, version, edition) = match connection_type {
+    let (active_input, preview_input, status, version, edition, preset) = match connection_type {
         ConnectionType::Http => {
             let info_vmix = VmixClientWrapper::new(&host, port);
             let active = info_vmix.get_active_input().await.unwrap_or(0);
             let preview = info_vmix.get_preview_input().await.unwrap_or(0);
             let status = info_vmix.get_status().await.unwrap_or(false);
             
-            // Get vMix data to extract version and edition information
-            let (version, edition) = match info_vmix.get_vmix_data().await {
-                Ok(vmix_data) => (vmix_data.version, vmix_data.edition),
-                Err(_) => ("Unknown".to_string(), "Unknown".to_string())
+            // Get vMix data to extract version, edition, and preset information
+            let (version, edition, preset) = match info_vmix.get_vmix_data().await {
+                Ok(vmix_data) => (vmix_data.version, vmix_data.edition, vmix_data.preset),
+                Err(_) => ("Unknown".to_string(), "Unknown".to_string(), None)
             };
             
-            (active, preview, status, version, edition)
+            (active, preview, status, version, edition, preset)
         },
         ConnectionType::Tcp => {
             // TCPの場合はバックグラウンドタスクで状態更新されるので初期値を返す
-            // version/editionはXMLレスポンスから後で更新される
-            (1, 1, true, "Unknown".to_string(), "Unknown".to_string())
+            // version/edition/presetはXMLレスポンスから後で更新される
+            (1, 1, true, "Unknown".to_string(), "Unknown".to_string(), None)
         }
     };
     
@@ -441,6 +444,7 @@ pub async fn connect_vmix(
         connection_type: connection_type,
         version,
         edition,
+        preset,
     })
 }
 
@@ -512,18 +516,18 @@ pub async fn get_vmix_status(
         tcp_connections.iter().find(|c| c.host() == host).map(|c| (c.is_connected(), ConnectionType::Tcp))
     };
     
-    let (status, active_input, preview_input, conn_type, version, edition) = if let Some(vmix) = http_result {
+    let (status, active_input, preview_input, conn_type, version, edition, preset) = if let Some(vmix) = http_result {
         let status = vmix.get_status().await.map_err(|e| e.to_string())?;
         let active_input = vmix.get_active_input().await.unwrap_or(0);
         let preview_input = vmix.get_preview_input().await.unwrap_or(0);
         
-        // Get version and edition information
-        let (version, edition) = match vmix.get_vmix_data().await {
-            Ok(vmix_data) => (vmix_data.version, vmix_data.edition),
-            Err(_) => ("Unknown".to_string(), "Unknown".to_string())
+        // Get version, edition, and preset information
+        let (version, edition, preset) = match vmix.get_vmix_data().await {
+            Ok(vmix_data) => (vmix_data.version, vmix_data.edition, vmix_data.preset),
+            Err(_) => ("Unknown".to_string(), "Unknown".to_string(), None)
         };
         
-        (status, active_input, preview_input, ConnectionType::Http, version, edition)
+        (status, active_input, preview_input, ConnectionType::Http, version, edition, preset)
     } else if let Some((tcp_status, conn_type)) = tcp_result {
         // TCPの場合はキャッシュから取得
         let cached_connection = {
@@ -532,9 +536,9 @@ pub async fn get_vmix_status(
         };
         
         if let Some(cached) = cached_connection {
-            (tcp_status, cached.active_input, cached.preview_input, conn_type, cached.version, cached.edition)
+            (tcp_status, cached.active_input, cached.preview_input, conn_type, cached.version, cached.edition, cached.preset.clone())
         } else {
-            (tcp_status, 1, 1, conn_type, "Unknown".to_string(), "Unknown".to_string())
+            (tcp_status, 1, 1, conn_type, "Unknown".to_string(), "Unknown".to_string(), None)
         }
     } else {
         // 既存接続がない場合は新しいHTTP接続でテスト
@@ -543,13 +547,13 @@ pub async fn get_vmix_status(
         let active_input = vmix.get_active_input().await.unwrap_or(0);
         let preview_input = vmix.get_preview_input().await.unwrap_or(0);
         
-        // Get version and edition information
-        let (version, edition) = match vmix.get_vmix_data().await {
-            Ok(vmix_data) => (vmix_data.version, vmix_data.edition),
-            Err(_) => ("Unknown".to_string(), "Unknown".to_string())
+        // Get version, edition, and preset information
+        let (version, edition, preset) = match vmix.get_vmix_data().await {
+            Ok(vmix_data) => (vmix_data.version, vmix_data.edition, vmix_data.preset),
+            Err(_) => ("Unknown".to_string(), "Unknown".to_string(), None)
         };
         
-        (status, active_input, preview_input, ConnectionType::Http, version, edition)
+        (status, active_input, preview_input, ConnectionType::Http, version, edition, preset)
     };
     
     let label = {
@@ -567,6 +571,7 @@ pub async fn get_vmix_status(
         connection_type: conn_type,
         version,
         edition,
+        preset,
     })
 }
 
@@ -582,35 +587,83 @@ pub async fn get_vmix_statuses(state: State<'_, AppState>) -> Result<Vec<VmixCon
     };
     let mut statuses = Vec::new();
 
-    // Process HTTP connections
-    for vmix in http_connections.iter() {
-        let status = vmix.get_status().await.unwrap_or(false);
-        let active_input = vmix.get_active_input().await.unwrap_or(0);
-        let preview_input = vmix.get_preview_input().await.unwrap_or(0);
-        let host = vmix.host().to_string();
-        
-        // Get version and edition information
-        let (version, edition) = match vmix.get_vmix_data().await {
-            Ok(vmix_data) => (vmix_data.version, vmix_data.edition),
-            Err(_) => ("Unknown".to_string(), "Unknown".to_string())
-        };
-        
-        let label = {
-            let labels = state.connection_labels.lock().unwrap();
-            labels.get(&host).cloned().unwrap_or_else(|| format!("{} (HTTP)", host))
-        };
-        
-        statuses.push(VmixConnection {
-            host,
-            port: vmix.port(),
-            label,
-            status: if status { "Connected".to_string() } else { "Disconnected".to_string() },
-            active_input,
-            preview_input,
-            connection_type: ConnectionType::Http,
-            version,
-            edition,
-        });
+    // Process HTTP connections in parallel with timeout
+    let http_futures: Vec<_> = http_connections.iter().map(|vmix| {
+        let vmix_clone = vmix.clone();
+        async move {
+            let host = vmix_clone.host().to_string();
+            let host_for_timeout = host.clone();
+            
+            // Use tokio::timeout to prevent hanging
+            match tokio::time::timeout(std::time::Duration::from_millis(1000), async {
+                let status = vmix_clone.get_status().await.unwrap_or(false);
+                let active_input = vmix_clone.get_active_input().await.unwrap_or(0);
+                let preview_input = vmix_clone.get_preview_input().await.unwrap_or(0);
+                
+                // Get version, edition, and preset information
+                let (version, edition, preset) = match vmix_clone.get_vmix_data().await {
+                    Ok(vmix_data) => (vmix_data.version, vmix_data.edition, vmix_data.preset),
+                    Err(_) => ("Unknown".to_string(), "Unknown".to_string(), None)
+                };
+                
+                (host, status, active_input, preview_input, version, edition, preset)
+            }).await {
+                Ok(result) => Some(result),
+                Err(_) => {
+                    println!("Timeout getting status for {}", host_for_timeout);
+                    None
+                }
+            }
+        }
+    }).collect();
+
+    // Wait for all HTTP connections with timeout
+    let http_results = tokio::time::timeout(
+        std::time::Duration::from_millis(2000),
+        futures::future::join_all(http_futures)
+    ).await.unwrap_or_else(|_| vec![None; http_connections.len()]);
+
+    // Process HTTP results
+    for (i, result) in http_results.into_iter().enumerate() {
+        if let Some((host, status, active_input, preview_input, version, edition, preset)) = result {
+            let label = {
+                let labels = state.connection_labels.lock().unwrap();
+                labels.get(&host).cloned().unwrap_or_else(|| format!("{} (HTTP)", host))
+            };
+            
+            statuses.push(VmixConnection {
+                host,
+                port: http_connections[i].port(),
+                label,
+                status: if status { "Connected".to_string() } else { "Disconnected".to_string() },
+                active_input,
+                preview_input,
+                connection_type: ConnectionType::Http,
+                version,
+                edition,
+                preset,
+            });
+        } else {
+            // Add disconnected status for timed out connections
+            let host = http_connections[i].host().to_string();
+            let label = {
+                let labels = state.connection_labels.lock().unwrap();
+                labels.get(&host).cloned().unwrap_or_else(|| format!("{} (HTTP)", host))
+            };
+            
+            statuses.push(VmixConnection {
+                host,
+                port: http_connections[i].port(),
+                label,
+                status: "Disconnected".to_string(),
+                active_input: 0,
+                preview_input: 0,
+                connection_type: ConnectionType::Http,
+                version: "Unknown".to_string(),
+                edition: "Unknown".to_string(),
+                preset: None,
+            });
+        }
     }
     
     // Process TCP connections
@@ -621,12 +674,12 @@ pub async fn get_vmix_statuses(state: State<'_, AppState>) -> Result<Vec<VmixCon
         };
         
         // TCPの詳細情報はキャッシュから取得
-        let (active_input, preview_input, version, edition) = {
+        let (active_input, preview_input, version, edition, preset) = {
             let cache = state.last_status_cache.lock().unwrap();
             if let Some(cached) = cache.get(&host) {
-                (cached.active_input, cached.preview_input, cached.version.clone(), cached.edition.clone())
+                (cached.active_input, cached.preview_input, cached.version.clone(), cached.edition.clone(), cached.preset.clone())
             } else {
-                (1, 1, "Unknown".to_string(), "Unknown".to_string())
+                (1, 1, "Unknown".to_string(), "Unknown".to_string(), None)
             }
         };
         
@@ -640,6 +693,7 @@ pub async fn get_vmix_statuses(state: State<'_, AppState>) -> Result<Vec<VmixCon
             connection_type: ConnectionType::Tcp,
             version,
             edition,
+            preset,
         });
     }
 

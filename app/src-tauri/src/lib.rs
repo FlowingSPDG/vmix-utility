@@ -1,6 +1,6 @@
 use tauri::tray::TrayIconBuilder;
 use tauri::{
-    menu::{Menu, MenuItem}, Emitter, Manager
+    menu::{Menu, MenuItem}, Manager
 };
 use tauri_plugin_dialog::{DialogExt, MessageDialogButtons, MessageDialogKind};
 
@@ -131,6 +131,7 @@ pub fn run() {
 
             let _tray = TrayIconBuilder::new()
                 .menu(&menu)
+                .icon(app.default_window_icon().unwrap().clone())
                 .show_menu_on_left_click(false)
                 .on_tray_icon_event(|tray, event| {
                     match event {

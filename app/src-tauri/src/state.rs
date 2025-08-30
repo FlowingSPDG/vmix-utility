@@ -325,16 +325,16 @@ impl AppState {
                                 None
                             };
 
-                            // Preserve version/edition from cache if they exist, otherwise get from vMix data
-                            let (version, edition) = if let Some(ref data) = vmix_data_opt {
-                                (data.version.clone(), data.edition.clone())
+                            // Preserve version/edition/preset from cache if they exist, otherwise get from vMix data
+                            let (version, edition, preset) = if let Some(ref data) = vmix_data_opt {
+                                (data.version.clone(), data.edition.clone(), data.preset.clone())
                             } else {
                                 // If no data available (failed request or disconnected), preserve cached values
                                 let cache_guard = cache.lock().unwrap();
                                 if let Some(cached) = cache_guard.get(&host) {
-                                    (cached.version.clone(), cached.edition.clone())
+                                    (cached.version.clone(), cached.edition.clone(), cached.preset.clone())
                                 } else {
-                                    ("Unknown".to_string(), "Unknown".to_string())
+                                    ("Unknown".to_string(), "Unknown".to_string(), None)
                                 }
                             };
 
@@ -348,6 +348,7 @@ impl AppState {
                                 connection_type: ConnectionType::Http,
                                 version,
                                 edition,
+                                preset,
                             };
 
                             // Get current inputs for comparison
