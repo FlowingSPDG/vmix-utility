@@ -22,8 +22,13 @@ interface SingleVideoListProps {
 const SingleVideoList: React.FC<SingleVideoListProps> = ({ host, listKey }) => {
   const [error, setError] = useState<string | null>(null);
   
-  // Use global VMixStatusProvider instead of direct API calls
-  const { videoLists: contextVideoLists, connections } = useVMixStatus();
+  // Use global VMixStatusProvider for connections only
+  const { connections } = useVMixStatus();
+  
+  // Local state for video lists in popup window
+  const [localVideoLists, setLocalVideoLists] = useState<any[]>([]);
+  
+
 
   // Get URL parameters if not provided as props
   const urlParams = new URLSearchParams(window.location.search);
@@ -32,11 +37,10 @@ const SingleVideoList: React.FC<SingleVideoListProps> = ({ host, listKey }) => {
   
   console.log('SingleVideoList initialized:', { targetHost, targetListKey, url: window.location.href });
 
-  // Get video list from global cache
+  // Get video list from local state
   const videoList = useMemo(() => {
-    const hostVideoLists = contextVideoLists[targetHost] || [];
-    return hostVideoLists.find(list => list.key === targetListKey) || null;
-  }, [contextVideoLists, targetHost, targetListKey]);
+    return localVideoLists.find(list => list.key === targetListKey) || null;
+  }, [localVideoLists, targetListKey]);
 
   // Check if connection exists for this host
   const connectionExists = useMemo(() => {
@@ -84,6 +88,42 @@ const SingleVideoList: React.FC<SingleVideoListProps> = ({ host, listKey }) => {
     }
   }, [targetHost, targetListKey]);
 
+  // Listen for video lists updates from vMix (same as main window)
+  useEffect(() => {
+    if (!targetHost) return;
+
+    console.log('Setting up vmix-videolists-updated listener for popup window');
+    const unlistenVideoLists = vmixService.listenForVideoListsUpdates((event) => {
+      const { host, videoLists: updatedVideoLists } = event.payload;
+      
+      if (host === targetHost) {
+        console.log(`VideoLists update event received for popup window ${host}:`, updatedVideoLists);
+        
+        // Update local state with the new video lists data
+        console.log('Updating local video lists with new data from vMix:', updatedVideoLists);
+        setLocalVideoLists(updatedVideoLists);
+      }
+    });
+
+    return () => {
+      console.log('Cleaning up vmix-videolists-updated listener for popup window');
+      unlistenVideoLists.then(f => f());
+    };
+  }, [targetHost, targetListKey]);
+
+  // Initial data fetch when component mounts
+  useEffect(() => {
+    if (targetHost && targetListKey) {
+      console.log('Initial data fetch for popup window');
+      vmixService.getVMixVideoLists(targetHost).then(videoLists => {
+        console.log('Initial video lists fetched:', videoLists);
+        setLocalVideoLists(videoLists);
+      }).catch(error => {
+        console.error('Failed to fetch initial video lists:', error);
+      });
+    }
+  }, [targetHost, targetListKey]);
+
   // Set error state based on data availability
   useEffect(() => {
     if (!targetHost || !targetListKey) {
@@ -111,10 +151,11 @@ const SingleVideoList: React.FC<SingleVideoListProps> = ({ host, listKey }) => {
     if (!targetHost || !videoList) return;
     
     try {
+      // Send the request to vMix
       await vmixService.selectVideoListItem(targetHost, videoList.number, itemIndex);
       
-      // No need to manually refresh - backend will emit vmix-videolists-updated event
-      // which will automatically update the global cache via VMixStatusProvider
+      // The backend will emit vmix-videolists-updated event when vMix state changes
+      // UI will be updated automatically via AutoUpdate events
     } catch (err) {
       console.error('Failed to select item:', err);
       setError(`Failed to select item: ${err}`);

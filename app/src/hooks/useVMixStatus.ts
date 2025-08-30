@@ -1,6 +1,5 @@
 import React, { useState, useEffect, createContext, useContext, useCallback } from 'react';
-import { listen } from '@tauri-apps/api/event';
-import { vmixService, VMIX_EVENTS, type VmixConnection, type VmixInput, type VmixVideoListInput, type AutoRefreshConfig } from '../services/vmixService';
+import { vmixService, type VmixConnection, type VmixInput, type VmixVideoListInput, type AutoRefreshConfig } from '../services/vmixService';
 
 // Types are now imported from vmixService
 
@@ -101,7 +100,7 @@ export const VMixStatusProvider = ({ children }: { children: React.ReactNode }) 
 
   // Listen for status updates from Tauri backend
   useEffect(() => {
-    const unlistenStatus = listen<VmixConnection>(VMIX_EVENTS.STATUS_UPDATED, (event) => {
+    const unlistenStatus = vmixService.listenForStatusUpdates((event) => {
       console.log('vmix-status-updated event received:', event);
       const updatedConnection = event.payload;
       
@@ -154,7 +153,7 @@ export const VMixStatusProvider = ({ children }: { children: React.ReactNode }) 
 
   // Listen for connection removal events
   useEffect(() => {
-    const unlistenRemoval = listen<{host: string}>(VMIX_EVENTS.CONNECTION_REMOVED, (event) => {
+    const unlistenRemoval = vmixService.listenForConnectionRemoved((event) => {
       const { host } = event.payload;
       console.log('vmix-connection-removed event received for host:', host);
       
@@ -194,7 +193,7 @@ export const VMixStatusProvider = ({ children }: { children: React.ReactNode }) 
 
   // Listen for inputs updates (especially for TCP connections)
   useEffect(() => {
-    const unlistenInputs = listen<{host: string, inputs: VmixInput[]}>(VMIX_EVENTS.INPUTS_UPDATED, (event) => {
+    const unlistenInputs = vmixService.listenForInputsUpdates((event) => {
       const { host, inputs: updatedInputs } = event.payload;
       
       setInputs(prev => ({
@@ -213,7 +212,7 @@ export const VMixStatusProvider = ({ children }: { children: React.ReactNode }) 
   // Listen for video lists updates
   useEffect(() => {
     console.log('Setting up vmix-videolists-updated listener');
-    const unlistenVideoLists = listen<{host: string, videoLists: VmixVideoListInput[]}>(VMIX_EVENTS.VIDEOLISTS_UPDATED, (event) => {
+    const unlistenVideoLists = vmixService.listenForVideoListsUpdates((event) => {
       const { host, videoLists: updatedVideoLists } = event.payload;
       
       console.log(`VideoLists update event received for ${host}:`, updatedVideoLists);
@@ -411,9 +410,8 @@ export const VMixStatusProvider = ({ children }: { children: React.ReactNode }) 
     try {
       await vmixService.selectVideoListItem(host, inputNumber, itemIndex);
       
-      // Wait a moment for vMix to update, then refresh
-      await new Promise(resolve => setTimeout(resolve, 200));
-      await getVMixVideoLists(host);
+      // The backend will emit vmix-videolists-updated event when vMix state changes
+      // No manual refresh needed - rely on AutoUpdate events
     } catch (error) {
       console.error('Failed to select video list item:', error);
       throw error;

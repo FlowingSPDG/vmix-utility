@@ -1,4 +1,5 @@
 import { invoke } from '@tauri-apps/api/core';
+import { listen } from '@tauri-apps/api/event';
 
 // Re-export types from useVMixStatus for consistency
 export interface VmixConnection {
@@ -104,7 +105,25 @@ export const vmixService = {
 
   async setAutoRefreshConfig(host: string, config: AutoRefreshConfig): Promise<void> {
     return invoke('set_auto_refresh_config', { host, config });
+  },
+
+  // Event listening
+  listenForVideoListsUpdates(callback: (event: { payload: { host: string, videoLists: VmixVideoListInput[] } }) => void) {
+    return listen<{host: string, videoLists: VmixVideoListInput[]}>(VMIX_EVENTS.VIDEOLISTS_UPDATED, callback);
+  },
+
+  listenForStatusUpdates(callback: (event: { payload: VmixConnection }) => void) {
+    return listen<VmixConnection>(VMIX_EVENTS.STATUS_UPDATED, callback);
+  },
+
+  listenForConnectionRemoved(callback: (event: { payload: {host: string} }) => void) {
+    return listen<{host: string}>(VMIX_EVENTS.CONNECTION_REMOVED, callback);
+  },
+
+  listenForInputsUpdates(callback: (event: { payload: {host: string, inputs: VmixInput[]} }) => void) {
+    return listen<{host: string, inputs: VmixInput[]}>(VMIX_EVENTS.INPUTS_UPDATED, callback);
   }
+
 };
 
 /**

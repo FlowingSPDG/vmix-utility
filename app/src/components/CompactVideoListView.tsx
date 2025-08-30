@@ -136,7 +136,7 @@ const CompactVideoListView: React.FC<CompactVideoListViewProps> = ({
                   <Box display="flex" justifyContent="space-between" alignItems="center">
                     <Box display="flex" alignItems="center" gap={1}>
                       <Typography variant="body2" sx={{ fontSize: '0.8rem', fontWeight: 'medium' }}>
-                        {videoList.title}
+                        Input {videoList.number}: {videoList.title}
                       </Typography>
                       <Box 
                         sx={{ 
