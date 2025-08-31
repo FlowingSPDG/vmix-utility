@@ -52,7 +52,7 @@ impl VmixClientWrapper {
         Ok(VmixXml {
             version: vmix_state.version,
             edition: vmix_state.edition,
-            preset: Some(vmix_state.preset),
+            preset: vmix_state.preset,
             inputs: Inputs {
                 input: vmix_state.inputs.input.into_iter().map(|input| Input {
                     key: input.key,
