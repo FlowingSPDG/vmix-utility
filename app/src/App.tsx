@@ -47,7 +47,9 @@ function AppContent() {
         justifyContent: 'center', 
         alignItems: 'center', 
         height: '100vh',
-        fontSize: '18px'
+        fontSize: '18px',
+        backgroundColor: resolvedTheme === 'dark' ? '#121212' : '#f6f6f6',
+        color: resolvedTheme === 'dark' ? '#f6f6f6' : '#0f0f0f'
       }}>
         Loading theme...
       </div>
