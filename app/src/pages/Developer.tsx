@@ -14,6 +14,7 @@ import {
   ListItem,
   ListItemIcon,
   ListItemText,
+  SvgIcon,
 } from '@mui/material';
 import {
   GitHub,
@@ -23,14 +24,21 @@ import {
   Star,
 } from '@mui/icons-material';
 import { openUrl } from '@tauri-apps/plugin-opener';
+import { SvgIconProps } from '@mui/material/SvgIcon';
 import { useTheme } from '../hooks/useTheme';
+
+const TwitchIcon = (props: SvgIconProps) => (
+  <SvgIcon {...props} viewBox="0 0 24 24">
+    <path d="M3 0 0 4v17h6v3h3l3-3h5l7-7V0H3zm18 11-3 3h-5l-3 3v-3H5V2h16v9zm-9-5h2v5h-2V6zm5 0h2v5h-2V6z" />
+  </SvgIcon>
+);
 
 const Developer = () => {
   const { resolvedTheme } = useTheme();
   const repositoryUrl = 'https://github.com/FlowingSPDG/vmix-utility';
   const developerGitHub = 'https://github.com/FlowingSPDG';
   const sponsorUrl = 'https://github.com/sponsors/FlowingSPDG';
-  const fanboxUrl = 'https://flowingspdg.fanbox.cc/';
+  const twitchSupportUrl = 'http://subs.twitch.tv/flowingspdg';
 
   const openInBrowser = (url: string) => {
     openUrl(url);
@@ -130,7 +138,10 @@ const Developer = () => {
               </Box>
               
               <Typography variant="body2" color="text.secondary" gutterBottom>
-                If you find this project helpful, consider supporting its development!
+                If you find this project helpful, consider supporting its development via Twitch subscriptions.
+              </Typography>
+              <Typography variant="body2" color="text.secondary">
+                Twitch subscriptions do not auto-renew, so you can choose to support the project every month. If you have Amazon Prime, you can subscribe for free each month via Prime Gaming.
               </Typography>
               
               <Grid2 container spacing={2} sx={{ mt: 1 }}>
@@ -148,9 +159,9 @@ const Developer = () => {
                 <Grid2 size={{ xs: 12, sm: 4 }}>
                   <Button
                     variant="contained"
-                    sx={{ 
+                    sx={{
                       backgroundColor: '#13C3FF',
-                      '&:hover': { backgroundColor: '#0FA8CC' }
+                      '&:hover': { backgroundColor: '#0FA8CC' },
                     }}
                     startIcon={<FavoriteOutlined />}
                     onClick={() => openInBrowser(sponsorUrl)}
@@ -162,15 +173,16 @@ const Developer = () => {
                 <Grid2 size={{ xs: 12, sm: 4 }}>
                   <Button
                     variant="contained"
-                    sx={{ 
-                      backgroundColor: '#0096FA',
-                      '&:hover': { backgroundColor: '#0078CC' }
+                    sx={{
+                      backgroundColor: '#9146FF',
+                      '&:hover': { backgroundColor: '#772CE8' },
+                      height: '100%',
                     }}
-                    startIcon={<FavoriteOutlined />}
-                    onClick={() => openInBrowser(fanboxUrl)}
+                    startIcon={<TwitchIcon />}
+                    onClick={() => openInBrowser(twitchSupportUrl)}
                     fullWidth
                   >
-                    Support on FANBOX
+                    Subscribe on Twitch
                   </Button>
                 </Grid2>
               </Grid2>
