@@ -38,7 +38,7 @@ const Developer = () => {
   const repositoryUrl = 'https://github.com/FlowingSPDG/vmix-utility';
   const developerGitHub = 'https://github.com/FlowingSPDG';
   const sponsorUrl = 'https://github.com/sponsors/FlowingSPDG';
-  const twitchSupportUrl = 'http://subs.twitch.tv/flowingspdg';
+  const twitchSupportUrl = 'https://subs.twitch.tv/flowingspdg';
 
   const openInBrowser = (url: string) => {
     openUrl(url);
