@@ -13,6 +13,7 @@ export interface VmixScanResult {
   is_vmix: boolean;
   response_time: number;
   error_message?: string;
+  preset?: string;
 }
 
 export class NetworkScannerService {
