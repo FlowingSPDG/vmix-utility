@@ -78,6 +78,7 @@ pub async fn scan_network_for_vmix(interface_name: String, app_state: &crate::st
     }
     
     let subnet = target_interface.subnet.clone();
+    let interface_ip = target_interface.ip_address.clone();
     let port = 8088;
     
     // 既に接続されているIPアドレスのリストを取得
@@ -105,12 +106,17 @@ pub async fn scan_network_for_vmix(interface_name: String, app_state: &crate::st
     let mut tasks = vec![];
     let mut results = Vec::new();
     
-    // 1から254までのIPアドレスをスキャン（既に接続されているIPは除外）
+    // 1から254までのIPアドレスをスキャン（既に接続されているIPとローカルホストは除外）
     for host in 1..=254 {
         let ip_str = format!("{}.{}", subnet, host);
         
         // 既に接続されているIPはスキップ
         if connected_hosts.contains(&ip_str) {
+            continue;
+        }
+        
+        // ネットワークインターフェースのIPアドレス（localhost）は除外
+        if ip_str == interface_ip {
             continue;
         }
         

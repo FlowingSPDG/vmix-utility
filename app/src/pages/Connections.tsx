@@ -275,14 +275,15 @@ const Connections: React.FC = () => {
   };
 
   const handleConnectFromScan = async (ipAddress: string) => {
-    // Close scan dialog immediately for better UX
-    setScanDialogOpen(false);
-    
+    // Don't close dialog - allow connecting to multiple vMix instances
     // Add to background connections set
     setBackgroundConnections(prev => new Set([...prev, ipAddress]));
     
     try {
       await connectVMix(ipAddress, 8088, 'Http');
+      
+      // Refresh connections to update the UI
+      await refreshConnections();
       
       // Add success notification
       setConnectionNotifications(prev => [...prev, {
@@ -881,8 +882,6 @@ const Connections: React.FC = () => {
                   <TableHead>
                     <TableRow>
                       <TableCell>IP Address</TableCell>
-                      <TableCell>Port</TableCell>
-                      <TableCell>Status</TableCell>
                       <TableCell>Preset</TableCell>
                       <TableCell>Response Time</TableCell>
                       <TableCell>Action</TableCell>
@@ -892,14 +891,6 @@ const Connections: React.FC = () => {
                     {scanResults.map((result, index) => (
                       <TableRow key={index}>
                         <TableCell>{result.ip_address}</TableCell>
-                        <TableCell>{result.port}</TableCell>
-                        <TableCell>
-                          <Chip 
-                            label={result.is_vmix ? 'vMix Found' : 'HTTP Service'} 
-                            color={result.is_vmix ? 'success' : 'default'}
-                            size="small"
-                          />
-                        </TableCell>
                         <TableCell>
                           <Typography variant="body2">{result.preset || '-'}</Typography>
                         </TableCell>
@@ -934,7 +925,7 @@ const Connections: React.FC = () => {
             disabled={!selectedInterface || isScanning}
             startIcon={isScanning ? <CircularProgress size={16} /> : <SearchIcon />}
           >
-            {isScanning ? 'Scanning...' : 'Start Scan'}
+            {isScanning ? 'Scanning...' : (scanResults.length > 0 ? 'Rescan' : 'Start Scan')}
           </Button>
         </DialogActions>
       </Dialog>
