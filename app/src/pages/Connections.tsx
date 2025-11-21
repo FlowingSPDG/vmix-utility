@@ -883,6 +883,7 @@ const Connections: React.FC = () => {
                       <TableCell>IP Address</TableCell>
                       <TableCell>Port</TableCell>
                       <TableCell>Status</TableCell>
+                      <TableCell>Preset</TableCell>
                       <TableCell>Response Time</TableCell>
                       <TableCell>Action</TableCell>
                     </TableRow>
@@ -898,6 +899,9 @@ const Connections: React.FC = () => {
                             color={result.is_vmix ? 'success' : 'default'}
                             size="small"
                           />
+                        </TableCell>
+                        <TableCell>
+                          <Typography variant="body2">{result.preset || '-'}</Typography>
                         </TableCell>
                         <TableCell>{result.response_time}ms</TableCell>
                         <TableCell>

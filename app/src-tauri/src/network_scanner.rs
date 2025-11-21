@@ -23,6 +23,7 @@ pub struct VmixScanResult {
     pub is_vmix: bool,
     pub response_time: u64,
     pub error_message: Option<String>,
+    pub preset: Option<String>,
 }
 
 pub fn get_network_interfaces() -> Result<Vec<NetworkInterface>> {
@@ -140,9 +141,9 @@ pub async fn scan_network_for_vmix(interface_name: String, app_state: &crate::st
 async fn check_vmix_port(addr: SocketAddr) -> Option<VmixScanResult> {
     let start_time = std::time::Instant::now();
     
-    // vMix HTTP APIを使用してvMixの存在を確認
+    // vMix HTTP APIを使用してvMixの存在を確認し、プリセット名も取得
     match check_vmix_http_api(addr).await {
-        Ok(_) => {
+        Ok(vmix_data) => {
             let response_time = start_time.elapsed().as_millis() as u64;
             Some(VmixScanResult {
                 ip_address: addr.ip().to_string(),
@@ -150,13 +151,14 @@ async fn check_vmix_port(addr: SocketAddr) -> Option<VmixScanResult> {
                 is_vmix: true,
                 response_time,
                 error_message: None,
+                preset: vmix_data.preset,
             })
         }
         Err(_e) => None,
     }
 }
 
-async fn check_vmix_http_api(addr: SocketAddr) -> Result<()> {
+async fn check_vmix_http_api(addr: SocketAddr) -> Result<crate::types::VmixXml> {
     let host = addr.ip().to_string();
     let port = addr.port();
     
@@ -165,7 +167,7 @@ async fn check_vmix_http_api(addr: SocketAddr) -> Result<()> {
     
     // 短いタイムアウトでXMLを取得・パースできた場合のみ成功とみなす
     match tokio::time::timeout(Duration::from_secs(1), client.get_vmix_data()).await {
-        Ok(Ok(_xml)) => Ok(()),
+        Ok(Ok(xml)) => Ok(xml),
         Ok(Err(e)) => Err(anyhow::anyhow!("HTTP API XML error: {}", e)),
         Err(_) => Err(anyhow::anyhow!("HTTP API timeout")),
     }
