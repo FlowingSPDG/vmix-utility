@@ -86,23 +86,30 @@ impl TcpVmixManager {
                     duration: 3000, // 3 seconds in milliseconds
                 });
                 
-                // Send XML if auto-refresh is enabled
+                // Send XML if auto-refresh is enabled and enough time has passed since last send
                 if config.enabled {
-                    match xml_sender_client.send_command(SendCommand::XML) {
-                        Ok(_) => {
-                            let mut last_req = xml_last_request.lock().unwrap();
-                            *last_req = Instant::now();
-                            consecutive_failures = 0; // Reset failure counter on success
-                            app_log!(debug, "TCP: Sent XML command to {} (interval: {}ms)", xml_sender_host, config.duration);
-                        },
-                        Err(e) => {
-                            consecutive_failures += 1;
-                            app_log!(error, "Failed to send XML command to {} (attempt {}): {}", xml_sender_host, consecutive_failures, e);
-                            
-                            // Stop after 3 consecutive failures to avoid endless error spam
-                            if consecutive_failures >= 3 {
-                                app_log!(error, "Too many consecutive failures for {}, stopping XML sender task", xml_sender_host);
-                                break;
+                    let should_send = {
+                        let last_req = xml_last_request.lock().unwrap();
+                        last_req.elapsed() >= Duration::from_millis(config.duration)
+                    };
+                    
+                    if should_send {
+                        match xml_sender_client.send_command(SendCommand::XML) {
+                            Ok(_) => {
+                                let mut last_req = xml_last_request.lock().unwrap();
+                                *last_req = Instant::now();
+                                consecutive_failures = 0; // Reset failure counter on success
+                                app_log!(debug, "TCP: Sent XML command to {} (interval: {}ms)", xml_sender_host, config.duration);
+                            },
+                            Err(e) => {
+                                consecutive_failures += 1;
+                                app_log!(error, "Failed to send XML command to {} (attempt {}): {}", xml_sender_host, consecutive_failures, e);
+                                
+                                // Stop after 3 consecutive failures to avoid endless error spam
+                                if consecutive_failures >= 3 {
+                                    app_log!(error, "Too many consecutive failures for {}, stopping XML sender task", xml_sender_host);
+                                    break;
+                                }
                             }
                         }
                     }
