@@ -466,9 +466,9 @@ impl AppState {
 
                             // Schedule next refresh (shorter interval if reconnecting)
                             let refresh_interval = if new_connection.status == "Reconnecting" {
-                                Duration::from_secs(config.duration.min(2))
+                                Duration::from_millis(config.duration.min(2000)) // 2 seconds in milliseconds
                             } else {
-                                Duration::from_secs(config.duration)
+                                Duration::from_millis(config.duration)
                             };
                             next_refresh_times.insert(host, now + refresh_interval);
                         }

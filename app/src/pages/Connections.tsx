@@ -568,7 +568,7 @@ const Connections: React.FC = () => {
                   <TableCell>{connection.previewInput}</TableCell>
                   <TableCell>
                     {connection.status === 'Connected' && connection.connectionType === 'Http' && (() => {
-                      const config = autoRefreshConfigs[connection.host] || { enabled: true, duration: 3 };
+                      const config = autoRefreshConfigs[connection.host] || { enabled: true, duration: 3000 };
                       return (
                         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                           <Switch
@@ -582,7 +582,7 @@ const Connections: React.FC = () => {
                             size="small"
                           />
                           {config.enabled && (
-                            <FormControl size="small" sx={{ minWidth: 70 }}>
+                            <FormControl size="small" sx={{ minWidth: 90 }}>
                               <Select
                                 value={config.duration}
                                 onChange={async (e) => {
@@ -592,10 +592,13 @@ const Connections: React.FC = () => {
                                   });
                                 }}
                               >
-                                <MenuItem value={1}>1s</MenuItem>
-                                <MenuItem value={3}>3s</MenuItem>
-                                <MenuItem value={5}>5s</MenuItem>
-                                <MenuItem value={10}>10s</MenuItem>
+                                <MenuItem value={100}>100ms</MenuItem>
+                                <MenuItem value={300}>300ms</MenuItem>
+                                <MenuItem value={500}>500ms</MenuItem>
+                                <MenuItem value={1000}>1s</MenuItem>
+                                <MenuItem value={3000}>3s</MenuItem>
+                                <MenuItem value={5000}>5s</MenuItem>
+                                <MenuItem value={10000}>10s</MenuItem>
                               </Select>
                             </FormControl>
                           )}
@@ -603,7 +606,7 @@ const Connections: React.FC = () => {
                       );
                     })()}
                     {connection.status === 'Connected' && connection.connectionType === 'Tcp' && (() => {
-                      const config = autoRefreshConfigs[connection.host] || { enabled: true, duration: 3 };
+                      const config = autoRefreshConfigs[connection.host] || { enabled: true, duration: 3000 };
                       return (
                         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                           <Switch
@@ -617,7 +620,7 @@ const Connections: React.FC = () => {
                             size="small"
                           />
                           {config.enabled && (
-                            <FormControl size="small" sx={{ minWidth: 70 }}>
+                            <FormControl size="small" sx={{ minWidth: 90 }}>
                               <Select
                                 value={config.duration}
                                 onChange={async (e) => {
@@ -627,11 +630,13 @@ const Connections: React.FC = () => {
                                   });
                                 }}
                               >
-                                <MenuItem value={1}>1s</MenuItem>
-                                <MenuItem value={3}>3s</MenuItem>
-                                <MenuItem value={5}>5s</MenuItem>
-                                <MenuItem value={10}>10s</MenuItem>
-                                <MenuItem value={30}>30s</MenuItem>
+                                <MenuItem value={100}>100ms</MenuItem>
+                                <MenuItem value={300}>300ms</MenuItem>
+                                <MenuItem value={500}>500ms</MenuItem>
+                                <MenuItem value={1000}>1s</MenuItem>
+                                <MenuItem value={3000}>3s</MenuItem>
+                                <MenuItem value={5000}>5s</MenuItem>
+                                <MenuItem value={10000}>10s</MenuItem>
                               </Select>
                             </FormControl>
                           )}

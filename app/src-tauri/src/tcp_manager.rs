@@ -87,18 +87,18 @@ impl TcpVmixManager {
                 // Use config or default
                 let config = refresh_config.unwrap_or_else(|| crate::types::AutoRefreshConfig {
                     enabled: true,
-                    duration: 3,
+                    duration: 3000, // 3 seconds in milliseconds
                 });
                 
                 // Only send XML if auto-refresh is enabled and enough time has passed
-                if config.enabled && last_send_time.elapsed() >= Duration::from_secs(config.duration) {
+                if config.enabled && last_send_time.elapsed() >= Duration::from_millis(config.duration) {
                     match xml_sender_client.send_command(SendCommand::XML) {
                         Ok(_) => {
                             let mut last_req = xml_last_request.lock().unwrap();
                             *last_req = Instant::now();
                             last_send_time = Instant::now();
                             consecutive_failures = 0; // Reset failure counter on success
-                            app_log!(debug, "TCP: Sent XML command to {} (interval: {}s)", xml_sender_host, config.duration);
+                            app_log!(debug, "TCP: Sent XML command to {} (interval: {}ms)", xml_sender_host, config.duration);
                         },
                         Err(e) => {
                             consecutive_failures += 1;
