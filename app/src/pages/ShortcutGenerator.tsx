@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback, memo } from 'react';
+import { useState, useMemo, useCallback, memo, useRef, useEffect } from 'react';
 import { openUrl } from '@tauri-apps/plugin-opener';
 import { useVMixStatus } from '../hooks/useVMixStatus';
 import { useConnectionSelection } from '../hooks/useConnectionSelection';
@@ -355,8 +355,10 @@ const ShortcutGenerator = () => {
   
   // Highlighted input state
   const [lastClickedInputId, setLastClickedInputId] = useState<number | null>(null);
-  
-  
+
+  // List container ref and height state
+  const listContainerRef = useRef<HTMLDivElement>(null);
+  const [listHeight, setListHeight] = useState(600);
   
   // Shared function configuration
   const [sharedFunctionName, setSharedFunctionName] = useState('PreviewInput');
@@ -531,9 +533,40 @@ const ShortcutGenerator = () => {
     setLastClickedInputId(inputId);
   }, []);
 
+  // Calculate list height based on container size
+  useEffect(() => {
+    const updateListHeight = () => {
+      if (listContainerRef.current) {
+        const height = listContainerRef.current.clientHeight;
+        setListHeight(height);
+      }
+    };
+
+    updateListHeight();
+    window.addEventListener('resize', updateListHeight);
+    
+    // Use ResizeObserver for more accurate size tracking
+    const resizeObserver = new ResizeObserver(updateListHeight);
+    if (listContainerRef.current) {
+      resizeObserver.observe(listContainerRef.current);
+    }
+
+    return () => {
+      window.removeEventListener('resize', updateListHeight);
+      resizeObserver.disconnect();
+    };
+  }, [functionConfigExpanded, specialInputsExpanded]);
+
   return (
-    <Box sx={{ p: spacing.cardPadding * 3 }}>
-      <Paper sx={{ p: spacing.cardPadding, mb: spacing.spacing * 2 }}>
+    <Box sx={{ 
+      p: spacing.cardPadding * 3,
+      height: '100%',
+      display: 'flex',
+      flexDirection: 'column',
+      overflow: 'hidden',
+      boxSizing: 'border-box'
+    }}>
+      <Paper sx={{ p: spacing.cardPadding, mb: spacing.spacing * 2, flexShrink: 0 }}>
         {/* Connection and Filter Row */}
         <Box sx={{ display: 'flex', gap: spacing.spacing * 2, alignItems: 'flex-start', flexWrap: 'wrap', mb: spacing.spacing * 2 }}>
           <ConnectionSelector
@@ -580,7 +613,7 @@ const ShortcutGenerator = () => {
       </Paper>
 
       {connections.length === 0 ? (
-        <Paper sx={{ p: spacing.cardPadding * 2, textAlign: 'center' }}>
+        <Paper sx={{ p: spacing.cardPadding * 2, textAlign: 'center', flexShrink: 0 }}>
           <Typography variant="h6" color="textSecondary" gutterBottom>
             No vMix Connections Available
           </Typography>
@@ -591,7 +624,7 @@ const ShortcutGenerator = () => {
       ) : (
         <>
           {/* Shared Function Configuration */}
-          <Paper sx={{ p: spacing.cardPadding * 1.5, mb: spacing.spacing * 2 }}>
+          <Paper sx={{ p: spacing.cardPadding * 1.5, mb: spacing.spacing * 2, flexShrink: 0 }}>
             <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: spacing.spacing }}>
               <Typography variant={spacing.headerVariant} sx={{ fontSize: spacing.fontSize === '0.7rem' ? '0.9rem' : '1.1rem' }}>
                 Function Configuration
@@ -778,10 +811,10 @@ const ShortcutGenerator = () => {
             </Collapse>
           </Paper>
 
-          <Paper sx={{ width: '100%' }}>
+          <Paper sx={{ width: '100%', flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', minHeight: 0 }}>
             {/* Special Inputs Header */}
             {specialInputs.length > 0 && (
-              <Box sx={{ p: spacing.cardPadding * 1.5, display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid', borderColor: 'divider' }}>
+              <Box sx={{ p: spacing.cardPadding * 1.5, display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid', borderColor: 'divider', flexShrink: 0 }}>
                 <Typography variant="subtitle2" color="text.secondary">
                   Special Inputs (None/Preview/Program/Dynamic) ({specialInputs.length})
                 </Typography>
@@ -794,10 +827,10 @@ const ShortcutGenerator = () => {
               </Box>
             )}
             
-            <Box sx={{ height: '600px' }}>
+            <Box ref={listContainerRef} sx={{ flex: 1, minHeight: 0 }}>
               <List
                 width={"100%"}
-                height={600}
+                height={listHeight}
                 itemCount={filteredInputs.length}
                 itemSize={spacing.itemHeight + 46}
                 itemData={useMemo(() => ({

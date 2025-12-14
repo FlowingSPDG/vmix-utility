@@ -188,6 +188,11 @@ const Layout = () => {
           p: 3, 
           width: { sm: `calc(100% - ${desktopOpen ? drawerWidth : 0}px)` },
           marginTop: '64px',
+          height: 'calc(100vh - 64px)',
+          overflow: 'hidden',
+          display: 'flex',
+          flexDirection: 'column',
+          boxSizing: 'border-box'
         }}
       >
         {navItems[selectedIndex].component}
