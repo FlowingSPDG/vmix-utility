@@ -555,7 +555,7 @@ const ShortcutGenerator = () => {
       window.removeEventListener('resize', updateListHeight);
       resizeObserver.disconnect();
     };
-  }, [functionConfigExpanded, specialInputsExpanded]);
+  }, [functionConfigExpanded, specialInputsExpanded, connections.length]);
 
   return (
     <Box sx={{ 
