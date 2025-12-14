@@ -65,13 +65,9 @@ impl TcpVmixManager {
         let xml_sender_host = host.clone();
         let xml_configs = Arc::clone(&auto_refresh_configs);
         tokio::spawn(async move {
-            let mut interval = tokio::time::interval(Duration::from_secs(1)); // Check config every second
             let mut consecutive_failures = 0;
-            let mut last_send_time = Instant::now();
             
             while !xml_sender_shutdown.load(std::sync::atomic::Ordering::Relaxed) {
-                interval.tick().await;
-                
                 // Check if connection is still alive
                 if !xml_sender_client.is_connected() {
                     app_log!(warn, "TCP connection lost for {} during XML sending, stopping XML sender task", xml_sender_host);
@@ -90,13 +86,12 @@ impl TcpVmixManager {
                     duration: 3000, // 3 seconds in milliseconds
                 });
                 
-                // Only send XML if auto-refresh is enabled and enough time has passed
-                if config.enabled && last_send_time.elapsed() >= Duration::from_millis(config.duration) {
+                // Send XML if auto-refresh is enabled
+                if config.enabled {
                     match xml_sender_client.send_command(SendCommand::XML) {
                         Ok(_) => {
                             let mut last_req = xml_last_request.lock().unwrap();
                             *last_req = Instant::now();
-                            last_send_time = Instant::now();
                             consecutive_failures = 0; // Reset failure counter on success
                             app_log!(debug, "TCP: Sent XML command to {} (interval: {}ms)", xml_sender_host, config.duration);
                         },
@@ -112,6 +107,9 @@ impl TcpVmixManager {
                         }
                     }
                 }
+                
+                // Sleep for the configured refresh interval
+                tokio::time::sleep(Duration::from_millis(config.duration)).await;
             }
             app_log!(info, "XML sender task ended for {}", xml_sender_host);
         });

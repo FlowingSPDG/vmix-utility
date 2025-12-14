@@ -10,7 +10,7 @@ use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 use tokio::fs;
-use tokio::time::{interval, sleep};
+use tokio::time::sleep;
 use tauri::{Emitter, Manager};
 
 #[derive(Debug, Clone)]
@@ -238,13 +238,10 @@ impl AppState {
         let labels = Arc::clone(&self.connection_labels);
 
         tokio::spawn(async move {
-            let mut interval = interval(Duration::from_secs(1));
             let mut next_refresh_times: HashMap<String, Instant> = HashMap::new();
             let mut consecutive_failures: HashMap<String, u32> = HashMap::new();
 
             loop {
-                interval.tick().await;
-
                 let current_connections = {
                     let guard = http_connections.lock().unwrap();
                     guard.clone()
@@ -254,6 +251,13 @@ impl AppState {
                     let guard = configs.lock().unwrap();
                     guard.clone()
                 };
+
+                // Calculate minimum refresh interval from all enabled connections
+                let min_interval = current_configs.values()
+                    .filter(|config| config.enabled)
+                    .map(|config| config.duration)
+                    .min()
+                    .unwrap_or(3000); // Default to 3 seconds if no enabled configs
 
                 let now = Instant::now();
 
@@ -474,6 +478,9 @@ impl AppState {
                         }
                     }
                 }
+                
+                // Sleep for the minimum refresh interval before next check
+                sleep(Duration::from_millis(min_interval)).await;
             }
         });
     }
