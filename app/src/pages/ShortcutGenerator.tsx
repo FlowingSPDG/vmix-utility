@@ -22,7 +22,13 @@ import {
   FormControl,
   InputLabel,
   Select,
-  MenuItem
+  MenuItem,
+  Table,
+  TableBody,
+  TableCell,
+  TableContainer,
+  TableHead,
+  TableRow
 } from '@mui/material';
 import CodeIcon from '@mui/icons-material/Code';
 import PlayArrowIcon from '@mui/icons-material/PlayArrow';
@@ -324,7 +330,7 @@ const ShortcutGenerator = () => {
   const { uiDensity } = useUISettings();
   const spacing = getDensitySpacing(uiDensity);
   
-  // Process shortcuts data for autocomplete
+  // Process shortcuts data
   const shortcutsData: ShortcutData[] = Array.isArray(shortcuts) ? shortcuts : [];
   
   // Filter shortcuts based on search term
@@ -344,6 +350,69 @@ const ShortcutGenerator = () => {
   const vmixInputs = useMemo(() => {
     return selectedConnection ? (vmixStatusInputs[selectedConnection] || []) : [];
   }, [selectedConnection, vmixStatusInputs]);
+
+  // Get suggestions for parameter value based on parameter key
+  const getParameterValueSuggestions = useCallback((paramKey: string): Array<{ value: string; label: string }> => {
+    const key = paramKey.toLowerCase();
+    
+    // Input parameter - suggest vMix inputs (key, number, title)
+    if (key === 'input') {
+      const suggestions: Array<{ value: string; label: string }> = [];
+      vmixInputs.forEach(input => {
+        // Format: "Input N: INPUT_NAME"
+        const label = `Input ${input.number}: ${input.short_title || input.title}`;
+        suggestions.push({ value: input.key, label }); // UUID
+        suggestions.push({ value: input.number.toString(), label }); // Number
+        if (input.short_title && input.short_title !== input.title) {
+          suggestions.push({ value: input.short_title, label });
+        }
+        if (input.title !== input.short_title) {
+          suggestions.push({ value: input.title, label });
+        }
+      });
+      // Add special inputs
+      suggestions.push(
+        { value: '0', label: 'Input 0: Preview' },
+        { value: '-1', label: 'Input -1: Program' },
+        { value: 'Dynamic1', label: 'Dynamic1' },
+        { value: 'Dynamic2', label: 'Dynamic2' },
+        { value: 'Dynamic3', label: 'Dynamic3' },
+        { value: 'Dynamic4', label: 'Dynamic4' }
+      );
+      return suggestions;
+    }
+    
+    // Mix parameter - suggest mix numbers only
+    if (key === 'mix') {
+      const suggestions: Array<{ value: string; label: string }> = [];
+      for (let i = 1; i <= 4; i++) {
+        suggestions.push({ value: i.toString(), label: `Mix ${i}` });
+      }
+      return suggestions;
+    }
+    
+    // Duration parameter - suggest common durations (milliseconds)
+    if (key === 'duration') {
+      return [
+        { value: '500', label: '500ms' },
+        { value: '1000', label: '1000ms' },
+        { value: '1500', label: '1500ms' },
+        { value: '2000', label: '2000ms' },
+        { value: '3000', label: '3000ms' },
+        { value: '5000', label: '5000ms' },
+        { value: '10000', label: '10000ms' }
+      ];
+    }
+    
+    // No suggestions for other parameters
+    return [];
+  }, [vmixInputs]);
+
+  // Check if parameter value should be numeric
+  const isNumericParameter = useCallback((paramKey: string): boolean => {
+    const key = paramKey.toLowerCase();
+    return key === 'mix' || key === 'duration' || key.includes('volume') || key.includes('gain');
+  }, []);
   const [toast, setToast] = useState<{open: boolean, message: string, severity: 'success' | 'error' | 'info'}>(
     {open: false, message: '', severity: 'info'}
   );
@@ -458,11 +527,55 @@ const ShortcutGenerator = () => {
     ));
   }, []);
 
-
-
   const showToast = (message: string, severity: 'success' | 'error' | 'info' = 'success') => {
     setToast({open: true, message, severity});
   };
+
+  // Apply queries from scraper data
+  const handleApplyQueries = useCallback(() => {
+    if (!sharedFunctionName) {
+      showToast('Please select a function first', 'error');
+      return;
+    }
+
+    const selectedShortcut = shortcutsData.find(s => s.Name === sharedFunctionName);
+    if (!selectedShortcut) {
+      showToast('Function not found in scraper data', 'error');
+      return;
+    }
+
+    if (!selectedShortcut.Parameters || selectedShortcut.Parameters.length === 0) {
+      showToast('No parameters available for this function', 'info');
+      return;
+    }
+
+    // Get existing parameter keys
+    const existingKeys = new Set(sharedQueryParams.map(p => p.key));
+    
+    // Add new parameters that don't already exist
+    const newParams: QueryParam[] = [];
+    let nextId = sharedQueryParams.length > 0
+      ? Math.max(...sharedQueryParams.map(p => p.id)) + 1
+      : 1;
+
+    selectedShortcut.Parameters.forEach(paramKey => {
+      if (!existingKeys.has(paramKey)) {
+        newParams.push({
+          id: nextId++,
+          key: paramKey,
+          value: ''
+        });
+      }
+    });
+
+    if (newParams.length === 0) {
+      showToast('All parameters are already added', 'info');
+      return;
+    }
+
+    setSharedQueryParams(prev => [...prev, ...newParams]);
+    showToast(`Added ${newParams.length} parameter(s) from scraper data`, 'success');
+  }, [sharedFunctionName, shortcutsData, sharedQueryParams]);
 
   const handleCloseToast = () => {
     setToast(prev => ({...prev, open: false}));
@@ -638,8 +751,8 @@ const ShortcutGenerator = () => {
             </Box>
             
             <Collapse in={functionConfigExpanded}>
-            {/* Function Name with Autocomplete and Quick Functions in same row */}
-            <Box sx={{ mb: spacing.spacing * 1.5, display: 'flex', alignItems: 'flex-start', gap: spacing.spacing * 2, width: '100%' }}>
+            {/* Function Name with Apply queries button */}
+            <Box sx={{ mb: spacing.spacing, display: 'flex', alignItems: 'center', gap: spacing.spacing, flexWrap: 'wrap' }}>
               <Autocomplete
                 freeSolo
                 options={shortcutsData}
@@ -660,9 +773,8 @@ const ShortcutGenerator = () => {
                   <TextField
                     {...params}
                     label="Function Name"
-                    size={spacing.iconSize}
-                    sx={{ width: '250px', flexShrink: 0 }}
-                    helperText="Search functions or enter custom"
+                    size="small"
+                    sx={{ width: '220px', flexShrink: 0 }}
                   />
                 )}
                 renderOption={(props, option) => (
@@ -688,125 +800,304 @@ const ShortcutGenerator = () => {
                 }}
               />
               
-              {/* Quick Function Selection - same row with overflow handling */}
+              <Button
+                variant="outlined"
+                size="small"
+                onClick={handleApplyQueries}
+                disabled={!sharedFunctionName || !shortcutsData.find(s => s.Name === sharedFunctionName)?.Parameters}
+                sx={{ flexShrink: 0 }}
+              >
+                Apply queries
+              </Button>
+              
+              {/* Quick Function Selection - compact chips */}
               <Box sx={{ 
                 display: 'flex', 
                 alignItems: 'center', 
-                gap: spacing.spacing * 0.5, 
+                gap: spacing.spacing * 0.3, 
                 flex: 1, 
                 minWidth: 0,
-                overflow: 'hidden'
+                overflow: 'auto',
+                '&::-webkit-scrollbar': { height: '4px' },
+                scrollbarWidth: 'thin'
               }}>
-                <Typography variant="caption" color="text.secondary" sx={{ flexShrink: 0 }}>
-                  Quick:
-                </Typography>
-                <Box sx={{ 
-                  display: 'flex', 
-                  gap: spacing.spacing * 0.5, 
-                  overflow: 'hidden',
-                  '&::-webkit-scrollbar': { display: 'none' },
-                  scrollbarWidth: 'none'
-                }}>
-                  {['PreviewInput','Cut', 'Fade', 'Merge', 'Stinger1', 'Stinger2', 'OverlayInput1', 'OverlayInput2', 'OverlayInput3', 'OverlayInput4'].map((funcName) => (
-                    <Chip
-                      key={funcName}
-                      label={funcName}
-                      size={spacing.chipSize}
-                      onClick={() => setSharedFunctionName(funcName)}
-                      color={sharedFunctionName === funcName ? 'primary' : 'default'}
-                      variant={sharedFunctionName === funcName ? 'filled' : 'outlined'}
-                      sx={{ 
-                        fontSize: spacing.fontSize, 
-                        height: spacing.itemHeight,
-                        flexShrink: 0
-                      }}
-                    />
-                  ))}
-                </Box>
+                {['PreviewInput','Cut', 'Fade', 'Merge', 'Stinger1', 'Stinger2', 'OverlayInput1', 'OverlayInput2'].map((funcName) => (
+                  <Chip
+                    key={funcName}
+                    label={funcName}
+                    size="small"
+                    onClick={() => setSharedFunctionName(funcName)}
+                    color={sharedFunctionName === funcName ? 'primary' : 'default'}
+                    variant={sharedFunctionName === funcName ? 'filled' : 'outlined'}
+                    sx={{ flexShrink: 0 }}
+                  />
+                ))}
               </Box>
             </Box>
             
-            {/* Show selected function details - more compact */}
-            {sharedFunctionName && (() => {
-              const selectedShortcut = shortcutsData.find(s => s.Name === sharedFunctionName);
-              if (selectedShortcut) {
-                return (
-                  <Box sx={{ mb: spacing.spacing * 1.5, p: spacing.listItemPadding * 3, bgcolor: 'action.hover', borderRadius: 1 }}>
-                    <Typography variant="caption" color="text.secondary" sx={{ fontSize: spacing.fontSize }}>
-                      {selectedShortcut.Description}
-                      {selectedShortcut.Parameters && ` | Params: ${selectedShortcut.Parameters.join(', ')}`}
-                    </Typography>
-                  </Box>
-                );
-              }
-              return null;
-            })()}
-            
-            {/* Shared Query Parameters - more compact */}
-            {sharedQueryParams.length > 0 && (
-              <Box sx={{ mb: spacing.spacing }}>
-                <Typography variant="caption" color="text.secondary" gutterBottom>
-                  Additional Parameters:
+            {/* Query Parameters - Table format */}
+            <Box sx={{ mb: spacing.spacing }}>
+              <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: spacing.spacing * 0.5 }}>
+                <Typography variant="subtitle2" color="text.secondary">
+                  Query Parameters
                 </Typography>
-                {sharedQueryParams.map((param) => (
-                  <Box key={param.id} sx={{ display: 'flex', alignItems: 'center', mb: spacing.spacing * 0.5, gap: spacing.spacing }}>
-                    <TextField
-                      label="Key"
-                      value={param.key}
-                      onChange={(e) => handleSharedParamChange(param.id, e.target.value, param.value)}
-                      size={spacing.iconSize}
-                      sx={{ width: '120px' }}
-                    />
-                    <TextField
-                      label="Value"
-                      value={param.value}
-                      onChange={(e) => handleSharedParamChange(param.id, param.key, e.target.value)}
-                      size={spacing.iconSize}
-                      sx={{ width: '120px' }}
-                    />
-                    <IconButton
-                      size={spacing.iconSize}
-                      color="error"
-                      onClick={() => handleDeleteSharedParam(param.id)}
-                      sx={{ p: spacing.listItemPadding }}
-                    >
-                      <DeleteIcon fontSize={spacing.iconSize} />
-                    </IconButton>
-                  </Box>
-                ))}
+                {sharedQueryParams.length > 0 && (
+                  <Chip 
+                    label={`${sharedQueryParams.length} parameter${sharedQueryParams.length > 1 ? 's' : ''}`}
+                    size="small"
+                    variant="outlined"
+                  />
+                )}
               </Box>
-            )}
-            
-            {/* Add New Parameter - inline with proper sizing */}
-            <Box sx={{ display: 'flex', alignItems: 'flex-end', gap: spacing.spacing * 2, flexWrap: 'wrap' }}>
-              <TextField
-                label="Add Key"
-                value={newParamKey}
-                onChange={(e) => setNewParamKey(e.target.value)}
-                size={spacing.iconSize}
-                sx={{ width: '120px' }}
-              />
-              <TextField
-                label="Add Value"
-                value={newParamValue}
-                onChange={(e) => setNewParamValue(e.target.value)}
-                size={spacing.iconSize}
-                sx={{ width: '120px' }}
-              />
-              <Button
-                variant="outlined"
-                size={spacing.buttonSize}
-                startIcon={<AddIcon fontSize={spacing.iconSize} />}
-                onClick={handleAddSharedParam}
-                disabled={!newParamKey || !newParamValue}
-                sx={{ 
-                  height: '40px', // Match TextField height
-                  px: spacing.spacing * 2,
-                  minWidth: '80px'
-                }}
-              >
-                Add
-              </Button>
+              
+              {sharedQueryParams.length > 0 ? (
+                <TableContainer component={Paper} variant="outlined" sx={{ mb: spacing.spacing }}>
+                  <Table size="small">
+                    <TableHead>
+                      <TableRow>
+                        <TableCell sx={{ fontWeight: 600, width: '40%' }}>Key</TableCell>
+                        <TableCell sx={{ fontWeight: 600, width: '50%' }}>Value</TableCell>
+                        <TableCell sx={{ width: '10%', textAlign: 'center' }}>Action</TableCell>
+                      </TableRow>
+                    </TableHead>
+                    <TableBody>
+                      {sharedQueryParams.map((param) => (
+                        <TableRow key={param.id} hover>
+                          <TableCell sx={{ p: 1 }}>
+                            <TextField
+                              fullWidth
+                              value={param.key}
+                              onChange={(e) => handleSharedParamChange(param.id, e.target.value, param.value)}
+                              size="small"
+                              placeholder="Key"
+                              variant="outlined"
+                              sx={{ 
+                                '& .MuiOutlinedInput-root': {
+                                  fontSize: '0.875rem'
+                                }
+                              }}
+                            />
+                          </TableCell>
+                          <TableCell sx={{ p: 1 }}>
+                            {(() => {
+                              const suggestions = getParameterValueSuggestions(param.key);
+                              const isNumeric = isNumericParameter(param.key);
+                              
+                              if (suggestions.length > 0) {
+                                return (
+                                  <Autocomplete
+                                    freeSolo
+                                    options={suggestions}
+                                    getOptionLabel={(option) => {
+                                      if (typeof option === 'string') return option;
+                                      return option.label || option.value;
+                                    }}
+                                    value={suggestions.find(s => s.value === param.value) || param.value}
+                                    onInputChange={(_event, newValue) => {
+                                      handleSharedParamChange(param.id, param.key, newValue || '');
+                                    }}
+                                    onChange={(_event, newValue) => {
+                                      if (typeof newValue === 'string') {
+                                        handleSharedParamChange(param.id, param.key, newValue);
+                                      } else if (newValue) {
+                                        handleSharedParamChange(param.id, param.key, newValue.value);
+                                      }
+                                    }}
+                                    renderInput={(params) => (
+                                      <TextField
+                                        {...params}
+                                        size="small"
+                                        placeholder="Value"
+                                        variant="outlined"
+                                        type={isNumeric ? 'number' : 'text'}
+                                        sx={{ 
+                                          '& .MuiOutlinedInput-root': {
+                                            fontSize: '0.875rem'
+                                          }
+                                        }}
+                                      />
+                                    )}
+                                    renderOption={(props, option) => (
+                                      <Box component="li" {...props}>
+                                        <Typography variant="body2">
+                                          {typeof option === 'string' ? option : option.label}
+                                        </Typography>
+                                      </Box>
+                                    )}
+                                    sx={{ width: '100%' }}
+                                  />
+                                );
+                              }
+                              
+                              return (
+                                <TextField
+                                  fullWidth
+                                  value={param.value}
+                                  onChange={(e) => handleSharedParamChange(param.id, param.key, e.target.value)}
+                                  size="small"
+                                  placeholder="Value"
+                                  variant="outlined"
+                                  type={isNumeric ? 'number' : 'text'}
+                                  sx={{ 
+                                    '& .MuiOutlinedInput-root': {
+                                      fontSize: '0.875rem'
+                                    }
+                                  }}
+                                />
+                              );
+                            })()}
+                          </TableCell>
+                          <TableCell sx={{ p: 1, textAlign: 'center' }}>
+                            <IconButton
+                              size="small"
+                              color="error"
+                              onClick={() => handleDeleteSharedParam(param.id)}
+                              sx={{ p: 0.5 }}
+                            >
+                              <DeleteIcon fontSize="small" />
+                            </IconButton>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </TableContainer>
+              ) : (
+                <Paper 
+                  variant="outlined" 
+                  sx={{ 
+                    p: spacing.spacing * 2, 
+                    textAlign: 'center',
+                    bgcolor: 'action.hover',
+                    mb: spacing.spacing
+                  }}
+                >
+                  <Typography variant="body2" color="text.secondary">
+                    No parameters added. Use "Apply queries" or add manually below.
+                  </Typography>
+                </Paper>
+              )}
+              
+              {/* Add New Parameter */}
+              <TableContainer component={Paper} variant="outlined">
+                <Table size="small">
+                  <TableBody>
+                    <TableRow>
+                      <TableCell sx={{ p: 1, width: '40%' }}>
+                        <TextField
+                          fullWidth
+                          placeholder="Key"
+                          value={newParamKey}
+                          onChange={(e) => setNewParamKey(e.target.value)}
+                          size="small"
+                          variant="outlined"
+                          sx={{ 
+                            '& .MuiOutlinedInput-root': {
+                              fontSize: '0.875rem'
+                            }
+                          }}
+                          onKeyPress={(e) => {
+                            if (e.key === 'Enter' && newParamKey && newParamValue) {
+                              handleAddSharedParam();
+                            }
+                          }}
+                        />
+                      </TableCell>
+                      <TableCell sx={{ p: 1, width: '50%' }}>
+                        {(() => {
+                          const suggestions = getParameterValueSuggestions(newParamKey);
+                          const isNumeric = isNumericParameter(newParamKey);
+                          
+                          if (suggestions.length > 0) {
+                            return (
+                              <Autocomplete
+                                freeSolo
+                                options={suggestions}
+                                getOptionLabel={(option) => {
+                                  if (typeof option === 'string') return option;
+                                  return option.label || option.value;
+                                }}
+                                value={suggestions.find(s => s.value === newParamValue) || newParamValue}
+                                onInputChange={(_event, newValue) => {
+                                  setNewParamValue(newValue || '');
+                                }}
+                                onChange={(_event, newValue) => {
+                                  if (typeof newValue === 'string') {
+                                    setNewParamValue(newValue);
+                                  } else if (newValue) {
+                                    setNewParamValue(newValue.value);
+                                  }
+                                }}
+                                renderInput={(params) => (
+                                  <TextField
+                                    {...params}
+                                    placeholder="Value"
+                                    size="small"
+                                    variant="outlined"
+                                    type={isNumeric ? 'number' : 'text'}
+                                    sx={{ 
+                                      '& .MuiOutlinedInput-root': {
+                                        fontSize: '0.875rem'
+                                      }
+                                    }}
+                                    onKeyPress={(e) => {
+                                      if (e.key === 'Enter' && newParamKey && newParamValue) {
+                                        handleAddSharedParam();
+                                      }
+                                    }}
+                                  />
+                                )}
+                                renderOption={(props, option) => (
+                                  <Box component="li" {...props}>
+                                    <Typography variant="body2">
+                                      {typeof option === 'string' ? option : option.label}
+                                    </Typography>
+                                  </Box>
+                                )}
+                                sx={{ width: '100%' }}
+                              />
+                            );
+                          }
+                          
+                          return (
+                            <TextField
+                              fullWidth
+                              placeholder="Value"
+                              value={newParamValue}
+                              onChange={(e) => setNewParamValue(e.target.value)}
+                              size="small"
+                              variant="outlined"
+                              type={isNumeric ? 'number' : 'text'}
+                              sx={{ 
+                                '& .MuiOutlinedInput-root': {
+                                  fontSize: '0.875rem'
+                                }
+                              }}
+                              onKeyPress={(e) => {
+                                if (e.key === 'Enter' && newParamKey && newParamValue) {
+                                  handleAddSharedParam();
+                                }
+                              }}
+                            />
+                          );
+                        })()}
+                      </TableCell>
+                      <TableCell sx={{ p: 1, width: '10%', textAlign: 'center' }}>
+                        <Button
+                          variant="contained"
+                          size="small"
+                          startIcon={<AddIcon />}
+                          onClick={handleAddSharedParam}
+                          disabled={!newParamKey || !newParamValue}
+                          sx={{ flexShrink: 0 }}
+                        >
+                          Add
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  </TableBody>
+                </Table>
+              </TableContainer>
             </Box>
             </Collapse>
           </Paper>
