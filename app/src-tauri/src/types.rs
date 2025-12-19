@@ -57,18 +57,64 @@ impl Default for ConnectionType {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct AutoRefreshConfig {
     pub enabled: bool,
-    pub duration: u64, // seconds
+    pub duration: u64, // milliseconds
 }
 
 impl Default for AutoRefreshConfig {
     fn default() -> Self {
         Self {
             enabled: true,
-            duration: 3,
+            duration: 3000, // 3 seconds in milliseconds
         }
+    }
+}
+
+impl Serialize for AutoRefreshConfig {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        use serde::ser::SerializeStruct;
+        let mut state = serializer.serialize_struct("AutoRefreshConfig", 2)?;
+        state.serialize_field("enabled", &self.enabled)?;
+        state.serialize_field("duration", &self.duration)?;
+        state.end()
+    }
+}
+
+impl<'de> Deserialize<'de> for AutoRefreshConfig {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        #[derive(Deserialize)]
+        struct AutoRefreshConfigHelper {
+            enabled: bool,
+            duration: u64,
+        }
+        
+        let helper = AutoRefreshConfigHelper::deserialize(deserializer)?;
+        
+        // Migration: If duration is less than 100, assume it's in seconds (old format)
+        // and convert to milliseconds. Otherwise, assume it's already in milliseconds.
+        let duration_ms = if helper.duration < 100 {
+            // Old format: seconds -> milliseconds
+            helper.duration * 1000
+        } else {
+            // New format: already in milliseconds
+            helper.duration
+        };
+        
+        // Clamp to valid range: 100ms to 10000ms
+        let duration_ms = duration_ms.max(100).min(10000);
+        
+        Ok(AutoRefreshConfig {
+            enabled: helper.enabled,
+            duration: duration_ms,
+        })
     }
 }
 

@@ -20,10 +20,8 @@ import {
   DialogTitle,
   CircularProgress,
   Alert,
-  Chip,
   IconButton,
   MenuItem,
-  Switch,
   Select,
   FormControl,
   FormLabel,
@@ -34,7 +32,8 @@ import {
   Card,
   CardContent,
   DialogContentText,
-  Snackbar
+  Snackbar,
+  Switch
 } from '@mui/material';
 import AddIcon from '@mui/icons-material/Add';
 import DeleteIcon from '@mui/icons-material/Delete';
@@ -85,6 +84,15 @@ const Connections: React.FC = () => {
   // Background connection state
   const [backgroundConnections, setBackgroundConnections] = useState<Set<string>>(new Set());
   const [connectionNotifications, setConnectionNotifications] = useState<Array<{host: string, success: boolean, message: string}>>([]);
+
+  // Preset path display toggle
+  const [showFullPresetPaths, setShowFullPresetPaths] = useState(false);
+
+  // Helper function to get filename from path
+  const getFileName = (filePath: string | undefined): string => {
+    if (!filePath) return '-';
+    return filePath.split(/[\\\/]/).pop() || filePath;
+  };
 
   // Transform global connections to local format
   useEffect(() => {
@@ -442,21 +450,116 @@ const Connections: React.FC = () => {
         </Alert>
       )}
 
-      <TableContainer component={Paper}>
-        <Table>
+      {/* Preset path display toggle */}
+      <Box sx={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', mb: 1 }}>
+        <FormControlLabel
+          control={
+            <Switch
+              checked={showFullPresetPaths}
+              onChange={(e) => setShowFullPresetPaths(e.target.checked)}
+              size="small"
+            />
+          }
+          label="Show full paths"
+          labelPlacement="start"
+          sx={{ ml: 0, mr: 0 }}
+        />
+      </Box>
+
+      <TableContainer 
+        component={Paper}
+        sx={{
+          borderRadius: 2,
+          overflowX: 'auto',
+          overflowY: 'hidden',
+          boxShadow: (theme) => theme.palette.mode === 'dark' 
+            ? '0 2px 8px rgba(0, 0, 0, 0.3)' 
+            : '0 2px 8px rgba(0, 0, 0, 0.1)',
+        }}
+      >
+        <Table size="small" sx={{ minWidth: 1200 }}>
           <TableHead>
-            <TableRow>
-              <TableCell>Host</TableCell>
-              <TableCell>Port</TableCell>
-              <TableCell>Type</TableCell>
-              <TableCell>Status</TableCell>
-              <TableCell>Version</TableCell>
-              <TableCell>Edition</TableCell>
-              <TableCell>Preset</TableCell>
-              <TableCell>Active Input</TableCell>
-              <TableCell>Preview Input</TableCell>
-              <TableCell>Auto-Refresh</TableCell>
-              <TableCell align="right">Actions</TableCell>
+            <TableRow sx={{ 
+              backgroundColor: (theme) => theme.palette.mode === 'dark' 
+                ? 'rgba(255, 255, 255, 0.05)' 
+                : 'rgba(0, 0, 0, 0.02)',
+            }}>
+              <TableCell sx={{ 
+                fontSize: '0.75rem', 
+                py: 1.5, 
+                fontWeight: 600,
+                borderBottom: (theme) => `1px solid ${theme.palette.divider}`,
+              }}>Host</TableCell>
+              <TableCell sx={{ 
+                fontSize: '0.75rem', 
+                py: 1.5, 
+                width: '50px',
+                fontWeight: 600,
+                borderBottom: (theme) => `1px solid ${theme.palette.divider}`,
+              }}>Port</TableCell>
+              <TableCell sx={{ 
+                fontSize: '0.75rem', 
+                py: 1.5, 
+                width: '50px',
+                fontWeight: 600,
+                borderBottom: (theme) => `1px solid ${theme.palette.divider}`,
+              }}>Type</TableCell>
+              <TableCell sx={{ 
+                fontSize: '0.75rem', 
+                py: 1.5, 
+                width: '70px',
+                fontWeight: 600,
+                borderBottom: (theme) => `1px solid ${theme.palette.divider}`,
+              }}>Status</TableCell>
+              <TableCell sx={{ 
+                fontSize: '0.75rem', 
+                py: 1.5, 
+                width: '80px',
+                fontWeight: 600,
+                borderBottom: (theme) => `1px solid ${theme.palette.divider}`,
+              }}>Version</TableCell>
+              <TableCell sx={{ 
+                fontSize: '0.75rem', 
+                py: 1.5, 
+                width: '60px',
+                fontWeight: 600,
+                borderBottom: (theme) => `1px solid ${theme.palette.divider}`,
+              }}>Edition</TableCell>
+              <TableCell sx={{ 
+                fontSize: '0.75rem', 
+                py: 1.5, 
+                width: '80px',
+                fontWeight: 600,
+                borderBottom: (theme) => `1px solid ${theme.palette.divider}`,
+              }}>Preset</TableCell>
+              <TableCell sx={{ 
+                fontSize: '0.75rem', 
+                py: 1.5, 
+                width: '120px',
+                fontWeight: 600,
+                borderBottom: (theme) => `1px solid ${theme.palette.divider}`,
+              }}>Update Interval</TableCell>
+              <TableCell align="right" sx={{ 
+                fontSize: '0.75rem', 
+                py: 1.5, 
+                width: '50px',
+                fontWeight: 600,
+                borderBottom: (theme) => `1px solid ${theme.palette.divider}`,
+              }}>Active</TableCell>
+              <TableCell align="right" sx={{ 
+                fontSize: '0.75rem', 
+                py: 1.5, 
+                width: '50px',
+                fontWeight: 600,
+                borderBottom: (theme) => `1px solid ${theme.palette.divider}`,
+              }}>Preview</TableCell>
+              <TableCell align="right" sx={{ 
+                fontSize: '0.75rem', 
+                py: 1.5, 
+                width: '120px',
+                fontWeight: 600,
+                borderBottom: (theme) => `1px solid ${theme.palette.divider}`,
+              }}>Actions</TableCell>
             </TableRow>
           </TableHead>
           <TableBody>
@@ -473,7 +576,7 @@ const Connections: React.FC = () => {
               </TableRow>
             ) : connections.length === 0 && backgroundConnections.size === 0 ? (
               <TableRow>
-                <TableCell colSpan={11} align="center">
+                <TableCell colSpan={11} align="center" sx={{ py: 4 }}>
                   <Typography color="textSecondary">
                     No vMix connections. Add a connection to get started.
                   </Typography>
@@ -496,15 +599,54 @@ const Connections: React.FC = () => {
                   edition: 'Connecting...',
                   preset: undefined,
                 }))
-              ].map((connection) => (
-                <TableRow key={connection.id}>
-                  <TableCell>
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                      <Box>
-                        <Typography variant="body2" fontWeight="medium">
+              ].map((connection, index) => (
+                <TableRow 
+                  key={connection.id}
+                  sx={{
+                    '&:hover': {
+                      backgroundColor: (theme) => theme.palette.mode === 'dark' 
+                        ? 'rgba(255, 255, 255, 0.05)' 
+                        : 'rgba(0, 0, 0, 0.02)',
+                      transition: 'background-color 0.2s ease',
+                    },
+                    backgroundColor: (theme) => index % 2 === 0 
+                      ? 'transparent' 
+                      : theme.palette.mode === 'dark' 
+                        ? 'rgba(255, 255, 255, 0.02)' 
+                        : 'rgba(0, 0, 0, 0.01)',
+                    borderBottom: (theme) => `1px solid ${theme.palette.divider}`,
+                    '&:last-child td': {
+                      borderBottom: 'none',
+                    },
+                  }}
+                >
+                  <TableCell sx={{ 
+                    py: 1.5,
+                    borderBottom: 'none',
+                  }}>
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                      <Box sx={{ flex: 1, minWidth: 0 }}>
+                        <Typography 
+                          variant="body2" 
+                          fontWeight="medium" 
+                          sx={{ 
+                            fontSize: '0.875rem',
+                            lineHeight: 1.4,
+                            color: 'text.primary',
+                          }}
+                        >
                           {connection.host}
                         </Typography>
-                        <Typography variant="caption" color="textSecondary">
+                        <Typography 
+                          variant="caption" 
+                          color="textSecondary" 
+                          sx={{ 
+                            fontSize: '0.75rem',
+                            lineHeight: 1.3,
+                            display: 'block',
+                            mt: 0.25,
+                          }}
+                        >
                           {connection.label}
                         </Typography>
                       </Box>
@@ -512,174 +654,320 @@ const Connections: React.FC = () => {
                         size="small"
                         onClick={() => handleEditLabel(connection)}
                         title="Edit Label"
+                        sx={{ 
+                          padding: '4px',
+                          opacity: 0.7,
+                          '&:hover': {
+                            opacity: 1,
+                            backgroundColor: (theme) => theme.palette.mode === 'dark' 
+                              ? 'rgba(255, 255, 255, 0.1)' 
+                              : 'rgba(0, 0, 0, 0.05)',
+                          },
+                        }}
                       >
                         <EditIcon fontSize="small" />
                       </IconButton>
                     </Box>
                   </TableCell>
-                  <TableCell>
-                    <Typography variant="body2">{connection.port}</Typography>
+                  <TableCell sx={{ 
+                    py: 1.5,
+                    borderBottom: 'none',
+                  }}>
+                    <Typography 
+                      variant="body2" 
+                      sx={{ 
+                        fontSize: '0.875rem',
+                        color: 'text.primary',
+                      }}
+                    >
+                      {connection.port}
+                    </Typography>
                   </TableCell>
-                  <TableCell>
-                    <Chip 
-                      label={connection.connectionType === 'Tcp' ? 'TCP (Experimental)' : connection.connectionType}
-                      color={connection.connectionType === 'Tcp' ? 'primary' : 'default'}
-                      variant="outlined"
-                      size="small"
-                    />
+                  <TableCell sx={{ 
+                    py: 1.5,
+                    borderBottom: 'none',
+                  }}>
+                    <Typography 
+                      variant="body2" 
+                      sx={{ 
+                        fontSize: '0.75rem',
+                        color: connection.connectionType === 'Tcp' ? 'primary.main' : 'text.primary',
+                        fontWeight: 500,
+                      }}
+                    >
+                      {connection.connectionType === 'Tcp' ? 'TCP' : 'HTTP'}
+                    </Typography>
                   </TableCell>
-                  <TableCell>
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                  <TableCell sx={{ 
+                    py: 1.5,
+                    borderBottom: 'none',
+                  }}>
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
                       {backgroundConnections.has(connection.host) ? (
                         <>
-                          <Chip 
-                            label="Connecting..."
-                            color="warning"
-                            variant="outlined"
-                            size="small"
-                          />
-                          <CircularProgress size={16} />
+                          <Typography 
+                            variant="body2" 
+                            sx={{ 
+                              fontSize: '0.75rem',
+                              color: 'warning.main',
+                              fontWeight: 500,
+                            }}
+                          >
+                            Connecting
+                          </Typography>
+                          <CircularProgress size={12} thickness={4} />
                         </>
                       ) : (
                         <>
-                          <Chip 
-                            label={connection.status}
-                            color={connection.status === 'Connected' ? 'success' : connection.status === 'Reconnecting' ? 'warning' : 'error'}
-                            variant="outlined"
-                            size="small"
-                          />
+                          <Typography 
+                            variant="body2" 
+                            sx={{ 
+                              fontSize: '0.75rem',
+                              color: connection.status === 'Connected' 
+                                ? 'success.main' 
+                                : connection.status === 'Reconnecting' 
+                                  ? 'warning.main' 
+                                  : 'error.main',
+                              fontWeight: 500,
+                            }}
+                          >
+                            {connection.status === 'Reconnecting' ? 'Retrying' : connection.status}
+                          </Typography>
                           {connection.status === 'Reconnecting' && (
-                            <CircularProgress size={16} />
+                            <CircularProgress size={12} thickness={4} />
                           )}
                         </>
                       )}
                     </Box>
                   </TableCell>
-                  <TableCell>
-                    <Typography variant="body2">{connection.version}</Typography>
+                  <TableCell sx={{ 
+                    py: 1.5,
+                    borderBottom: 'none',
+                  }}>
+                    <Typography 
+                      variant="body2" 
+                      sx={{ 
+                        fontSize: '0.875rem',
+                        color: 'text.primary',
+                      }}
+                    >
+                      {connection.version}
+                    </Typography>
                   </TableCell>
-                  <TableCell>
-                    <Typography variant="body2">{connection.edition}</Typography>
+                  <TableCell sx={{ 
+                    py: 1.5,
+                    borderBottom: 'none',
+                  }}>
+                    <Typography 
+                      variant="body2" 
+                      sx={{ 
+                        fontSize: '0.75rem',
+                        color: 'text.primary',
+                        fontWeight: 500,
+                      }}
+                    >
+                      {connection.edition}
+                    </Typography>
                   </TableCell>
-                  <TableCell>
-                    <Typography variant="body2">{connection.preset || '-'}</Typography>
+                  <TableCell sx={{ 
+                    py: 1.5,
+                    borderBottom: 'none',
+                  }}>
+                    <Typography 
+                      variant="body2" 
+                      sx={{ 
+                        fontSize: '0.875rem',
+                        color: connection.preset ? 'text.primary' : 'text.secondary',
+                      }}
+                      title={connection.preset || undefined}
+                    >
+                      {connection.preset 
+                        ? (showFullPresetPaths ? connection.preset : getFileName(connection.preset))
+                        : '-'
+                      }
+                    </Typography>
                   </TableCell>
-                  <TableCell>{connection.activeInput}</TableCell>
-                  <TableCell>{connection.previewInput}</TableCell>
-                  <TableCell>
-                    {connection.status === 'Connected' && connection.connectionType === 'Http' && (() => {
-                      const config = autoRefreshConfigs[connection.host] || { enabled: true, duration: 3 };
+                  <TableCell sx={{ 
+                    py: 1.5,
+                    borderBottom: 'none',
+                  }}>
+                    {connection.status === 'Connected' && (() => {
+                      const config = autoRefreshConfigs[connection.host] || { enabled: true, duration: 3000 };
                       return (
-                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                          <Switch
-                            checked={config.enabled}
-                            onChange={async (e) => {
-                              await setAutoRefreshConfig(connection.host, {
-                                ...config,
-                                enabled: e.target.checked
-                              });
-                            }}
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                          <TextField
+                            type="number"
                             size="small"
-                          />
-                          {config.enabled && (
-                            <FormControl size="small" sx={{ minWidth: 70 }}>
-                              <Select
-                                value={config.duration}
-                                onChange={async (e) => {
-                                  await setAutoRefreshConfig(connection.host, {
-                                    ...config,
-                                    duration: Number(e.target.value)
-                                  });
-                                }}
-                              >
-                                <MenuItem value={1}>1s</MenuItem>
-                                <MenuItem value={3}>3s</MenuItem>
-                                <MenuItem value={5}>5s</MenuItem>
-                                <MenuItem value={10}>10s</MenuItem>
-                              </Select>
-                            </FormControl>
-                          )}
-                        </Box>
-                      );
-                    })()}
-                    {connection.status === 'Connected' && connection.connectionType === 'Tcp' && (() => {
-                      const config = autoRefreshConfigs[connection.host] || { enabled: true, duration: 3 };
-                      return (
-                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                          <Switch
-                            checked={config.enabled}
+                            value={config.duration}
                             onChange={async (e) => {
-                              await setAutoRefreshConfig(connection.host, {
-                                ...config,
-                                enabled: e.target.checked
-                              });
+                              const inputValue = Number(e.target.value);
+                              if (inputValue >= 100 && inputValue <= 10000) {
+                                await setAutoRefreshConfig(connection.host, {
+                                  ...config,
+                                  enabled: true,
+                                  duration: inputValue
+                                });
+                              }
                             }}
-                            size="small"
+                            onBlur={async (e) => {
+                              const inputValue = Number(e.target.value);
+                              if (inputValue < 100) {
+                                await setAutoRefreshConfig(connection.host, {
+                                  ...config,
+                                  enabled: true,
+                                  duration: 100
+                                });
+                              } else if (inputValue > 10000) {
+                                await setAutoRefreshConfig(connection.host, {
+                                  ...config,
+                                  enabled: true,
+                                  duration: 10000
+                                });
+                              }
+                            }}
+                            inputProps={{
+                              min: 100,
+                              max: 10000,
+                              step: 100,
+                              style: { 
+                                fontSize: '0.8125rem', 
+                                padding: '6px 8px',
+                                textAlign: 'right'
+                              }
+                            }}
+                            sx={{ 
+                              width: '70px',
+                              '& .MuiOutlinedInput-root': {
+                                height: '32px',
+                                '&:hover fieldset': {
+                                  borderColor: (theme) => theme.palette.primary.main,
+                                },
+                                '&.Mui-focused fieldset': {
+                                  borderColor: (theme) => theme.palette.primary.main,
+                                },
+                              }
+                            }}
                           />
-                          {config.enabled && (
-                            <FormControl size="small" sx={{ minWidth: 70 }}>
-                              <Select
-                                value={config.duration}
-                                onChange={async (e) => {
-                                  await setAutoRefreshConfig(connection.host, {
-                                    ...config,
-                                    duration: Number(e.target.value)
-                                  });
-                                }}
-                              >
-                                <MenuItem value={1}>1s</MenuItem>
-                                <MenuItem value={3}>3s</MenuItem>
-                                <MenuItem value={5}>5s</MenuItem>
-                                <MenuItem value={10}>10s</MenuItem>
-                                <MenuItem value={30}>30s</MenuItem>
-                              </Select>
-                            </FormControl>
-                          )}
-                          <Typography variant="caption" color="textSecondary" sx={{ ml: 1 }}>
-                            XML
+                          <Typography 
+                            variant="caption" 
+                            sx={{ 
+                              fontSize: '0.75rem', 
+                              color: 'text.secondary',
+                              fontWeight: 500,
+                            }}
+                          >
+                            ms
                           </Typography>
                         </Box>
                       );
                     })()}
-                    {connection.connectionType === 'Tcp' && connection.status !== 'Connected' && (
-                      <Typography variant="body2" color="textSecondary">
-                        TCP Auto-refresh (Disconnected)
-                      </Typography>
-                    )}
-                    {connection.connectionType === 'Http' && connection.status !== 'Connected' && (
-                      <Typography variant="body2" color="textSecondary">
-                        Auto-refresh (Disconnected)
+                    {connection.status !== 'Connected' && (
+                      <Typography 
+                        variant="body2" 
+                        color="textSecondary" 
+                        sx={{ 
+                          fontSize: '0.75rem',
+                          fontStyle: 'italic',
+                        }}
+                      >
+                        -
                       </Typography>
                     )}
                   </TableCell>
-                  <TableCell align="right">
+                  <TableCell 
+                    align="right" 
+                    sx={{ 
+                      py: 1.5,
+                      borderBottom: 'none',
+                    }}
+                  >
+                    <Typography 
+                      variant="body2" 
+                      sx={{ 
+                        fontSize: '0.875rem',
+                        fontWeight: 500,
+                        color: 'text.primary',
+                      }}
+                    >
+                      {connection.activeInput}
+                    </Typography>
+                  </TableCell>
+                  <TableCell 
+                    align="right" 
+                    sx={{ 
+                      py: 1.5,
+                      borderBottom: 'none',
+                    }}
+                  >
+                    <Typography 
+                      variant="body2" 
+                      sx={{ 
+                        fontSize: '0.875rem',
+                        fontWeight: 500,
+                        color: 'text.primary',
+                      }}
+                    >
+                      {connection.previewInput}
+                    </Typography>
+                  </TableCell>
+                  <TableCell 
+                    align="right" 
+                    sx={{ 
+                      py: 1.5,
+                      borderBottom: 'none',
+                    }}
+                  >
                     {backgroundConnections.has(connection.host) ? (
-                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                        <CircularProgress size={16} />
-                        <Typography variant="caption" color="textSecondary">
+                      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 0.75 }}>
+                        <CircularProgress size={16} thickness={4} />
+                        <Typography 
+                          variant="caption" 
+                          color="textSecondary" 
+                          sx={{ 
+                            fontSize: '0.75rem',
+                            fontWeight: 500,
+                          }}
+                        >
                           Connecting...
                         </Typography>
                       </Box>
                     ) : (
-                      <>
-                        {connection.status === 'Disconnected' ? (
+                      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 0.5 }}>
+                        {connection.status === 'Disconnected' && (
                           <IconButton
                             color="primary"
                             onClick={() => handleReconnect(connection)}
                             title="Reconnect"
+                            size="small"
+                            sx={{ 
+                              padding: '6px',
+                              '&:hover': {
+                                backgroundColor: (theme) => theme.palette.mode === 'dark' 
+                                  ? 'rgba(144, 202, 249, 0.1)' 
+                                  : 'rgba(25, 118, 210, 0.08)',
+                              },
+                            }}
                           >
-                            <ReconnectIcon />
+                            <ReconnectIcon fontSize="small" />
                           </IconButton>
-                        ) : (
-                          <></>
                         )}
                         <IconButton 
                           color="error" 
                           onClick={() => handleDelete(connection.id)}
+                          size="small"
+                          title="Delete"
+                          sx={{ 
+                            padding: '6px',
+                            '&:hover': {
+                              backgroundColor: (theme) => theme.palette.mode === 'dark' 
+                                ? 'rgba(244, 67, 54, 0.1)' 
+                                : 'rgba(244, 67, 54, 0.08)',
+                            },
+                          }}
                         >
-                          <DeleteIcon />
+                          <DeleteIcon fontSize="small" />
                         </IconButton>
-                      </>
+                      </Box>
                     )}
                   </TableCell>
                 </TableRow>

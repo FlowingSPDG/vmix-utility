@@ -10,7 +10,7 @@ use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 use tokio::fs;
-use tokio::time::{interval, sleep};
+use tokio::time::sleep;
 use tauri::{Emitter, Manager};
 
 #[derive(Debug, Clone)]
@@ -238,13 +238,10 @@ impl AppState {
         let labels = Arc::clone(&self.connection_labels);
 
         tokio::spawn(async move {
-            let mut interval = interval(Duration::from_secs(1));
             let mut next_refresh_times: HashMap<String, Instant> = HashMap::new();
             let mut consecutive_failures: HashMap<String, u32> = HashMap::new();
 
             loop {
-                interval.tick().await;
-
                 let current_connections = {
                     let guard = http_connections.lock().unwrap();
                     guard.clone()
@@ -254,6 +251,19 @@ impl AppState {
                     let guard = configs.lock().unwrap();
                     guard.clone()
                 };
+
+                // Create a set of HTTP connection hosts for filtering
+                let http_hosts: std::collections::HashSet<String> = current_connections
+                    .iter()
+                    .map(|vmix| vmix.host().to_string())
+                    .collect();
+
+                // Calculate minimum refresh interval from enabled HTTP connections only
+                let min_interval = current_configs.iter()
+                    .filter(|(host, config)| http_hosts.contains(*host) && config.enabled)
+                    .map(|(_, config)| config.duration)
+                    .min()
+                    .unwrap_or(3000); // Default to 3 seconds if no enabled configs
 
                 let now = Instant::now();
 
@@ -466,14 +476,17 @@ impl AppState {
 
                             // Schedule next refresh (shorter interval if reconnecting)
                             let refresh_interval = if new_connection.status == "Reconnecting" {
-                                Duration::from_secs(config.duration.min(2))
+                                Duration::from_millis(config.duration.min(2000)) // 2 seconds in milliseconds
                             } else {
-                                Duration::from_secs(config.duration)
+                                Duration::from_millis(config.duration)
                             };
                             next_refresh_times.insert(host, now + refresh_interval);
                         }
                     }
                 }
+                
+                // Sleep for the minimum refresh interval before next check
+                sleep(Duration::from_millis(min_interval)).await;
             }
         });
     }

@@ -65,13 +65,9 @@ impl TcpVmixManager {
         let xml_sender_host = host.clone();
         let xml_configs = Arc::clone(&auto_refresh_configs);
         tokio::spawn(async move {
-            let mut interval = tokio::time::interval(Duration::from_secs(1)); // Check config every second
             let mut consecutive_failures = 0;
-            let mut last_send_time = Instant::now();
             
             while !xml_sender_shutdown.load(std::sync::atomic::Ordering::Relaxed) {
-                interval.tick().await;
-                
                 // Check if connection is still alive
                 if !xml_sender_client.is_connected() {
                     app_log!(warn, "TCP connection lost for {} during XML sending, stopping XML sender task", xml_sender_host);
@@ -87,31 +83,40 @@ impl TcpVmixManager {
                 // Use config or default
                 let config = refresh_config.unwrap_or_else(|| crate::types::AutoRefreshConfig {
                     enabled: true,
-                    duration: 3,
+                    duration: 3000, // 3 seconds in milliseconds
                 });
                 
-                // Only send XML if auto-refresh is enabled and enough time has passed
-                if config.enabled && last_send_time.elapsed() >= Duration::from_secs(config.duration) {
-                    match xml_sender_client.send_command(SendCommand::XML) {
-                        Ok(_) => {
-                            let mut last_req = xml_last_request.lock().unwrap();
-                            *last_req = Instant::now();
-                            last_send_time = Instant::now();
-                            consecutive_failures = 0; // Reset failure counter on success
-                            app_log!(debug, "TCP: Sent XML command to {} (interval: {}s)", xml_sender_host, config.duration);
-                        },
-                        Err(e) => {
-                            consecutive_failures += 1;
-                            app_log!(error, "Failed to send XML command to {} (attempt {}): {}", xml_sender_host, consecutive_failures, e);
-                            
-                            // Stop after 3 consecutive failures to avoid endless error spam
-                            if consecutive_failures >= 3 {
-                                app_log!(error, "Too many consecutive failures for {}, stopping XML sender task", xml_sender_host);
-                                break;
+                // Send XML if auto-refresh is enabled and enough time has passed since last send
+                if config.enabled {
+                    let should_send = {
+                        let last_req = xml_last_request.lock().unwrap();
+                        last_req.elapsed() >= Duration::from_millis(config.duration)
+                    };
+                    
+                    if should_send {
+                        match xml_sender_client.send_command(SendCommand::XML) {
+                            Ok(_) => {
+                                let mut last_req = xml_last_request.lock().unwrap();
+                                *last_req = Instant::now();
+                                consecutive_failures = 0; // Reset failure counter on success
+                                app_log!(debug, "TCP: Sent XML command to {} (interval: {}ms)", xml_sender_host, config.duration);
+                            },
+                            Err(e) => {
+                                consecutive_failures += 1;
+                                app_log!(error, "Failed to send XML command to {} (attempt {}): {}", xml_sender_host, consecutive_failures, e);
+                                
+                                // Stop after 3 consecutive failures to avoid endless error spam
+                                if consecutive_failures >= 3 {
+                                    app_log!(error, "Too many consecutive failures for {}, stopping XML sender task", xml_sender_host);
+                                    break;
+                                }
                             }
                         }
                     }
                 }
+                
+                // Sleep for the configured refresh interval
+                tokio::time::sleep(Duration::from_millis(config.duration)).await;
             }
             app_log!(info, "XML sender task ended for {}", xml_sender_host);
         });
