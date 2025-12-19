@@ -252,10 +252,16 @@ impl AppState {
                     guard.clone()
                 };
 
-                // Calculate minimum refresh interval from all enabled connections
-                let min_interval = current_configs.values()
-                    .filter(|config| config.enabled)
-                    .map(|config| config.duration)
+                // Create a set of HTTP connection hosts for filtering
+                let http_hosts: std::collections::HashSet<String> = current_connections
+                    .iter()
+                    .map(|vmix| vmix.host().to_string())
+                    .collect();
+
+                // Calculate minimum refresh interval from enabled HTTP connections only
+                let min_interval = current_configs.iter()
+                    .filter(|(host, config)| http_hosts.contains(*host) && config.enabled)
+                    .map(|(_, config)| config.duration)
                     .min()
                     .unwrap_or(3000); // Default to 3 seconds if no enabled configs
 
