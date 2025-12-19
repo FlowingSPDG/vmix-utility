@@ -9,7 +9,7 @@ import {
   Button,
   Checkbox,
   FormControlLabel,
-  Slider,
+  TextField,
   Alert,
   Dialog,
   DialogActions,
@@ -24,6 +24,7 @@ const BlankGenerator = () => {
   const { getVMixInputs, sendVMixFunction } = useVMixStatus();
   const [transparent, setTransparent] = useState(false);
   const [count, setCount] = useState(1);
+  const [countError, setCountError] = useState(false);
   const [showConfirmDialog, setShowConfirmDialog] = useState(false);
   const [generating, setGenerating] = useState(false);
   
@@ -39,8 +40,21 @@ const BlankGenerator = () => {
     setTransparent(event.target.checked);
   };
 
-  const handleCountChange = (_event: Event, newValue: number | number[]) => {
-    setCount(newValue as number);
+  const handleCountChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const inputValue = event.target.value;
+    
+    if (inputValue === '') {
+      setCountError(true);
+      return;
+    }
+    
+    const value = parseInt(inputValue, 10);
+    if (!isNaN(value) && value >= 1 && value <= 50) {
+      setCount(value);
+      setCountError(false);
+    } else {
+      setCountError(true);
+    }
   };
 
   const handleGenerate = () => {
@@ -124,18 +138,21 @@ const BlankGenerator = () => {
         </Box>
         
         <Box sx={{ mb: 3 }}>
-          <Typography id="blank-count-slider" gutterBottom>
-            Number of Blanks to Generate: {count}
-          </Typography>
-          <Slider
+          <TextField
+            id="blank-count-input"
+            label="Number of Blanks to Generate"
+            type="number"
             value={count}
             onChange={handleCountChange}
-            aria-labelledby="blank-count-slider"
-            valueLabelDisplay="auto"
-            step={1}
-            marks
-            min={1}
-            max={10}
+            inputProps={{
+              min: 1,
+              max: 50,
+              step: 1
+            }}
+            error={countError}
+            helperText={countError ? "Please enter a number between 1 and 50" : "Enter a number between 1 and 50"}
+            fullWidth
+            variant="outlined"
           />
         </Box>
         
@@ -144,7 +161,7 @@ const BlankGenerator = () => {
           color="primary"
           size="large"
           onClick={handleGenerate}
-          disabled={selectedConnection === '' || generating}
+          disabled={selectedConnection === '' || generating || countError || count < 1 || count > 50}
           startIcon={generating ? <CircularProgress size={20} /> : null}
         >
           {generating ? 'Generating...' : 'Generate Blanks'}
