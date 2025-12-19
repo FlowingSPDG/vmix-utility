@@ -29,6 +29,7 @@ var OverrideShortcuts = []Shortcut{
 		Parameters: []string{
 			"Input",
 			"Mix",
+			"Duration",
 		},
 	},
 	{
@@ -36,6 +37,7 @@ var OverrideShortcuts = []Shortcut{
 		Description: "Merge",
 		Parameters: []string{
 			"Input",
+			"Duration",
 		},
 	},
 }
