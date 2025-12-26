@@ -131,16 +131,21 @@ const Connections: React.FC = () => {
     
     setConnections(newConnections);
     
-    // Eagerly load missing auto-refresh configs
-    vmixConnections.forEach(async (conn) => {
-      if (!autoRefreshConfigs[conn.host]) {
-        try {
-          await getConfigForHost(conn.host);
-        } catch (error) {
-          // Error already logged in getConfigForHost
-        }
-      }
-    });
+    // Eagerly load missing auto-refresh configs in parallel
+    const loadConfigs = async () => {
+      const configPromises = vmixConnections
+        .filter(conn => !autoRefreshConfigs[conn.host])
+        .map(conn => getConfigForHost(conn.host).catch(() => {
+          // Error already logged in getConfigForHost, just silently continue
+          console.debug(`Skipping config load for ${conn.host}`);
+        }));
+      
+      await Promise.all(configPromises);
+    };
+    
+    if (vmixConnections.length > 0) {
+      loadConfigs();
+    }
     
     // Mark initial loading as complete when we have connections or after a shorter timeout
     if (isInitialLoading && (!globalLoading || newConnections.length > 0)) {
@@ -875,16 +880,6 @@ const Connections: React.FC = () => {
                                   enabled: true,
                                   duration: 10000
                                 });
-                              }
-                            }}
-                            onFocus={async () => {
-                              // Ensure config is loaded when field is focused
-                              if (!autoRefreshConfigs[connection.host]) {
-                                try {
-                                  await getConfigForHost(connection.host);
-                                } catch (error) {
-                                  console.error('Failed to load config on focus:', error);
-                                }
                               }
                             }}
                             inputProps={{
