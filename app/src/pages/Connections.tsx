@@ -57,7 +57,7 @@ interface Connection {
 }
 
 const Connections: React.FC = () => {
-  const { connections: vmixConnections, loading: globalLoading, connectVMix, disconnectVMix, autoRefreshConfigs, setAutoRefreshConfig, refreshConnections } = useVMixStatus();
+  const { connections: vmixConnections, loading: globalLoading, connectVMix, disconnectVMix, autoRefreshConfigs, setAutoRefreshConfig, getAutoRefreshConfig, refreshConnections } = useVMixStatus();
   const [connections, setConnections] = useState<Connection[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [open, setOpen] = useState(false);
@@ -117,6 +117,26 @@ const Connections: React.FC = () => {
       setIsInitialLoading(false);
     }
   }, [vmixConnections, globalLoading, isInitialLoading]);
+
+  // Load auto-refresh configs for connections that don't have them yet
+  useEffect(() => {
+    const loadMissingConfigs = async () => {
+      for (const conn of vmixConnections) {
+        if (!autoRefreshConfigs[conn.host]) {
+          try {
+            const config = await getAutoRefreshConfig(conn.host);
+            await setAutoRefreshConfig(conn.host, config);
+          } catch (error) {
+            console.error(`Failed to load auto-refresh config for ${conn.host}:`, error);
+          }
+        }
+      }
+    };
+    
+    if (vmixConnections.length > 0) {
+      loadMissingConfigs();
+    }
+  }, [vmixConnections, autoRefreshConfigs, getAutoRefreshConfig, setAutoRefreshConfig]);
 
   // Auto-refresh connections when component mounts
   useEffect(() => {
@@ -792,6 +812,8 @@ const Connections: React.FC = () => {
                     borderBottom: 'none',
                   }}>
                     {connection.status === 'Connected' && (() => {
+                      // Get config from state, or use default if not loaded yet
+                      // The useEffect will load the actual config from backend
                       const config = autoRefreshConfigs[connection.host] || { enabled: true, duration: 3000 };
                       return (
                         <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
