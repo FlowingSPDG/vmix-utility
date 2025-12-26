@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useVMixStatus } from '../hooks/useVMixStatus';
 import { settingsService } from '../services/settingsService';
 import { NetworkScannerService, type NetworkInterface, type VmixScanResult } from '../services/networkScannerService';
@@ -94,7 +94,26 @@ const Connections: React.FC = () => {
     return filePath.split(/[\\\/]/).pop() || filePath;
   };
 
-  // Transform global connections to local format
+  // Helper function to get auto-refresh config with lazy loading
+  const getConfigForHost = useCallback(async (host: string) => {
+    // Return from cache if available
+    if (autoRefreshConfigs[host]) {
+      return autoRefreshConfigs[host];
+    }
+    
+    // Otherwise fetch and cache it
+    try {
+      const config = await getAutoRefreshConfig(host);
+      await setAutoRefreshConfig(host, config);
+      return config;
+    } catch (error) {
+      console.error(`Failed to load auto-refresh config for ${host}:`, error);
+      // Return backend default - this will be consistent with the backend's AutoRefreshConfig::default()
+      throw error;
+    }
+  }, [autoRefreshConfigs, getAutoRefreshConfig, setAutoRefreshConfig]);
+
+  // Transform global connections to local format and eagerly load configs
   useEffect(() => {
     const newConnections = vmixConnections.map((conn, index) => ({
       id: index + 1,
@@ -112,31 +131,22 @@ const Connections: React.FC = () => {
     
     setConnections(newConnections);
     
+    // Eagerly load missing auto-refresh configs
+    vmixConnections.forEach(async (conn) => {
+      if (!autoRefreshConfigs[conn.host]) {
+        try {
+          await getConfigForHost(conn.host);
+        } catch (error) {
+          // Error already logged in getConfigForHost
+        }
+      }
+    });
+    
     // Mark initial loading as complete when we have connections or after a shorter timeout
     if (isInitialLoading && (!globalLoading || newConnections.length > 0)) {
       setIsInitialLoading(false);
     }
-  }, [vmixConnections, globalLoading, isInitialLoading]);
-
-  // Load auto-refresh configs for connections that don't have them yet
-  useEffect(() => {
-    const loadMissingConfigs = async () => {
-      for (const conn of vmixConnections) {
-        if (!autoRefreshConfigs[conn.host]) {
-          try {
-            const config = await getAutoRefreshConfig(conn.host);
-            await setAutoRefreshConfig(conn.host, config);
-          } catch (error) {
-            console.error(`Failed to load auto-refresh config for ${conn.host}:`, error);
-          }
-        }
-      }
-    };
-    
-    if (vmixConnections.length > 0) {
-      loadMissingConfigs();
-    }
-  }, [vmixConnections, autoRefreshConfigs, getAutoRefreshConfig, setAutoRefreshConfig]);
+  }, [vmixConnections, globalLoading, isInitialLoading, autoRefreshConfigs, getConfigForHost]);
 
   // Auto-refresh connections when component mounts
   useEffect(() => {
@@ -812,9 +822,29 @@ const Connections: React.FC = () => {
                     borderBottom: 'none',
                   }}>
                     {connection.status === 'Connected' && (() => {
-                      // Get config from state, or use default if not loaded yet
-                      // The useEffect will load the actual config from backend
-                      const config = autoRefreshConfigs[connection.host] || { enabled: true, duration: 3000 };
+                      // Get config from state - load on focus if not available
+                      const config = autoRefreshConfigs[connection.host];
+                      
+                      if (!config) {
+                        // Show loading state and fetch config on mount
+                        return (
+                          <Typography 
+                            variant="body2" 
+                            color="textSecondary" 
+                            sx={{ fontSize: '0.75rem' }}
+                            onClick={async () => {
+                              try {
+                                await getConfigForHost(connection.host);
+                              } catch (error) {
+                                console.error('Failed to load config:', error);
+                              }
+                            }}
+                          >
+                            Loading...
+                          </Typography>
+                        );
+                      }
+                      
                       return (
                         <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
                           <TextField
@@ -845,6 +875,16 @@ const Connections: React.FC = () => {
                                   enabled: true,
                                   duration: 10000
                                 });
+                              }
+                            }}
+                            onFocus={async () => {
+                              // Ensure config is loaded when field is focused
+                              if (!autoRefreshConfigs[connection.host]) {
+                                try {
+                                  await getConfigForHost(connection.host);
+                                } catch (error) {
+                                  console.error('Failed to load config on focus:', error);
+                                }
                               }
                             }}
                             inputProps={{
