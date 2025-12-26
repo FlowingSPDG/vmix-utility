@@ -131,14 +131,14 @@ const Connections: React.FC = () => {
     
     setConnections(newConnections);
     
-    // Eagerly load missing auto-refresh configs in parallel
+    // Eagerly load auto-refresh configs in parallel
+    // getConfigForHost handles caching internally, so we don't need to filter here
     const loadConfigs = async () => {
-      const configPromises = vmixConnections
-        .filter(conn => !autoRefreshConfigs[conn.host])
-        .map(conn => getConfigForHost(conn.host).catch(() => {
-          // Error already logged in getConfigForHost, just silently continue
-          console.debug(`Skipping config load for ${conn.host}`);
-        }));
+      const configPromises = vmixConnections.map(conn => 
+        getConfigForHost(conn.host).catch(() => {
+          // Error already logged in getConfigForHost
+        })
+      );
       
       await Promise.all(configPromises);
     };
@@ -151,7 +151,7 @@ const Connections: React.FC = () => {
     if (isInitialLoading && (!globalLoading || newConnections.length > 0)) {
       setIsInitialLoading(false);
     }
-  }, [vmixConnections, globalLoading, isInitialLoading, autoRefreshConfigs, getConfigForHost]);
+  }, [vmixConnections, globalLoading, isInitialLoading, getConfigForHost]);
 
   // Auto-refresh connections when component mounts
   useEffect(() => {
