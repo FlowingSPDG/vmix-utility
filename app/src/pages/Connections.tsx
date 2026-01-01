@@ -791,7 +791,7 @@ const Connections: React.FC = () => {
                     py: 1.5,
                     borderBottom: 'none',
                   }}>
-                    {connection.status === 'Connected' && (() => {
+                    {(() => {
                       const config = autoRefreshConfigs[connection.host] || { enabled: true, duration: 3000 };
                       return (
                         <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
@@ -861,18 +861,6 @@ const Connections: React.FC = () => {
                         </Box>
                       );
                     })()}
-                    {connection.status !== 'Connected' && (
-                      <Typography 
-                        variant="body2" 
-                        color="textSecondary" 
-                        sx={{ 
-                          fontSize: '0.75rem',
-                          fontStyle: 'italic',
-                        }}
-                      >
-                        -
-                      </Typography>
-                    )}
                   </TableCell>
                   <TableCell 
                     align="right" 
