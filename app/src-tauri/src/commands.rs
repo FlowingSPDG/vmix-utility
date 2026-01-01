@@ -702,12 +702,17 @@ pub async fn get_vmix_statuses(state: State<'_, AppState>) -> Result<Vec<VmixCon
 
 #[tauri::command]
 pub async fn set_auto_refresh_config(
-    state: State<'_, AppState>, 
+    state: State<'_, AppState>,
+    app_handle: AppHandle,
     host: String, 
     config: AutoRefreshConfig
 ) -> Result<(), String> {
     state.auto_refresh_configs.lock().unwrap()
         .insert(host, config);
+    
+    // Automatically save settings after auto refresh config update
+    state.save_config(&app_handle).await?;
+    
     Ok(())
 }
 
