@@ -59,6 +59,7 @@ pub mod tcp_manager;
 pub mod state;
 pub mod commands;
 pub mod network_scanner;
+pub mod http_server;
 
 // Re-export commonly used types
 pub use state::AppState;
@@ -177,6 +178,20 @@ pub fn run() {
                 if let Err(e) = app_state.initialize(&app_handle).await {
                     println!("Failed to initialize app state: {}", e);
                 }
+                
+                // Start HTTP server if enabled in settings
+                let settings = {
+                    let app_settings = app_state.app_settings.lock().unwrap();
+                    app_settings.clone()
+                };
+                
+                if settings.enable_http_server {
+                    let server_manager = app_state.http_server_manager.clone();
+                    let mut manager = server_manager.lock().await;
+                    if let Err(e) = manager.start(settings.http_server_port, app_handle.clone()).await {
+                        app_log!(error, "Failed to start HTTP server on initialization: {}", e);
+                    }
+                }
             });
             
             // Start auto-refresh background task after initialization
@@ -221,7 +236,9 @@ pub fn run() {
             check_for_updates,
             install_update,
             get_network_interfaces_command,
-            scan_network_for_vmix_command
+            scan_network_for_vmix_command,
+            get_app_logs,
+            get_http_server_logs
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

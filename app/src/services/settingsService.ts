@@ -5,6 +5,8 @@ export interface AppSettings {
   default_vmix_port: number;
   theme: string;
   ui_density: string;
+  enable_http_server?: boolean;
+  http_server_port?: number;
 }
 
 export interface LoggingConfig {
@@ -15,6 +17,14 @@ export interface LoggingConfig {
 export interface AppInfo {
   version: string;
   [key: string]: any;
+}
+
+export interface LogEntry {
+  timestamp: string;
+  level: string;
+  message: string;
+  module?: string;
+  target?: string;
 }
 
 /**
@@ -41,6 +51,8 @@ export const settingsService = {
     defaultVMixPort: number;
     theme: string;
     uiDensity: string;
+    enableHttpServer?: boolean;
+    httpServerPort?: number;
   }): Promise<void> {
     try {
       await invoke('save_app_settings', {
@@ -49,6 +61,8 @@ export const settingsService = {
           default_vmix_port: settings.defaultVMixPort,
           theme: settings.theme,
           ui_density: settings.uiDensity,
+          enable_http_server: settings.enableHttpServer ?? false,
+          http_server_port: settings.httpServerPort ?? 3000,
         }
       });
     } catch (error) {
@@ -119,6 +133,38 @@ export const settingsService = {
       });
     } catch (error) {
       console.error('Failed to update connection label:', error);
+      throw error;
+    }
+  },
+
+  /**
+   * Get application logs
+   */
+  async getAppLogs(limit?: number, filter?: string, levelFilter?: string): Promise<LogEntry[]> {
+    try {
+      return await invoke<LogEntry[]>('get_app_logs', {
+        limit,
+        filter,
+        level_filter: levelFilter
+      });
+    } catch (error) {
+      console.error('Failed to get app logs:', error);
+      throw error;
+    }
+  },
+
+  /**
+   * Get HTTP server logs
+   */
+  async getHttpServerLogs(limit?: number, filter?: string, levelFilter?: string): Promise<LogEntry[]> {
+    try {
+      return await invoke<LogEntry[]>('get_http_server_logs', {
+        limit,
+        filter,
+        level_filter: levelFilter
+      });
+    } catch (error) {
+      console.error('Failed to get HTTP server logs:', error);
       throw error;
     }
   },

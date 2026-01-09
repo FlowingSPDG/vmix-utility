@@ -22,6 +22,7 @@ import {
   Snackbar,
   IconButton,
   CircularProgress,
+  TextField,
 } from '@mui/material';
 import FolderOpenIcon from '@mui/icons-material/FolderOpen';
 
@@ -37,6 +38,9 @@ const Settings = () => {
     logFilePath: '',
     // New UI settings
     uiDensity: 'comfortable' as 'compact' | 'comfortable' | 'spacious',
+    // HTTP Server settings
+    enableHttpServer: false,
+    httpServerPort: 3000,
   });
 
   const [appInfo, setAppInfo] = useState<{
@@ -144,6 +148,8 @@ const Settings = () => {
         defaultVMixPort: settings.defaultVMixPort,
         theme: settings.theme,
         uiDensity: settings.uiDensity,
+        enableHttpServer: settings.enableHttpServer,
+        httpServerPort: settings.httpServerPort,
       });
 
       // Save logging configuration to backend
@@ -172,6 +178,8 @@ const Settings = () => {
             defaultVMixPort: appSettings.default_vmix_port ?? 8088,
             theme: appSettings.theme as ThemeMode ?? 'Auto',
             uiDensity: appSettings.ui_density as any ?? 'comfortable',
+            enableHttpServer: appSettings.enable_http_server ?? false,
+            httpServerPort: appSettings.http_server_port ?? 3000,
           }));
         }
 
@@ -315,6 +323,49 @@ const Settings = () => {
               </Typography>
             </Box>
 
+          </Grid2>
+
+          <Grid2 size={12}>
+            <Typography variant="h6" gutterBottom>
+              HTTP Server Settings
+            </Typography>
+            <Divider sx={{ mb: 2 }} />
+            
+            <FormGroup>
+              <FormControlLabel
+                control={
+                  <Switch
+                    checked={settings.enableHttpServer}
+                    onChange={handleSwitchChange}
+                    name="enableHttpServer"
+                    color="primary"
+                  />
+                }
+                label="Enable HTTP Server Features"
+              />
+            </FormGroup>
+
+            {settings.enableHttpServer && (
+              <Box sx={{ mt: 2 }}>
+                <TextField
+                  fullWidth
+                  margin="normal"
+                  label="HTTP Server Port"
+                  name="httpServerPort"
+                  type="number"
+                  value={settings.httpServerPort}
+                  onChange={(e) => handleChange('httpServerPort', Number(e.target.value))}
+                  inputProps={{ min: 1024, max: 65535 }}
+                  helperText={`HTTP server will listen on port ${settings.httpServerPort}. Access at http://localhost:${settings.httpServerPort}`}
+                />
+              </Box>
+            )}
+
+            {!settings.enableHttpServer && (
+              <Alert severity="warning" sx={{ mt: 2 }}>
+                HTTP Server must be enabled to use web-based features (Multiview, Frame Seek, etc.)
+              </Alert>
+            )}
           </Grid2>
 
           <Grid2 size={12}>

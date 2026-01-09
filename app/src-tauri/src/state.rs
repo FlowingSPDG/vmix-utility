@@ -4,6 +4,7 @@ use crate::types::{
 };
 use crate::http_client::VmixClientWrapper;
 use crate::tcp_manager::TcpVmixManager;
+use crate::http_server::HttpServerManager;
 use crate::app_log;
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -32,6 +33,7 @@ pub struct AppState {
     pub connection_labels: Arc<Mutex<HashMap<String, String>>>,
     pub app_settings: Arc<Mutex<AppSettings>>,
     pub video_list_windows: Arc<Mutex<HashMap<String, VideoListWindow>>>,
+    pub http_server_manager: Arc<tokio::sync::Mutex<HttpServerManager>>,
 }
 
 impl AppState {
@@ -46,6 +48,7 @@ impl AppState {
             connection_labels: Arc::new(Mutex::new(HashMap::new())),
             app_settings: Arc::new(Mutex::new(AppSettings::default())),
             video_list_windows: Arc::new(Mutex::new(HashMap::new())),
+            http_server_manager: Arc::new(tokio::sync::Mutex::new(HttpServerManager::new())),
         }
     }
     
