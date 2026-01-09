@@ -24,6 +24,7 @@ import ViewListIcon from '@mui/icons-material/ViewList';
 import PlaylistPlayIcon from '@mui/icons-material/PlaylistPlay';
 import SettingsIcon from '@mui/icons-material/Settings';
 import CodeIcon from '@mui/icons-material/Code';
+import DescriptionIcon from '@mui/icons-material/Description';
 
 import Connections from '../pages/Connections';
 import ShortcutGenerator from '../pages/ShortcutGenerator';
@@ -32,6 +33,7 @@ import InputManager from '../pages/InputManager';
 import ListManager from '../pages/ListManager';
 import Settings from '../pages/Settings';
 import Developer from '../pages/Developer';
+import Logs from '../pages/Logs';
 
 const drawerWidth = 240;
 
@@ -87,6 +89,11 @@ const Layout = () => {
       text: 'Settings', 
       icon: <SettingsIcon />, 
       component: <Settings /> 
+    },
+    { 
+      text: 'Logs', 
+      icon: <DescriptionIcon />, 
+      component: <Logs /> 
     },
     { 
       text: 'Developer', 
