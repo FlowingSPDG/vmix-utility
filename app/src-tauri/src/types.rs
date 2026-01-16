@@ -202,6 +202,14 @@ pub struct AppSettings {
     pub theme: ThemeMode,
     #[serde(default)]
     pub ui_density: UIDensity,
+    #[serde(default)]
+    pub enable_http_server: bool,
+    #[serde(default = "default_http_server_port")]
+    pub http_server_port: u16,
+}
+
+fn default_http_server_port() -> u16 {
+    3000
 }
 
 impl Default for AppSettings {
@@ -211,6 +219,8 @@ impl Default for AppSettings {
             default_vmix_port: 8088,
             theme: ThemeMode::Auto,
             ui_density: UIDensity::default(),
+            enable_http_server: false,
+            http_server_port: 3000,
         }
     }
 }
@@ -221,6 +231,27 @@ pub struct LoggingConfig {
     pub level: String,
     pub save_to_file: bool,
     pub file_path: Option<PathBuf>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord)]
+pub struct LogEntry {
+    pub timestamp: String,
+    pub level: String,
+    pub message: String,
+    pub module: Option<String>,
+    pub target: Option<String>,
+}
+
+impl LogEntry {
+    pub fn new(level: String, message: String, module: Option<String>, target: Option<String>) -> Self {
+        Self {
+            timestamp: chrono::Local::now().to_rfc3339(),
+            level,
+            message,
+            module,
+            target,
+        }
+    }
 }
 
 impl Default for LoggingConfig {

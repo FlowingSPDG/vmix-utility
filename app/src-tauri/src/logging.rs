@@ -35,6 +35,25 @@ impl FileLogger {
             let _ = file.write_all(log_line.as_bytes());
         }
     }
+
+    pub fn log_structured(&self, entry: &crate::types::LogEntry) {
+        use crate::types::LogEntry;
+        // Write both JSON (for structured access) and plain text (for readability)
+        let json_line = serde_json::to_string(entry).unwrap_or_default();
+        let timestamp = Local::now().format("%Y-%m-%d %H:%M:%S%.3f");
+        let text_line = format!("[{}] {} - {}\n", timestamp, entry.level, entry.message);
+        
+        if let Ok(mut file) = OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(&self.file_path)
+        {
+            // Write JSON line
+            let _ = file.write_all(format!("JSON:{}\n", json_line).as_bytes());
+            // Write human-readable line
+            let _ = file.write_all(text_line.as_bytes());
+        }
+    }
 }
 
 // Initialize logging with file output
@@ -70,6 +89,7 @@ macro_rules! app_log {
             let config = $crate::logging::LOGGING_CONFIG.lock().unwrap();
             if config.enabled && $crate::logging::should_log_level(stringify!($level), &config.level) {
                 let message = format!($($arg)*);
+                let level_str = stringify!($level).to_uppercase();
                 
                 // Log to console
                 log::$level!("{}", message);
@@ -78,7 +98,14 @@ macro_rules! app_log {
                 if config.save_to_file {
                     if let Some(ref file_path) = config.file_path {
                         let logger = $crate::logging::FileLogger::new(file_path.clone());
-                        logger.log(stringify!($level), &message);
+                        // Create structured log entry
+                        let entry = $crate::types::LogEntry::new(
+                            level_str,
+                            message.clone(),
+                            module_path!().to_string().into(),
+                            None,
+                        );
+                        logger.log_structured(&entry);
                     }
                 }
             }

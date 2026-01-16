@@ -798,10 +798,40 @@ pub async fn save_app_settings(
 ) -> Result<(), String> {
     app_log!(info, "Saving app settings: {:?}", settings);
     
+    // Get old settings to check if HTTP server settings changed
+    let old_settings = {
+        let app_settings = state.app_settings.lock().unwrap();
+        app_settings.clone()
+    };
+    
     // Update app settings in state
     {
         let mut app_settings = state.app_settings.lock().unwrap();
-        *app_settings = settings;
+        *app_settings = settings.clone();
+    }
+    
+    // Check if HTTP server settings changed and update server accordingly
+    let http_server_changed = old_settings.enable_http_server != settings.enable_http_server
+        || old_settings.http_server_port != settings.http_server_port;
+    
+    if http_server_changed {
+        let server_manager = state.http_server_manager.clone();
+        
+        if settings.enable_http_server {
+            // Start HTTP server
+            let mut manager = server_manager.lock().await;
+            if let Err(e) = manager.start(settings.http_server_port, app_handle.clone()).await {
+                app_log!(error, "Failed to start HTTP server: {}", e);
+                // Revert settings change
+                let mut app_settings = state.app_settings.lock().unwrap();
+                *app_settings = old_settings;
+                return Err(format!("Failed to start HTTP server: {}", e));
+            }
+        } else {
+            // Stop HTTP server
+            let manager = server_manager.lock().await;
+            manager.stop().await;
+        }
     }
     
     // Save to config file
@@ -1313,4 +1343,124 @@ pub async fn scan_network_for_vmix_command(
             Err(format!("Failed to scan network for vMix: {}", e))
         }
     }
+}
+
+#[tauri::command]
+pub async fn get_app_logs(
+    _app_handle: AppHandle,
+    limit: Option<usize>,
+    filter: Option<String>,
+    level_filter: Option<String>,
+) -> Result<Vec<crate::types::LogEntry>, String> {
+    let file_path = {
+        let config = crate::logging::LOGGING_CONFIG.lock().unwrap();
+        config.file_path.clone()
+    };
+    
+    if let Some(ref file_path) = file_path {
+        if file_path.exists() {
+            let content = tokio::fs::read_to_string(file_path).await
+                .map_err(|e| format!("Failed to read log file: {}", e))?;
+            
+            let mut entries: Vec<crate::types::LogEntry> = Vec::new();
+            
+            // Parse log file - look for JSON lines first, then fall back to plain text
+            for line in content.lines() {
+                if line.starts_with("JSON:") {
+                    // Parse structured JSON log
+                    if let Some(json_str) = line.strip_prefix("JSON:") {
+                        if let Ok(entry) = serde_json::from_str::<crate::types::LogEntry>(json_str) {
+                            entries.push(entry);
+                            continue;
+                        }
+                    }
+                } else if line.starts_with('[') && line.contains(']') {
+                    // Parse plain text log format: [timestamp] LEVEL - message
+                    if let Some(bracket_end) = line.find(']') {
+                        let timestamp_part = &line[1..bracket_end];
+                        let rest = &line[bracket_end + 1..].trim();
+                        
+                        if let Some(level_end) = rest.find('-') {
+                            let level = rest[..level_end].trim().to_string();
+                            let message = rest[level_end + 1..].trim().to_string();
+                            
+                            // Try to parse timestamp, fallback to current time if fails
+                            let timestamp = if let Ok(dt) = chrono::DateTime::parse_from_rfc3339(timestamp_part) {
+                                dt.to_rfc3339()
+                            } else if let Ok(naive_dt) = chrono::NaiveDateTime::parse_from_str(timestamp_part, "%Y-%m-%d %H:%M:%S%.3f") {
+                                // For plain text logs, use the timestamp as-is in a simple format
+                                // We'll create an RFC3339-like string
+                                format!("{}Z", naive_dt.format("%Y-%m-%dT%H:%M:%S%.3f"))
+                            } else {
+                                chrono::Local::now().to_rfc3339()
+                            };
+                            
+                            entries.push(crate::types::LogEntry {
+                                timestamp,
+                                level,
+                                message,
+                                module: None,
+                                target: None,
+                            });
+                        }
+                    }
+                }
+            }
+            
+            // Apply level filter if provided
+            if let Some(ref level) = level_filter {
+                if !level.is_empty() && level != "all" {
+                    entries.retain(|e| e.level.to_lowercase() == level.to_lowercase());
+                }
+            }
+            
+            // Apply text filter if provided
+            if let Some(ref filter_str) = filter {
+                if !filter_str.is_empty() {
+                    entries.retain(|e| e.message.contains(filter_str) || 
+                        e.module.as_ref().map(|m| m.contains(filter_str)).unwrap_or(false));
+                }
+            }
+            
+            // Sort by timestamp (newest first by default)
+            entries.sort_by(|a, b| b.timestamp.cmp(&a.timestamp));
+            
+            // Apply limit
+            if let Some(limit_val) = limit {
+                entries.truncate(limit_val);
+            }
+            
+            Ok(entries)
+        } else {
+            Ok(Vec::new())
+        }
+    } else {
+        Ok(Vec::new())
+    }
+}
+
+#[tauri::command]
+pub async fn get_http_server_logs(
+    app_handle: AppHandle,
+    limit: Option<usize>,
+    filter: Option<String>,
+    level_filter: Option<String>,
+) -> Result<Vec<crate::types::LogEntry>, String> {
+    // HTTP server logs are currently mixed with app logs
+    // Filter by module/target to get HTTP server related logs
+    let mut entries = get_app_logs(app_handle, None, filter.clone(), level_filter).await?;
+    
+    // Filter for HTTP server related logs
+    entries.retain(|e| {
+        e.module.as_ref().map(|m| m.contains("http_server")).unwrap_or(false) ||
+        e.message.contains("HTTP server") ||
+        e.message.contains("http_server")
+    });
+    
+    // Apply limit after filtering
+    if let Some(limit_val) = limit {
+        entries.truncate(limit_val);
+    }
+    
+    Ok(entries)
 }
