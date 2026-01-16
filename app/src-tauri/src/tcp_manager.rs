@@ -31,7 +31,7 @@ impl TcpVmixManager {
             .next()
             .ok_or_else(|| anyhow::anyhow!("No socket address found for {}:{}", host, port))?;
         
-        let client = TcpVmixClient::new(socket_addr, Duration::from_secs(10)).await
+        let client = TcpVmixClient::new(socket_addr, Duration::from_secs(10))
             .map_err(|e| anyhow::anyhow!("Failed to connect TCP client: {}", e))?;
 
         // Send initial XML command to get current state and populate cache

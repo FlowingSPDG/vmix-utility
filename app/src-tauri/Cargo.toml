@@ -40,7 +40,7 @@ env_logger = "0.11"
 chrono = { version = "0.4", features = ["serde"] }
 once_cell = "1.19"
 urlencoding = "2.1"
-vmix_rs = { git = "https://github.com/FlowingSPDG/vmix-rs.git" }
+vmix-rs = { version = "0.2.1", features = ["full"] }
 network-interface = { version = "2.0.3", features = ["serde"] }
 
 [profile.dev]
