@@ -19,6 +19,16 @@ Download the latest version for your platform from [Releases](https://github.com
 - **macOS**: `.dmg` file (Intel and Apple Silicon)
 - **Linux**: `.AppImage` file
 
+### Features / 機能
+
+- **Connections** - Manage vMix connections / vMix接続を管理
+- **Shortcut Generator** - Create function shortcuts / Shortcut FunctionのURLを作成
+- **Blank Generator** - Generate blank/color inputs / Blank/Colours入力を生成
+- **Input Manager** - Browse and manage inputs / Inputを閲覧・管理
+- **List Manager** - Manage input lists / Input Listを管理
+- **Settings** - Configure application / 設定
+- **Developer** - Developer / 開発者について
+
 ### License / ライセンス
 
 MIT License - see [LICENSE](LICENSE) file for details.
