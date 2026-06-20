@@ -1,4 +1,4 @@
-import { lazy, Suspense, useMemo, useState, type LazyExoticComponent, type ComponentType, type ReactElement } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useMemo, useState, type LazyExoticComponent, type ComponentType, type ReactElement } from 'react';
 import { useTranslation } from 'react-i18next';
 import Box from '@mui/material/Box';
 import Drawer from '@mui/material/Drawer';
@@ -25,13 +25,23 @@ import PlaylistPlayIcon from '@mui/icons-material/PlaylistPlay';
 import SettingsIcon from '@mui/icons-material/Settings';
 import CodeIcon from '@mui/icons-material/Code';
 
-const Connections = lazy(() => import('../pages/Connections'));
-const ShortcutGenerator = lazy(() => import('../pages/ShortcutGenerator'));
-const BlankGenerator = lazy(() => import('../pages/BlankGenerator'));
-const InputManager = lazy(() => import('../pages/InputManager'));
-const ListManager = lazy(() => import('../pages/ListManager'));
-const Settings = lazy(() => import('../pages/Settings'));
-const Developer = lazy(() => import('../pages/Developer'));
+const pageModules = {
+  connections: () => import('../pages/Connections'),
+  shortcutGenerator: () => import('../pages/ShortcutGenerator'),
+  blankGenerator: () => import('../pages/BlankGenerator'),
+  inputManager: () => import('../pages/InputManager'),
+  listManager: () => import('../pages/ListManager'),
+  settings: () => import('../pages/Settings'),
+  developer: () => import('../pages/Developer'),
+} as const;
+
+const Connections = lazy(pageModules.connections);
+const ShortcutGenerator = lazy(pageModules.shortcutGenerator);
+const BlankGenerator = lazy(pageModules.blankGenerator);
+const InputManager = lazy(pageModules.inputManager);
+const ListManager = lazy(pageModules.listManager);
+const Settings = lazy(pageModules.settings);
+const Developer = lazy(pageModules.developer);
 
 const drawerWidth = 240;
 
@@ -39,6 +49,7 @@ interface NavItem {
   text: string;
   icon: ReactElement;
   Page: LazyExoticComponent<ComponentType>;
+  preload: () => Promise<unknown>;
 }
 
 const Layout = () => {
@@ -46,6 +57,7 @@ const Layout = () => {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [desktopOpen, setDesktopOpen] = useState(true);
   const [selectedIndex, setSelectedIndex] = useState(0);
+  const [visitedPages, setVisitedPages] = useState<Set<number>>(() => new Set([0]));
 
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
@@ -58,43 +70,71 @@ const Layout = () => {
     }
   };
 
+  const preloadPage = useCallback((preload: () => Promise<unknown>) => {
+    void preload();
+  }, []);
+
   const navItems: NavItem[] = useMemo(() => [
     {
       text: t('layout.nav.connections'),
       icon: <LinkIcon />,
       Page: Connections,
+      preload: pageModules.connections,
     },
     {
       text: t('layout.nav.shortcutGenerator'),
       icon: <ShortcutIcon />,
       Page: ShortcutGenerator,
+      preload: pageModules.shortcutGenerator,
     },
     {
       text: t('layout.nav.blankGenerator'),
       icon: <CreateIcon />,
       Page: BlankGenerator,
+      preload: pageModules.blankGenerator,
     },
     {
       text: t('layout.nav.inputManager'),
       icon: <ViewListIcon />,
       Page: InputManager,
+      preload: pageModules.inputManager,
     },
     {
       text: t('layout.nav.listManager'),
       icon: <PlaylistPlayIcon />,
       Page: ListManager,
+      preload: pageModules.listManager,
     },
     {
       text: t('layout.nav.settings'),
       icon: <SettingsIcon />,
       Page: Settings,
+      preload: pageModules.settings,
     },
     {
       text: t('layout.nav.about'),
       icon: <CodeIcon />,
       Page: Developer,
+      preload: pageModules.developer,
     },
   ], [t]);
+
+  useEffect(() => {
+    setVisitedPages(prev => {
+      if (prev.has(selectedIndex)) {
+        return prev;
+      }
+      const next = new Set(prev);
+      next.add(selectedIndex);
+      return next;
+    });
+  }, [selectedIndex]);
+
+  const pageFallback = (
+    <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: 200 }}>
+      <CircularProgress aria-label={t('app.loadingTheme')} />
+    </Box>
+  );
 
   const drawer = (
     <div>
@@ -115,6 +155,8 @@ const Layout = () => {
                   setMobileOpen(false);
                 }
               }}
+              onMouseEnter={() => preloadPage(item.preload)}
+              onFocus={() => preloadPage(item.preload)}
             >
               <ListItemIcon>
                 {item.icon}
@@ -126,8 +168,6 @@ const Layout = () => {
       </List>
     </div>
   );
-
-  const ActivePage = navItems[selectedIndex].Page;
 
   return (
     <Box sx={{ display: 'flex' }}>
@@ -192,19 +232,26 @@ const Layout = () => {
           width: { sm: `calc(100% - ${desktopOpen ? drawerWidth : 0}px)` },
           marginTop: '64px',
           height: 'calc(100vh - 64px)',
-          overflow: 'auto',
+          overflow: 'hidden',
           boxSizing: 'border-box'
         }}
       >
-        <Suspense
-          fallback={(
-            <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: 200 }}>
-              <CircularProgress aria-label={t('app.loadingTheme')} />
+        {navItems.map((item, index) => (
+          visitedPages.has(index) ? (
+            <Box
+              key={item.text}
+              sx={{
+                display: selectedIndex === index ? 'block' : 'none',
+                height: '100%',
+                overflow: 'auto',
+              }}
+            >
+              <Suspense fallback={pageFallback}>
+                <item.Page />
+              </Suspense>
             </Box>
-          )}
-        >
-          <ActivePage />
-        </Suspense>
+          ) : null
+        ))}
       </Box>
     </Box>
   );

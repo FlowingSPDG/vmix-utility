@@ -1,4 +1,4 @@
-import React, { useState, useEffect, createContext, useContext, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, createContext, useContext, useCallback, useMemo, useRef } from 'react';
 import { vmixService, type VmixConnection, type VmixInput, type VmixVideoListInput, type AutoRefreshConfig } from '../services/vmixService';
 
 // Types are now imported from vmixService
@@ -36,6 +36,8 @@ export const VMixStatusProvider = ({ children }: { children: React.ReactNode }) 
   
   // Track optimistically removed connections to ignore status updates temporarily
   const [optimisticallyRemovedHosts, setOptimisticallyRemovedHosts] = useState<Set<string>>(new Set());
+  const optimisticallyRemovedHostsRef = useRef(optimisticallyRemovedHosts);
+  optimisticallyRemovedHostsRef.current = optimisticallyRemovedHosts;
 
   const fetchInputsForHost = useCallback(async (host: string) => {
     try {
@@ -105,7 +107,7 @@ export const VMixStatusProvider = ({ children }: { children: React.ReactNode }) 
       const updatedConnection = event.payload;
       
       // Ignore status updates for optimistically removed hosts
-      if (optimisticallyRemovedHosts.has(updatedConnection.host)) {
+      if (optimisticallyRemovedHostsRef.current.has(updatedConnection.host)) {
         console.log(`Ignoring status update for optimistically removed host: ${updatedConnection.host}`);
         return;
       }
@@ -149,7 +151,7 @@ export const VMixStatusProvider = ({ children }: { children: React.ReactNode }) 
     return () => {
       unlistenStatus.then(f => f());
     };
-  }, [fetchInputsForHost, fetchVideoListsForHost, optimisticallyRemovedHosts]);
+  }, [fetchInputsForHost, fetchVideoListsForHost]);
 
   // Listen for connection removal events
   useEffect(() => {

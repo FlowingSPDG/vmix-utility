@@ -3,7 +3,6 @@ import { useTranslation } from 'react-i18next';
 import { useVMixStatus } from '../hooks/useVMixStatus';
 import { useConnectionSelection } from '../hooks/useConnectionSelection';
 import ConnectionSelector from '../components/ConnectionSelector';
-import Alert from '@mui/material/Alert';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import Checkbox from '@mui/material/Checkbox';
@@ -15,7 +14,7 @@ import DialogContentText from '@mui/material/DialogContentText';
 import DialogTitle from '@mui/material/DialogTitle';
 import FormControlLabel from '@mui/material/FormControlLabel';
 import Paper from '@mui/material/Paper';
-import Snackbar from '@mui/material/Snackbar';
+import { useToast, ToastSnackbar } from '../hooks/useToast';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
 
@@ -28,9 +27,7 @@ const BlankGenerator = () => {
   const [showConfirmDialog, setShowConfirmDialog] = useState(false);
   const [generating, setGenerating] = useState(false);
 
-  const [toastOpen, setToastOpen] = useState(false);
-  const [toastMessage, setToastMessage] = useState('');
-  const [toastSeverity, setToastSeverity] = useState<'success' | 'error'>('success');
+  const { toast, showToast, hideToast } = useToast(6000);
 
   const { selectedConnection, setSelectedConnection, connectedConnections } = useConnectionSelection();
 
@@ -82,14 +79,10 @@ const BlankGenerator = () => {
       await getVMixInputs(selectedConnection);
 
       const bg = transparent ? t('common.transparent') : t('common.black');
-      setToastMessage(t('blank.success', { count, plural: count !== 1 ? 's' : '', bg }));
-      setToastSeverity('success');
-      setToastOpen(true);
+      showToast(t('blank.success', { count, plural: count !== 1 ? 's' : '', bg }), 'success');
     } catch (error) {
       console.error('Failed to generate blanks:', error);
-      setToastMessage(t('blank.fail', { error: String(error) }));
-      setToastSeverity('error');
-      setToastOpen(true);
+      showToast(t('blank.fail', { error: String(error) }), 'error');
     } finally {
       setGenerating(false);
     }
@@ -97,10 +90,6 @@ const BlankGenerator = () => {
 
   const handleCancelGenerate = () => {
     setShowConfirmDialog(false);
-  };
-
-  const handleToastClose = () => {
-    setToastOpen(false);
   };
 
   const bgWord = transparent ? t('common.transparent') : t('common.black');
@@ -197,20 +186,7 @@ const BlankGenerator = () => {
         </DialogActions>
       </Dialog>
 
-      <Snackbar
-        open={toastOpen}
-        autoHideDuration={6000}
-        onClose={handleToastClose}
-        anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
-      >
-        <Alert
-          onClose={handleToastClose}
-          severity={toastSeverity}
-          sx={{ width: '100%' }}
-        >
-          {toastMessage}
-        </Alert>
-      </Snackbar>
+      <ToastSnackbar toast={toast} onClose={hideToast} variant="standard" />
     </Box>
   );
 };

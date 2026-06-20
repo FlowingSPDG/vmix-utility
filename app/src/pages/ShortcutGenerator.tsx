@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback, memo, useRef, useEffect, type ComponentType } from 'react';
+import { useState, useMemo, useCallback, memo, useRef, useEffect, useTransition, forwardRef, useImperativeHandle, type ComponentType } from 'react';
 import type { TFunction } from 'i18next';
 import { useTranslation } from 'react-i18next';
 import { openUrl } from '@tauri-apps/plugin-opener';
@@ -21,7 +21,7 @@ import InputLabel from '@mui/material/InputLabel';
 import MenuItem from '@mui/material/MenuItem';
 import Paper from '@mui/material/Paper';
 import Select from '@mui/material/Select';
-import Snackbar from '@mui/material/Snackbar';
+import { useToast, ToastSnackbar } from '../hooks/useToast';
 import Table from '@mui/material/Table';
 import TableBody from '@mui/material/TableBody';
 import TableCell from '@mui/material/TableCell';
@@ -71,7 +71,7 @@ interface ShortcutData {
 
 type VirtualizedInputItemData = {
   filteredInputs: Input[];
-  vmixInputs: VmixInput[];
+  vmixInputsByNumber: Map<number, VmixInput>;
   selectedConnection: string;
   showToast: (message: string, severity?: 'success' | 'error' | 'info') => void;
   onTryCommand: (input: Input) => void | Promise<void>;
@@ -86,12 +86,145 @@ const VirtualizedInputList = FixedSizeList as unknown as ComponentType<
   FixedSizeListProps<VirtualizedInputItemData>
 >;
 
+const FUNCTION_NAME_COMMIT_MS = 400;
+const MAX_SHORTCUT_SUGGESTIONS = 50;
+
+interface FunctionNameFieldHandle {
+  commitAndGet: () => string;
+}
+
+interface FunctionNameFieldProps {
+  value: string;
+  onChange: (name: string) => void;
+  shortcutsData: ShortcutData[];
+  label: string;
+  paramsLabel: string;
+}
+
+const FunctionNameField = memo(forwardRef<FunctionNameFieldHandle, FunctionNameFieldProps>(
+  function FunctionNameField({ value, onChange, shortcutsData, label, paramsLabel }, ref) {
+    const [draft, setDraft] = useState(value);
+    const draftRef = useRef(draft);
+    draftRef.current = draft;
+    const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+    useEffect(() => {
+      setDraft(value);
+    }, [value]);
+
+    const commit = useCallback((name: string) => {
+      if (debounceRef.current) {
+        clearTimeout(debounceRef.current);
+        debounceRef.current = null;
+      }
+      onChange(name);
+    }, [onChange]);
+
+    const scheduleCommit = useCallback((name: string) => {
+      if (debounceRef.current) {
+        clearTimeout(debounceRef.current);
+      }
+      debounceRef.current = setTimeout(() => {
+        debounceRef.current = null;
+        onChange(name);
+      }, FUNCTION_NAME_COMMIT_MS);
+    }, [onChange]);
+
+    useEffect(() => () => {
+      if (debounceRef.current) {
+        clearTimeout(debounceRef.current);
+      }
+    }, []);
+
+    useImperativeHandle(ref, () => ({
+      commitAndGet: () => {
+        const name = draftRef.current;
+        commit(name);
+        return name;
+      },
+    }), [commit]);
+
+    const filterOptions = useCallback((options: ShortcutData[], state: { inputValue: string }) => {
+      const term = state.inputValue.trim().toLowerCase();
+      if (!term) {
+        return [];
+      }
+
+      const results: ShortcutData[] = [];
+      for (const shortcut of options) {
+        if (shortcut.Name.toLowerCase().includes(term)) {
+          results.push(shortcut);
+          if (results.length >= MAX_SHORTCUT_SUGGESTIONS) {
+            break;
+          }
+        }
+      }
+      return results;
+    }, []);
+
+    return (
+      <Autocomplete
+        freeSolo
+        options={shortcutsData}
+        getOptionLabel={(option) => (typeof option === 'string' ? option : option.Name)}
+        inputValue={draft}
+        onInputChange={(_event, newInputValue, reason) => {
+          if (reason !== 'input' && reason !== 'clear') {
+            return;
+          }
+          setDraft(newInputValue);
+          scheduleCommit(newInputValue);
+        }}
+        onChange={(_event, newValue) => {
+          if (newValue && typeof newValue !== 'string') {
+            setDraft(newValue.Name);
+            commit(newValue.Name);
+          }
+        }}
+        filterOptions={filterOptions}
+        renderInput={(params) => (
+          <TextField
+            {...params}
+            label={label}
+            size="small"
+            sx={{ width: '220px', flexShrink: 0 }}
+            onBlur={() => {
+              if (draftRef.current !== value) {
+                commit(draftRef.current);
+              }
+            }}
+          />
+        )}
+        renderOption={(props, option) => (
+          <Box component="li" {...props}>
+            <Box>
+              <Typography variant="body2" fontWeight="bold">
+                {option.Name}
+              </Typography>
+              <Typography variant="caption" color="text.secondary">
+                {option.Description}
+              </Typography>
+              {option.Parameters ? (
+                <Typography variant="caption" color="text.secondary" display="block">
+                  {paramsLabel} {option.Parameters.join(', ')}
+                </Typography>
+              ) : null}
+            </Box>
+          </Box>
+        )}
+      />
+    );
+  }
+));
+
+FunctionNameField.displayName = 'FunctionNameField';
+
 // Virtualized row component for react-window
 const VirtualizedInputItem = memo((props: ListChildComponentProps<VirtualizedInputItemData>) => {
   const { index, style, data } = props;
-  const { filteredInputs, vmixInputs, selectedConnection, showToast, onTryCommand, lastClickedInputId, onInputClick, t } = data;
+  const { filteredInputs, vmixInputsByNumber, selectedConnection, showToast, onTryCommand, lastClickedInputId, onInputClick, spacing, t } = data;
   const input = filteredInputs[index];
-  const vmixInput = vmixInputs.find(vi => vi.number === input.number);
+  const vmixInput = vmixInputsByNumber.get(input.number);
   const isLastItem = index === filteredInputs.length - 1;
   const isSpecialInput = input.id < 0;
   const isHighlighted = lastClickedInputId === input.id;
@@ -171,12 +304,14 @@ const VirtualizedInputItem = memo((props: ListChildComponentProps<VirtualizedInp
     <div style={style as React.CSSProperties}>
       <Box 
         sx={{ 
-          p: 1, 
+          px: spacing.listItemPadding,
+          py: spacing.listItemPadding * 0.5,
           display: 'flex', 
           alignItems: 'center', 
-          gap: 1,
-          flexWrap: 'wrap',
-          minHeight: '50px',
+          gap: spacing.spacing,
+          flexWrap: 'nowrap',
+          minHeight: spacing.itemHeight,
+          boxSizing: 'border-box',
           bgcolor: isHighlighted ? 'action.selected' : 'transparent',
           cursor: 'pointer',
           transition: 'background-color 0.2s ease'
@@ -185,9 +320,10 @@ const VirtualizedInputItem = memo((props: ListChildComponentProps<VirtualizedInp
       >
         {/* Input Info */}
         <Box sx={{ 
-          minWidth: '160px', 
-          maxWidth: '220px', 
-          overflow: 'hidden'
+          minWidth: '140px', 
+          maxWidth: '200px', 
+          overflow: 'hidden',
+          flexShrink: 0,
         }}>
           <Typography 
             variant="body2" 
@@ -196,7 +332,8 @@ const VirtualizedInputItem = memo((props: ListChildComponentProps<VirtualizedInp
               overflow: 'hidden',
               textOverflow: 'ellipsis',
               whiteSpace: 'nowrap',
-              fontSize: '0.875rem'
+              fontSize: spacing.fontSize,
+              lineHeight: spacing.lineHeight,
             }}
             title={isSpecialInput ? input.title.replace(`${input.functionName} to `, '') : t('shortcut.inputLine', { num: input.number, name: vmixInput?.short_title || vmixInput?.title || t('shortcut.unknownInput') })}
           >
@@ -210,7 +347,8 @@ const VirtualizedInputItem = memo((props: ListChildComponentProps<VirtualizedInp
               textOverflow: 'ellipsis',
               whiteSpace: 'nowrap',
               display: 'block',
-              fontSize: '0.7rem'
+              fontSize: `calc(${spacing.fontSize} - 0.05rem)`,
+              lineHeight: spacing.lineHeight,
             }}
             title={`${input.functionName} | ${input.queryParams.map(p => `${p.key}=${p.value}`).join(', ')}`}
           >
@@ -223,35 +361,24 @@ const VirtualizedInputItem = memo((props: ListChildComponentProps<VirtualizedInp
           flex: 1, 
           minWidth: 0,
           display: 'flex',
-          gap: 1,
+          gap: spacing.spacing,
           alignItems: 'center'
         }}>
           {/* Generated URL */}
           <Box sx={{ 
             flex: 1, 
             minWidth: 0,
-            minHeight: '36px'
+            height: '100%',
           }}>
             <Box sx={{ display: 'flex', alignItems: 'center', bgcolor: 'action.hover', borderRadius: 1, height: '100%' }}>
               <Box 
                 sx={{ 
                   flex: 1, 
-                  p: 0.75,
-                  overflow: 'auto',
-                  maxHeight: '60px',
-                  '&::-webkit-scrollbar': {
-                    height: '4px',
-                  },
-                  '&::-webkit-scrollbar-track': {
-                    background: 'transparent',
-                  },
-                  '&::-webkit-scrollbar-thumb': {
-                    background: 'rgba(0,0,0,0.2)',
-                    borderRadius: '2px',
-                  },
-                  '&::-webkit-scrollbar-thumb:hover': {
-                    background: 'rgba(0,0,0,0.3)',
-                  }
+                  px: spacing.listItemPadding,
+                  py: 0,
+                  overflow: 'hidden',
+                  display: 'flex',
+                  alignItems: 'center',
                 }}
               >
                 <Typography 
@@ -259,46 +386,66 @@ const VirtualizedInputItem = memo((props: ListChildComponentProps<VirtualizedInp
                   variant="caption" 
                   sx={{ 
                     fontFamily: 'monospace', 
-                    fontSize: '0.7rem',
+                    fontSize: `calc(${spacing.fontSize} - 0.05rem)`,
                     whiteSpace: 'nowrap',
                     margin: 0,
-                    lineHeight: 1.2
+                    lineHeight: spacing.lineHeight,
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
                   }}
                 >
                   {generateUrl(input)}
                 </Typography>
               </Box>
               <IconButton
-                size="small"
+                size={spacing.iconSize}
                 onClick={(e) => handleCopyUrl(e)}
-                sx={{ p: 0.5, flexShrink: 0 }}
+                aria-label={t('shortcut.copyUrl')}
+                sx={{
+                  p: spacing.listItemPadding,
+                  flexShrink: 0,
+                  minWidth: spacing.itemHeight,
+                  minHeight: spacing.itemHeight,
+                }}
               >
-                <ContentCopyIcon fontSize="small" />
+                <ContentCopyIcon fontSize={spacing.iconSize} />
               </IconButton>
             </Box>
           </Box>
           
           {/* Action Buttons */}
-          <Box sx={{ flexShrink: 0 }}>
+          <Box sx={{ flexShrink: 0, ml: spacing.spacing }}>
             <ButtonGroup 
               variant="outlined" 
               size="small"
               sx={{ 
                 '& .MuiButton-root': { 
                   minWidth: 'auto', 
-                  px: 1
-                }
+                  px: 0.75,
+                  py: 0.25,
+                  minHeight: 26,
+                  fontSize: '0.6875rem',
+                  lineHeight: 1.2,
+                  textTransform: 'none',
+                  '& .MuiButton-startIcon': {
+                    marginRight: 0.375,
+                    marginLeft: -0.125,
+                    '& > *:nth-of-type(1)': {
+                      fontSize: '0.875rem',
+                    },
+                  },
+                },
               }}
             >
               <Button
-                startIcon={<CodeIcon fontSize="small" />}
+                startIcon={<CodeIcon />}
                 onClick={(e) => handleCopyScript(e)}
                 size="small"
               >
                 {t('shortcut.script')}
               </Button>
               <Button
-                startIcon={<OpenInBrowserIcon fontSize="small" />}
+                startIcon={<OpenInBrowserIcon />}
                 onClick={(e) => openTallyInBrowser(e, input)}
                 size="small"
                 disabled={isSpecialInput}
@@ -306,7 +453,7 @@ const VirtualizedInputItem = memo((props: ListChildComponentProps<VirtualizedInp
                 {t('shortcut.tally')}
               </Button>
               <Button
-                startIcon={<ContentCopyIcon fontSize="small" />}
+                startIcon={<ContentCopyIcon />}
                 onClick={(e) => handleCopyKey(e)}
                 size="small"
                 disabled={isSpecialInput}
@@ -314,7 +461,7 @@ const VirtualizedInputItem = memo((props: ListChildComponentProps<VirtualizedInp
                 {t('shortcut.keyBtn')}
               </Button>
               <Button
-                startIcon={<PlayArrowIcon fontSize="small" />}
+                startIcon={<PlayArrowIcon />}
                 color="primary"
                 onClick={(e) => handleTryCommand(e)}
                 size="small"
@@ -340,13 +487,7 @@ const ShortcutGenerator = () => {
   // Process shortcuts data
   const shortcutsData: ShortcutData[] = Array.isArray(shortcuts) ? shortcuts : [];
   
-  // Filter shortcuts based on search term
-  const getFilteredShortcuts = (searchTerm: string) => {
-    if (!searchTerm) return [];
-    return shortcutsData.filter(shortcut => 
-      shortcut.Name.toLowerCase().includes(searchTerm.toLowerCase())
-    );
-  };
+  const functionNameFieldRef = useRef<FunctionNameFieldHandle>(null);
   const { inputs: vmixStatusInputs, connections } = useVMixStatus();
   
   // Use optimized connection selection hook
@@ -357,6 +498,16 @@ const ShortcutGenerator = () => {
   const vmixInputs = useMemo(() => {
     return selectedConnection ? (vmixStatusInputs[selectedConnection] || []) : [];
   }, [selectedConnection, vmixStatusInputs]);
+
+  const vmixInputsByNumber = useMemo(() => {
+    const map = new Map<number, VmixInput>();
+    for (const input of vmixInputs) {
+      map.set(input.number, input);
+    }
+    return map;
+  }, [vmixInputs]);
+
+  const [, startTransition] = useTransition();
 
   // Get suggestions for parameter value based on parameter key
   const getParameterValueSuggestions = useCallback((paramKey: string): Array<{ value: string; label: string }> => {
@@ -421,9 +572,7 @@ const ShortcutGenerator = () => {
     const key = paramKey.toLowerCase();
     return key === 'mix' || key === 'duration' || key.includes('volume') || key.includes('gain');
   }, []);
-  const [toast, setToast] = useState<{open: boolean, message: string, severity: 'success' | 'error' | 'info'}>(
-    {open: false, message: '', severity: 'info'}
-  );
+  const { toast, showToast, hideToast } = useToast();
   const [inputTypeFilter, setInputTypeFilter] = useState<string>('All');
   
   // Collapse states
@@ -509,44 +658,43 @@ const ShortcutGenerator = () => {
 
   const handleAddSharedParam = useCallback(() => {
     if (newParamKey && newParamValue) {
-      const newId = sharedQueryParams.length > 0
-        ? Math.max(...sharedQueryParams.map(p => p.id)) + 1
-        : 1;
-      
-      setSharedQueryParams([
-        ...sharedQueryParams,
-        { id: newId, key: newParamKey, value: newParamValue }
-      ]);
-      
+      startTransition(() => {
+        setSharedQueryParams(prev => {
+          const newId = prev.length > 0 ? Math.max(...prev.map(p => p.id)) + 1 : 1;
+          return [...prev, { id: newId, key: newParamKey, value: newParamValue }];
+        });
+      });
+
       setNewParamKey('');
       setNewParamValue('');
     }
-  }, [newParamKey, newParamValue, sharedQueryParams]);
+  }, [newParamKey, newParamValue, startTransition]);
 
   const handleDeleteSharedParam = useCallback((paramId: number) => {
-    setSharedQueryParams(prev => prev.filter(param => param.id !== paramId));
-  }, []);
+    startTransition(() => {
+      setSharedQueryParams(prev => prev.filter(param => param.id !== paramId));
+    });
+  }, [startTransition]);
 
   const handleSharedParamChange = useCallback((paramId: number, key: string, value: string) => {
-    setSharedQueryParams(prev => prev.map(param => 
-      param.id === paramId 
-        ? { ...param, key, value }
-        : param
-    ));
-  }, []);
-
-  const showToast = (message: string, severity: 'success' | 'error' | 'info' = 'success') => {
-    setToast({open: true, message, severity});
-  };
+    startTransition(() => {
+      setSharedQueryParams(prev => prev.map(param =>
+        param.id === paramId
+          ? { ...param, key, value }
+          : param
+      ));
+    });
+  }, [startTransition]);
 
   // Apply queries from scraper data
   const handleApplyQueries = useCallback(() => {
-    if (!sharedFunctionName) {
+    const activeFunctionName = functionNameFieldRef.current?.commitAndGet() ?? sharedFunctionName;
+    if (!activeFunctionName) {
       showToast(t('shortcut.selectFunctionFirst'), 'error');
       return;
     }
 
-    const selectedShortcut = shortcutsData.find(s => s.Name === sharedFunctionName);
+    const selectedShortcut = shortcutsData.find(s => s.Name === activeFunctionName);
     if (!selectedShortcut) {
       showToast(t('shortcut.functionNotInScraper'), 'error');
       return;
@@ -567,6 +715,10 @@ const ShortcutGenerator = () => {
       : 1;
 
     selectedShortcut.Parameters.forEach(paramKey => {
+      // Input is auto-added per input row; skip when applying scraper params
+      if (paramKey.toLowerCase() === 'input') {
+        return;
+      }
       if (!existingKeys.has(paramKey)) {
         newParams.push({
           id: nextId++,
@@ -581,13 +733,11 @@ const ShortcutGenerator = () => {
       return;
     }
 
-    setSharedQueryParams(prev => [...prev, ...newParams]);
+    startTransition(() => {
+      setSharedQueryParams(prev => [...prev, ...newParams]);
+    });
     showToast(t('shortcut.addedParams', { count: newParams.length }), 'success');
-  }, [sharedFunctionName, shortcutsData, sharedQueryParams, t]);
-
-  const handleCloseToast = () => {
-    setToast(prev => ({...prev, open: false}));
-  };
+  }, [sharedFunctionName, shortcutsData, sharedQueryParams, t, startTransition, showToast]);
 
   // Get unique input types from vmixInputs - memoized for performance
   const availableInputTypes = useMemo(() => {
@@ -610,10 +760,21 @@ const ShortcutGenerator = () => {
       return regularInputs;
     }
     return regularInputs.filter(input => {
-      const vmixInput = vmixInputs.find(vi => vi.number === input.number);
+      const vmixInput = vmixInputsByNumber.get(input.number);
       return vmixInput?.input_type === effectiveInputTypeFilter;
     });
-  }, [regularInputs, effectiveInputTypeFilter, vmixInputs]);
+  }, [regularInputs, effectiveInputTypeFilter, vmixInputsByNumber]);
+
+  const inputTypeCounts = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const input of regularInputs) {
+      const type = vmixInputsByNumber.get(input.number)?.input_type;
+      if (type) {
+        counts.set(type, (counts.get(type) ?? 0) + 1);
+      }
+    }
+    return counts;
+  }, [regularInputs, vmixInputsByNumber]);
   
   // Combine inputs based on collapse states
   const filteredInputs = useMemo(() => {
@@ -704,15 +865,14 @@ const ShortcutGenerator = () => {
                 labelId="input-type-filter-label"
                 value={effectiveInputTypeFilter}
                 label={t('shortcut.filterInputType')}
-                onChange={(e) => setInputTypeFilter(e.target.value as string)}
+                onChange={(e) => {
+                  startTransition(() => setInputTypeFilter(e.target.value as string));
+                }}
                 size={spacing.iconSize}
               >
                 {availableInputTypes.map((type) => (
                   <MenuItem key={type} value={type}>
-                    {(type === 'All' ? t('common.all') : type)} {type === 'All' ? `(${regularInputs.length})` : `(${regularInputs.filter(input => {
-                      const vmixInput = vmixInputs.find(vi => vi.number === input.number);
-                      return vmixInput?.input_type === type;
-                    }).length})`}
+                    {(type === 'All' ? t('common.all') : type)} {type === 'All' ? `(${regularInputs.length})` : `(${inputTypeCounts.get(type) ?? 0})`}
                   </MenuItem>
                 ))}
               </Select>
@@ -752,7 +912,9 @@ const ShortcutGenerator = () => {
               </Typography>
               <IconButton
                 size={spacing.iconSize}
-                onClick={() => setFunctionConfigExpanded(!functionConfigExpanded)}
+                onClick={() => {
+                  startTransition(() => setFunctionConfigExpanded(prev => !prev));
+                }}
               >
                 {functionConfigExpanded ? <ExpandLessIcon /> : <ExpandMoreIcon />}
               </IconButton>
@@ -761,51 +923,13 @@ const ShortcutGenerator = () => {
             <Collapse in={functionConfigExpanded}>
             {/* Function Name with Apply queries button */}
             <Box sx={{ mb: spacing.spacing, display: 'flex', alignItems: 'center', gap: spacing.spacing, flexWrap: 'wrap' }}>
-              <Autocomplete
-                freeSolo
-                options={shortcutsData}
-                getOptionLabel={(option) => {
-                  if (typeof option === 'string') return option;
-                  return option.Name;
-                }}
-                inputValue={sharedFunctionName}
-                onInputChange={(_event, newInputValue) => {
-                  setSharedFunctionName(newInputValue);
-                }}
-                onChange={(_event, newValue) => {
-                  if (newValue && typeof newValue !== 'string') {
-                    setSharedFunctionName(newValue.Name);
-                  }
-                }}
-                renderInput={(params) => (
-                  <TextField
-                    {...params}
-                    label={t('shortcut.functionName')}
-                    size="small"
-                    sx={{ width: '220px', flexShrink: 0 }}
-                  />
-                )}
-                renderOption={(props, option) => (
-                  <Box component="li" {...props}>
-                    <Box>
-                      <Typography variant="body2" fontWeight="bold">
-                        {option.Name}
-                      </Typography>
-                      <Typography variant="caption" color="text.secondary">
-                        {option.Description}
-                      </Typography>
-                      {option.Parameters ? (
-                        <Typography variant="caption" color="text.secondary" display="block">
-                          {t('shortcut.paramsLabel')} {option.Parameters.join(', ')}
-                        </Typography>
-                      ) : null}
-                    </Box>
-                  </Box>
-                )}
-                filterOptions={(_options, { inputValue }) => {
-                  const filtered = getFilteredShortcuts(inputValue);
-                  return filtered
-                }}
+              <FunctionNameField
+                ref={functionNameFieldRef}
+                value={sharedFunctionName}
+                onChange={setSharedFunctionName}
+                shortcutsData={shortcutsData}
+                label={t('shortcut.functionName')}
+                paramsLabel={t('shortcut.paramsLabel')}
               />
               
               <Button
@@ -1161,7 +1285,9 @@ const ShortcutGenerator = () => {
                 </Typography>
                 <IconButton
                   size={spacing.iconSize}
-                  onClick={() => setSpecialInputsExpanded(!specialInputsExpanded)}
+                  onClick={() => {
+                    startTransition(() => setSpecialInputsExpanded(prev => !prev));
+                  }}
                 >
                   {specialInputsExpanded ? <ExpandLessIcon /> : <ExpandMoreIcon />}
                 </IconButton>
@@ -1173,10 +1299,10 @@ const ShortcutGenerator = () => {
                 width={"100%"}
                 height={listHeight}
                 itemCount={filteredInputs.length}
-                itemSize={spacing.itemHeight + 46}
+                itemSize={spacing.itemHeight + 8}
                 itemData={useMemo(() => ({
                   filteredInputs,
-                  vmixInputs,
+                  vmixInputsByNumber,
                   selectedConnection,
                   showToast,
                   onTryCommand: tryCommand,
@@ -1184,7 +1310,7 @@ const ShortcutGenerator = () => {
                   onInputClick: handleInputClick,
                   spacing,
                   t,
-                }), [filteredInputs, vmixInputs, selectedConnection, showToast, tryCommand, lastClickedInputId, handleInputClick, spacing, t])}
+                }), [filteredInputs, vmixInputsByNumber, selectedConnection, showToast, tryCommand, lastClickedInputId, handleInputClick, spacing, t])}
               >
                 {VirtualizedInputItem}
               </VirtualizedInputList>
@@ -1193,21 +1319,7 @@ const ShortcutGenerator = () => {
         </>
       )}
 
-      {/* Toast Notification */}
-      <Snackbar 
-        open={toast.open} 
-        autoHideDuration={3000} 
-        onClose={handleCloseToast}
-        anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
-      >
-        <Alert 
-          severity={toast.severity} 
-          sx={{ width: '100%' }}
-          variant="filled"
-        >
-          {toast.message}
-        </Alert>
-      </Snackbar>
+      <ToastSnackbar toast={toast} onClose={hideToast} />
     </Box>
   );
 };

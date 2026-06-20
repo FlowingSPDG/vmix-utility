@@ -14,10 +14,12 @@ jobs:
         include:
           - platform: 'macos-latest'
             args: '--target aarch64-apple-darwin'
+          - platform: 'macos-latest'
+            args: '--target x86_64-apple-darwin'
           - platform: 'ubuntu-22.04'
             args: ''
           - platform: 'windows-latest'
-            args: ''
+            args: '--target x86_64-pc-windows-msvc --bundles msi,nsis'
 
     runs-on: ${{ matrix.platform }}
     steps:

@@ -15,7 +15,7 @@ import DialogTitle from '@mui/material/DialogTitle';
 import IconButton from '@mui/material/IconButton';
 import Paper from '@mui/material/Paper';
 import Skeleton from '@mui/material/Skeleton';
-import Snackbar from '@mui/material/Snackbar';
+import { useToast, ToastSnackbar } from '../hooks/useToast';
 import Table from '@mui/material/Table';
 import TableBody from '@mui/material/TableBody';
 import TableCell from '@mui/material/TableCell';
@@ -53,12 +53,6 @@ interface InputRowProps {
   onDeleteClick: (key: string) => void;
   onTitleChange: (key: string, value: string) => void;
   onCopyKey: (key: string) => void;
-}
-
-interface ToastState {
-  open: boolean;
-  message: string;
-  severity: 'success' | 'error' | 'info';
 }
 
 
@@ -205,11 +199,11 @@ const InputRow = OptimizedInputRow;
 
 const InputManager = () => {
   const { t } = useTranslation();
-  const { connections, inputs: globalInputs, sendVMixFunction, getVMixInputs } = useVMixStatus();
+  const { connections, inputs: globalInputs, inputsLoading, sendVMixFunction, getVMixInputs } = useVMixStatus();
   const { uiDensity } = useUISettings();
   const spacing = getDensitySpacing(uiDensity);
   const [error, setError] = useState<string | null>(null);
-  const [toast, setToast] = useState<ToastState>({ open: false, message: '', severity: 'info' });
+  const { toast, showToast, hideToast } = useToast();
   
   // Single editing state to minimize re-renders
   const [editingData, setEditingData] = useState<{[key: string]: string}>({});
@@ -240,8 +234,12 @@ const InputManager = () => {
     return [];
   }, [selectedConnection, globalInputs]);
 
-  // Show loading only when we have a selected connection but no data yet
-  const isLoading = selectedConnection && !globalInputs[selectedConnection];
+  // Show skeleton only while inputs are actively being fetched
+  const isLoading = Boolean(
+    selectedConnection &&
+    !globalInputs[selectedConnection] &&
+    inputsLoading[selectedConnection] !== false
+  );
 
 
   const handleEditClick = useCallback((input: Input) => {
@@ -265,7 +263,7 @@ const InputManager = () => {
         // Refresh inputs to get latest XML data
         await getVMixInputs(selectedConnection);
 
-        setToast({ open: true, message: t('inputManager.toastTitleUpdated'), severity: 'success' });
+        showToast(t('inputManager.toastTitleUpdated'), 'success');
         
         // Remove from editing data
         setEditingData(currentEditingData => {
@@ -274,7 +272,7 @@ const InputManager = () => {
         });
       } catch (error) {
         console.error('Failed to update input title:', error);
-        setToast({ open: true, message: t('inputManager.toastTitleFailed'), severity: 'error' });
+        showToast(t('inputManager.toastTitleFailed'), 'error');
       } finally {
         setOperationLoading(prev => {
           const { [key]: _, ...rest } = prev;
@@ -315,11 +313,11 @@ const InputManager = () => {
         // Refresh inputs to get latest XML data
         await getVMixInputs(selectedConnection);
 
-        setToast({ open: true, message: t('inputManager.toastDeleted'), severity: 'success' });
+        showToast(t('inputManager.toastDeleted'), 'success');
       } catch (error) {
         console.error('Failed to delete input:', error);
         setError(t('inputManager.deleteFailedDetail', { error: String(error) }));
-        setToast({ open: true, message: t('inputManager.toastDeleteFailed'), severity: 'error' });
+        showToast(t('inputManager.toastDeleteFailed'), 'error');
       } finally {
         setOperationLoading(prev => {
           const { [`delete_${inputToDelete.key}`]: _, ...rest } = prev;
@@ -338,7 +336,7 @@ const InputManager = () => {
 
   const handleCopyKey = useCallback((key: string) => {
     navigator.clipboard.writeText(key);
-    setToast({ open: true, message: t('inputManager.toastKeyCopied'), severity: 'success' });
+    showToast(t('inputManager.toastKeyCopied'), 'success');
   }, [t]);
 
   const handleRequestSort = (property: OrderBy) => {
@@ -509,21 +507,7 @@ const InputManager = () => {
         </TableContainer>
       )}
       
-      {/* Toast Notification */}
-      <Snackbar 
-        open={toast.open} 
-        autoHideDuration={3000} 
-        onClose={() => setToast(prev => ({ ...prev, open: false }))}
-        anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
-      >
-        <Alert 
-          severity={toast.severity} 
-          sx={{ width: '100%' }}
-          variant="filled"
-        >
-          {toast.message}
-        </Alert>
-      </Snackbar>
+      <ToastSnackbar toast={toast} onClose={hideToast} />
       {connections.length > 0 ? (
         <Box sx={{ mt: 2, display: 'flex', justifyContent: 'flex-end' }}>
           <Button

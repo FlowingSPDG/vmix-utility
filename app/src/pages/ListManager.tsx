@@ -33,7 +33,7 @@ interface VmixVideoListInput {
 
 const ListManager: React.FC = () => {
   const { t } = useTranslation();
-  const { videoLists: contextVideoLists, getVMixVideoLists, selectVideoListItem, openVideoListWindow } = useVMixStatus();
+  const { videoLists: contextVideoLists, videoListsLoading, getVMixVideoLists, selectVideoListItem, openVideoListWindow } = useVMixStatus();
   const [_error, _setError] = useState<string | null>(null);
   const [expandedLists] = useState<Set<string>>(new Set());
 
@@ -49,7 +49,11 @@ const ListManager: React.FC = () => {
     [selectedHost, contextVideoLists]
   );
 
-  const isLoading = connectedConnections.length === 0 || (selectedHost && !contextVideoLists[selectedHost]);
+  const isLoading = Boolean(
+    selectedHost &&
+    !contextVideoLists[selectedHost] &&
+    videoListsLoading[selectedHost] !== false
+  );
 
   useEffect(() => {
     if (selectedHost && !contextVideoLists[selectedHost]) {
