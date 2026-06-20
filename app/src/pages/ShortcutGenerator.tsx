@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback, memo, useRef, useEffect, useTransition, type ComponentType } from 'react';
+import { useState, useMemo, useCallback, memo, useRef, useEffect, useTransition, forwardRef, useImperativeHandle, type ComponentType } from 'react';
 import type { TFunction } from 'i18next';
 import { useTranslation } from 'react-i18next';
 import { openUrl } from '@tauri-apps/plugin-opener';
@@ -85,6 +85,139 @@ type VirtualizedInputItemData = {
 const VirtualizedInputList = FixedSizeList as unknown as ComponentType<
   FixedSizeListProps<VirtualizedInputItemData>
 >;
+
+const FUNCTION_NAME_COMMIT_MS = 400;
+const MAX_SHORTCUT_SUGGESTIONS = 50;
+
+interface FunctionNameFieldHandle {
+  commitAndGet: () => string;
+}
+
+interface FunctionNameFieldProps {
+  value: string;
+  onChange: (name: string) => void;
+  shortcutsData: ShortcutData[];
+  label: string;
+  paramsLabel: string;
+}
+
+const FunctionNameField = memo(forwardRef<FunctionNameFieldHandle, FunctionNameFieldProps>(
+  function FunctionNameField({ value, onChange, shortcutsData, label, paramsLabel }, ref) {
+    const [draft, setDraft] = useState(value);
+    const draftRef = useRef(draft);
+    draftRef.current = draft;
+    const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+    useEffect(() => {
+      setDraft(value);
+    }, [value]);
+
+    const commit = useCallback((name: string) => {
+      if (debounceRef.current) {
+        clearTimeout(debounceRef.current);
+        debounceRef.current = null;
+      }
+      onChange(name);
+    }, [onChange]);
+
+    const scheduleCommit = useCallback((name: string) => {
+      if (debounceRef.current) {
+        clearTimeout(debounceRef.current);
+      }
+      debounceRef.current = setTimeout(() => {
+        debounceRef.current = null;
+        onChange(name);
+      }, FUNCTION_NAME_COMMIT_MS);
+    }, [onChange]);
+
+    useEffect(() => () => {
+      if (debounceRef.current) {
+        clearTimeout(debounceRef.current);
+      }
+    }, []);
+
+    useImperativeHandle(ref, () => ({
+      commitAndGet: () => {
+        const name = draftRef.current;
+        commit(name);
+        return name;
+      },
+    }), [commit]);
+
+    const filterOptions = useCallback((options: ShortcutData[], state: { inputValue: string }) => {
+      const term = state.inputValue.trim().toLowerCase();
+      if (!term) {
+        return [];
+      }
+
+      const results: ShortcutData[] = [];
+      for (const shortcut of options) {
+        if (shortcut.Name.toLowerCase().includes(term)) {
+          results.push(shortcut);
+          if (results.length >= MAX_SHORTCUT_SUGGESTIONS) {
+            break;
+          }
+        }
+      }
+      return results;
+    }, []);
+
+    return (
+      <Autocomplete
+        freeSolo
+        options={shortcutsData}
+        getOptionLabel={(option) => (typeof option === 'string' ? option : option.Name)}
+        inputValue={draft}
+        onInputChange={(_event, newInputValue, reason) => {
+          if (reason !== 'input' && reason !== 'clear') {
+            return;
+          }
+          setDraft(newInputValue);
+          scheduleCommit(newInputValue);
+        }}
+        onChange={(_event, newValue) => {
+          if (newValue && typeof newValue !== 'string') {
+            setDraft(newValue.Name);
+            commit(newValue.Name);
+          }
+        }}
+        filterOptions={filterOptions}
+        renderInput={(params) => (
+          <TextField
+            {...params}
+            label={label}
+            size="small"
+            sx={{ width: '220px', flexShrink: 0 }}
+            onBlur={() => {
+              if (draftRef.current !== value) {
+                commit(draftRef.current);
+              }
+            }}
+          />
+        )}
+        renderOption={(props, option) => (
+          <Box component="li" {...props}>
+            <Box>
+              <Typography variant="body2" fontWeight="bold">
+                {option.Name}
+              </Typography>
+              <Typography variant="caption" color="text.secondary">
+                {option.Description}
+              </Typography>
+              {option.Parameters ? (
+                <Typography variant="caption" color="text.secondary" display="block">
+                  {paramsLabel} {option.Parameters.join(', ')}
+                </Typography>
+              ) : null}
+            </Box>
+          </Box>
+        )}
+      />
+    );
+  }
+));
+
+FunctionNameField.displayName = 'FunctionNameField';
 
 // Virtualized row component for react-window
 const VirtualizedInputItem = memo((props: ListChildComponentProps<VirtualizedInputItemData>) => {
@@ -354,13 +487,7 @@ const ShortcutGenerator = () => {
   // Process shortcuts data
   const shortcutsData: ShortcutData[] = Array.isArray(shortcuts) ? shortcuts : [];
   
-  // Filter shortcuts based on search term
-  const getFilteredShortcuts = (searchTerm: string) => {
-    if (!searchTerm) return [];
-    return shortcutsData.filter(shortcut => 
-      shortcut.Name.toLowerCase().includes(searchTerm.toLowerCase())
-    );
-  };
+  const functionNameFieldRef = useRef<FunctionNameFieldHandle>(null);
   const { inputs: vmixStatusInputs, connections } = useVMixStatus();
   
   // Use optimized connection selection hook
@@ -561,12 +688,13 @@ const ShortcutGenerator = () => {
 
   // Apply queries from scraper data
   const handleApplyQueries = useCallback(() => {
-    if (!sharedFunctionName) {
+    const activeFunctionName = functionNameFieldRef.current?.commitAndGet() ?? sharedFunctionName;
+    if (!activeFunctionName) {
       showToast(t('shortcut.selectFunctionFirst'), 'error');
       return;
     }
 
-    const selectedShortcut = shortcutsData.find(s => s.Name === sharedFunctionName);
+    const selectedShortcut = shortcutsData.find(s => s.Name === activeFunctionName);
     if (!selectedShortcut) {
       showToast(t('shortcut.functionNotInScraper'), 'error');
       return;
@@ -795,51 +923,13 @@ const ShortcutGenerator = () => {
             <Collapse in={functionConfigExpanded}>
             {/* Function Name with Apply queries button */}
             <Box sx={{ mb: spacing.spacing, display: 'flex', alignItems: 'center', gap: spacing.spacing, flexWrap: 'wrap' }}>
-              <Autocomplete
-                freeSolo
-                options={shortcutsData}
-                getOptionLabel={(option) => {
-                  if (typeof option === 'string') return option;
-                  return option.Name;
-                }}
-                inputValue={sharedFunctionName}
-                onInputChange={(_event, newInputValue) => {
-                  startTransition(() => setSharedFunctionName(newInputValue));
-                }}
-                onChange={(_event, newValue) => {
-                  if (newValue && typeof newValue !== 'string') {
-                    startTransition(() => setSharedFunctionName(newValue.Name));
-                  }
-                }}
-                renderInput={(params) => (
-                  <TextField
-                    {...params}
-                    label={t('shortcut.functionName')}
-                    size="small"
-                    sx={{ width: '220px', flexShrink: 0 }}
-                  />
-                )}
-                renderOption={(props, option) => (
-                  <Box component="li" {...props}>
-                    <Box>
-                      <Typography variant="body2" fontWeight="bold">
-                        {option.Name}
-                      </Typography>
-                      <Typography variant="caption" color="text.secondary">
-                        {option.Description}
-                      </Typography>
-                      {option.Parameters ? (
-                        <Typography variant="caption" color="text.secondary" display="block">
-                          {t('shortcut.paramsLabel')} {option.Parameters.join(', ')}
-                        </Typography>
-                      ) : null}
-                    </Box>
-                  </Box>
-                )}
-                filterOptions={(_options, { inputValue }) => {
-                  const filtered = getFilteredShortcuts(inputValue);
-                  return filtered
-                }}
+              <FunctionNameField
+                ref={functionNameFieldRef}
+                value={sharedFunctionName}
+                onChange={setSharedFunctionName}
+                shortcutsData={shortcutsData}
+                label={t('shortcut.functionName')}
+                paramsLabel={t('shortcut.paramsLabel')}
               />
               
               <Button
@@ -868,9 +958,7 @@ const ShortcutGenerator = () => {
                     key={funcName}
                     label={funcName}
                     size="small"
-                    onClick={() => {
-                      startTransition(() => setSharedFunctionName(funcName));
-                    }}
+                    onClick={() => setSharedFunctionName(funcName)}
                     color={sharedFunctionName === funcName ? 'primary' : 'default'}
                     variant={sharedFunctionName === funcName ? 'filled' : 'outlined'}
                     sx={{ flexShrink: 0 }}
