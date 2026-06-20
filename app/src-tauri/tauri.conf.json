@@ -32,6 +32,14 @@
     "active": true,
     "targets": "all",
     "createUpdaterArtifacts": true,
+    "windows": {
+      "wix": {
+        "template": "./windows/main.wxs"
+      },
+      "nsis": {
+        "template": "./windows/installer.nsi"
+      }
+    },
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",

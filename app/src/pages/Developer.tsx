@@ -14,13 +14,11 @@ import ListItemText from '@mui/material/ListItemText';
 import Paper from '@mui/material/Paper';
 import SvgIcon, { type SvgIconProps } from '@mui/material/SvgIcon';
 import Typography from '@mui/material/Typography';
-import {
-  GitHub,
-  Code,
-  FavoriteOutlined,
-  Description,
-  Public,
-} from '@mui/icons-material';
+import CodeIcon from '@mui/icons-material/Code';
+import DescriptionIcon from '@mui/icons-material/Description';
+import FavoriteOutlinedIcon from '@mui/icons-material/FavoriteOutlined';
+import GitHubIcon from '@mui/icons-material/GitHub';
+import PublicIcon from '@mui/icons-material/Public';
 import { openUrl } from '@tauri-apps/plugin-opener';
 import { useTranslation, Trans } from 'react-i18next';
 import { useTheme } from '../hooks/useTheme';
@@ -59,7 +57,7 @@ const Developer = () => {
             <CardContent>
               <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
                 <Avatar sx={{ mr: 2, bgcolor: 'primary.main' }}>
-                  <GitHub />
+                  <GitHubIcon />
                 </Avatar>
                 <Box>
                   <Typography variant="h6" component="h2">
@@ -85,7 +83,7 @@ const Developer = () => {
 
               <Button
                 variant="contained"
-                startIcon={<GitHub />}
+                startIcon={<GitHubIcon />}
                 onClick={() => openInBrowser(repositoryUrl)}
                 fullWidth
               >
@@ -100,7 +98,7 @@ const Developer = () => {
             <CardContent>
               <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
                 <Avatar sx={{ mr: 2, bgcolor: 'primary.main' }}>
-                  <Code />
+                  <CodeIcon />
                 </Avatar>
                 <Box>
                   <Typography variant="h6" component="h2">
@@ -119,7 +117,7 @@ const Developer = () => {
               <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1, mt: 2 }}>
                 <Button
                   variant="contained"
-                  startIcon={<Public />}
+                  startIcon={<PublicIcon />}
                   onClick={() => openInBrowser(mikanseiLaboratoryUrl)}
                   fullWidth
                 >
@@ -127,7 +125,7 @@ const Developer = () => {
                 </Button>
                 <Button
                   variant="outlined"
-                  startIcon={<GitHub />}
+                  startIcon={<GitHubIcon />}
                   onClick={() => openInBrowser(developerGitHub)}
                   fullWidth
                 >
@@ -142,7 +140,7 @@ const Developer = () => {
           <Card elevation={3}>
             <CardContent>
               <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
-                <FavoriteOutlined sx={{ mr: 1, color: 'error.main' }} />
+                <FavoriteOutlinedIcon sx={{ mr: 1, color: 'error.main' }} />
                 <Typography variant="h6" component="h2">
                   {t('developer.supportTitle')}
                 </Typography>
@@ -192,7 +190,7 @@ const Developer = () => {
         <Grid2 size={12}>
           <Paper sx={{ p: 3 }}>
             <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
-              <Description sx={{ mr: 1 }} />
+              <DescriptionIcon sx={{ mr: 1 }} />
               <Typography variant="h6" component="h2">
                 {t('developer.licenseTitle')}
               </Typography>
@@ -258,7 +256,7 @@ SOFTWARE.`}
               <ListItem sx={{ pl: 0 }}>
                 <ListItemIcon>
                   <Avatar sx={{ bgcolor: 'primary.main' }}>
-                    <Code />
+                    <CodeIcon />
                   </Avatar>
                 </ListItemIcon>
                 <ListItemText
@@ -277,7 +275,7 @@ SOFTWARE.`}
               <ListItem sx={{ pl: 0 }}>
                 <ListItemIcon>
                   <Avatar sx={{ bgcolor: 'primary.main' }}>
-                    <Code />
+                    <CodeIcon />
                   </Avatar>
                 </ListItemIcon>
                 <ListItemText
@@ -306,7 +304,7 @@ SOFTWARE.`}
             <List>
               <ListItem sx={{ pl: 0 }}>
                 <ListItemIcon>
-                  <GitHub />
+                  <GitHubIcon />
                 </ListItemIcon>
                 <ListItemText
                   primary={
@@ -342,7 +340,7 @@ SOFTWARE.`}
 
               <ListItem sx={{ pl: 0 }}>
                 <ListItemIcon>
-                  <Description />
+                  <DescriptionIcon />
                 </ListItemIcon>
                 <ListItemText
                   primary={
@@ -360,7 +358,7 @@ SOFTWARE.`}
 
               <ListItem sx={{ pl: 0 }}>
                 <ListItemIcon>
-                  <Code />
+                  <CodeIcon />
                 </ListItemIcon>
                 <ListItemText
                   primary={

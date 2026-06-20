@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useVMixStatus } from '../hooks/useVMixStatus';
 import { settingsService } from '../services/settingsService';
@@ -22,6 +22,7 @@ import IconButton from '@mui/material/IconButton';
 import MenuItem from '@mui/material/MenuItem';
 import Paper from '@mui/material/Paper';
 import Select from '@mui/material/Select';
+import { useBackgroundAwareTimeout } from '../hooks/useBackgroundAwareTimeout';
 import Snackbar from '@mui/material/Snackbar';
 import Switch from '@mui/material/Switch';
 import Table from '@mui/material/Table';
@@ -81,6 +82,21 @@ const Connections: React.FC = () => {
   const [backgroundConnections, setBackgroundConnections] = useState<Set<string>>(new Set());
   const [connectionNotifications, setConnectionNotifications] = useState<Array<{host: string, success: boolean, message: string}>>([]);
 
+  const dismissNextNotification = useCallback(() => {
+    setConnectionNotifications(prev => prev.slice(1));
+  }, []);
+
+  const { startTimer, clearTimer } = useBackgroundAwareTimeout(dismissNextNotification);
+
+  useEffect(() => {
+    if (connectionNotifications.length === 0) {
+      clearTimer();
+      return;
+    }
+
+    startTimer(5000);
+  }, [connectionNotifications, startTimer, clearTimer]);
+
   // Preset path display toggle
   const [showFullPresetPaths, setShowFullPresetPaths] = useState(false);
 
@@ -132,15 +148,6 @@ const Connections: React.FC = () => {
 
     return () => clearTimeout(timeout);
   }, [isInitialLoading]);
-
-  // Clear old notifications
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      setConnectionNotifications(prev => prev.slice(1));
-    }, 5000);
-
-    return () => clearTimeout(timer);
-  }, [connectionNotifications]);
 
   const handleClickOpen = () => {
     setOpen(true);
@@ -1158,8 +1165,7 @@ const Connections: React.FC = () => {
       {connectionNotifications.length > 0 ? (
         <Snackbar
           open={true}
-          autoHideDuration={5000}
-          onClose={() => setConnectionNotifications(prev => prev.slice(1))}
+          onClose={dismissNextNotification}
           anchorOrigin={{ vertical: 'bottom', horizontal: 'left' }}
         >
           <Alert

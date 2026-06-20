@@ -22,7 +22,7 @@ jobs:
           - platform: 'ubuntu-22.04'
             args: ''
           - platform: 'windows-latest'
-            args: '--target x86_64-pc-windows-msvc'
+            args: '--target x86_64-pc-windows-msvc --bundles msi,nsis'
 
     runs-on: ${{ matrix.platform }}
     steps:
@@ -117,8 +117,9 @@ jobs:
             
             ### Download Instructions
             Select the appropriate installer for your platform:
-            - **Windows**: `.msi` file
-            - **macOS**: `.dmg` file  
+            - **Windows**: `.msi` (WiX) or `-setup.exe` (NSIS)
+            - **macOS (Apple Silicon)**: `.dmg` for `aarch64-apple-darwin`
+            - **macOS (Intel)**: `.dmg` for `x86_64-apple-darwin`
             - **Linux**: `.AppImage` file
             
             ### How to Help

@@ -8,7 +8,7 @@ import DialogTitle from '@mui/material/DialogTitle';
 import FormControlLabel from '@mui/material/FormControlLabel';
 import SvgIcon, { type SvgIconProps } from '@mui/material/SvgIcon';
 import Typography from '@mui/material/Typography';
-import { FavoriteOutlined } from '@mui/icons-material';
+import FavoriteOutlinedIcon from '@mui/icons-material/FavoriteOutlined';
 import { openUrl } from '@tauri-apps/plugin-opener';
 import { useState } from 'react';
 import { useTranslation, Trans } from 'react-i18next';
@@ -45,7 +45,7 @@ const DonationDialog = ({ open, onClose }: DonationDialogProps) => {
     >
       <DialogTitle>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-          <FavoriteOutlined color="error" />
+          <FavoriteOutlinedIcon color="error" />
           <span>{t('donation.title')}</span>
         </Box>
       </DialogTitle>

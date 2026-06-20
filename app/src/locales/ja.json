@@ -34,14 +34,14 @@
       "shortcutGenerator": "Shortcut Generator",
       "blankGenerator": "Blank作成",
       "inputManager": "Input管理",
-      "listManager": "リスト管理",
+      "listManager": "List管理",
       "settings": "設定",
       "about": "アプリについて"
     }
   },
   "app": {
     "loadingTheme": "テーマを読み込み中...",
-    "listManagerTitle": "リスト管理"
+    "listManagerTitle": "List管理"
   },
   "connectionSelector": {
     "defaultLabel": "vMix接続",
@@ -211,7 +211,7 @@
   },
   "listManager": {
     "noConnections": "vMix接続がありません。先に接続してください。",
-    "title": "リスト管理",
+    "title": "List管理",
     "connectionSettings": "接続設定",
     "noVideoLists": "選択した接続にVideoList Inputがありません。"
   },

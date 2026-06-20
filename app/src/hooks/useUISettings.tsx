@@ -1,4 +1,4 @@
-import React, { useState, useEffect, createContext, useContext } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, createContext, useContext } from 'react';
 import { settingsService } from '../services/settingsService';
 
 export type UIDensity = 'compact' | 'comfortable' | 'spacious';
@@ -15,9 +15,7 @@ export const UISettingsProvider = ({ children }: { children: React.ReactNode }) 
   const [uiDensity, setUiDensity] = useState<UIDensity>('comfortable');
   const [isLoading, setIsLoading] = useState(true);
 
-
-  // Load UI settings from backend
-  const loadUISettings = async () => {
+  const loadUISettings = useCallback(async () => {
     try {
       setIsLoading(true);
       const appSettings = await settingsService.getAppSettings();
@@ -26,22 +24,24 @@ export const UISettingsProvider = ({ children }: { children: React.ReactNode }) 
       }
     } catch (error) {
       console.error('Failed to load UI settings:', error);
-      // Use defaults
       setUiDensity('comfortable');
     } finally {
       setIsLoading(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
     loadUISettings();
-  }, []);
+  }, [loadUISettings]);
 
-  const contextValue: UISettingsContextType = {
-    uiDensity,
-    isLoading,
-    refreshSettings: loadUISettings,
-  };
+  const contextValue = useMemo<UISettingsContextType>(
+    () => ({
+      uiDensity,
+      isLoading,
+      refreshSettings: loadUISettings,
+    }),
+    [uiDensity, isLoading, loadUISettings]
+  );
 
   return <UISettingsContext.Provider value={contextValue}>{children}</UISettingsContext.Provider>;
 };

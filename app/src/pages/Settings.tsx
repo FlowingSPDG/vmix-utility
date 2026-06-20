@@ -8,7 +8,6 @@ import { invoke } from '@tauri-apps/api/core';
 import { applySavedLocale } from '../i18n/config';
 import type { SettingsLocaleChoice } from '../i18n/locale';
 import { parseStoredLocaleForSettings } from '../i18n/locale';
-import Alert from '@mui/material/Alert';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import CircularProgress from '@mui/material/CircularProgress';
@@ -22,7 +21,7 @@ import InputLabel from '@mui/material/InputLabel';
 import MenuItem from '@mui/material/MenuItem';
 import Paper from '@mui/material/Paper';
 import Select from '@mui/material/Select';
-import Snackbar from '@mui/material/Snackbar';
+import { useToast, ToastSnackbar } from '../hooks/useToast';
 import Switch from '@mui/material/Switch';
 import Typography from '@mui/material/Typography';
 import FolderOpenIcon from '@mui/icons-material/FolderOpen';
@@ -58,29 +57,13 @@ const Settings = () => {
 
   const [checkingUpdate, setCheckingUpdate] = useState(false);
 
-  const [toast, setToast] = useState<{
-    open: boolean;
-    message: string;
-    severity: 'success' | 'error' | 'info';
-  }>({
-    open: false,
-    message: '',
-    severity: 'info',
-  });
+  const { toast, showToast, hideToast } = useToast(6000);
 
   const handleChange = (name: string, value: unknown) => {
     setSettings({
       ...settings,
       [name]: value
     });
-  };
-
-  const showToast = (message: string, severity: 'success' | 'error' | 'info' = 'info') => {
-    setToast({ open: true, message, severity });
-  };
-
-  const handleCloseToast = () => {
-    setToast(prev => ({ ...prev, open: false }));
   };
 
   const handleOpenLogsDirectory = async () => {
@@ -457,21 +440,7 @@ const Settings = () => {
         )}
       </Paper>
 
-      <Snackbar
-        open={toast.open}
-        autoHideDuration={6000}
-        onClose={handleCloseToast}
-        anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
-      >
-        <Alert
-          severity={toast.severity}
-          sx={{ width: '100%' }}
-          variant="filled"
-          onClose={handleCloseToast}
-        >
-          {toast.message}
-        </Alert>
-      </Snackbar>
+      <ToastSnackbar toast={toast} onClose={hideToast} />
     </Box>
   );
 };
