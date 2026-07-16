@@ -271,8 +271,8 @@
     "documentationSecondary": "vmix-utilityの使い方",
     "contribute": "コントリビュート",
     "contributeSecondary": "プルリクエストで改善に参加",
-    "thanksFlowingSecondary": "オリジナル作者・開発者（vmix-utilityの創成と開発）",
-    "thanksGulerSecondary": "ロゴデザイナー（vmix-utilityのロゴ制作）"
+    "thanksFlowingSecondary": "開発者",
+    "thanksGulerSecondary": "ロゴデザイナー"
   },
   "shortcut": {
     "selectConnectionLabel": "vMixの接続を選択",
