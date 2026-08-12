@@ -119,7 +119,7 @@
                 </Component>
             </Directory>
             <Directory Id="$(var.PlatformProgramFilesFolder)" Name="PFiles">
-                <Directory Id="MikanseiLaboratoryDir" Name="MikanseiLaboratory">
+                <Directory Id="PublisherDir" Name="{{manufacturer}}">
                     <Directory Id="INSTALLDIR" Name="{{product_name}}"/>
                 </Directory>
             </Directory>
