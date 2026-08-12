@@ -77,8 +77,8 @@ OutFile "${OUTFILE}"
 ; We don't actually use this value as default install path,
 ; it's just for nsis to append the product name folder in the directory selector
 ; https://nsis.sourceforge.io/Reference/InstallDir
-!define INSTALL_PARENT_DIR "MikanseiLaboratory"
-!define INSTALL_RELATIVE_PATH "${INSTALL_PARENT_DIR}\${PRODUCTNAME}"
+; Default: C:\Program Files\${MANUFACTURER}\${PRODUCTNAME}
+!define INSTALL_RELATIVE_PATH "${MANUFACTURER}\${PRODUCTNAME}"
 !define PLACEHOLDER_INSTALL_DIR "placeholder\${INSTALL_RELATIVE_PATH}"
 InstallDir "${PLACEHOLDER_INSTALL_DIR}"
 
