@@ -336,6 +336,13 @@ pub struct UpdateInfo {
     pub body: Option<String>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct CachedUpdateStatus {
+    pub checked: bool,
+    pub info: Option<UpdateInfo>,
+    pub error: Option<String>,
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct VmixVideoListItem {
     pub key: String,

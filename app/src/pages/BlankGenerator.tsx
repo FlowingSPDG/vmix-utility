@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { useVMixStatus } from '../hooks/useVMixStatus';
 import { useConnectionSelection } from '../hooks/useConnectionSelection';
 import ConnectionSelector from '../components/ConnectionSelector';
+import Alert from '@mui/material/Alert';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import Checkbox from '@mui/material/Checkbox';
@@ -18,11 +19,26 @@ import { useToast, ToastSnackbar } from '../hooks/useToast';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
 
+const MIN_BLANK_COUNT = 1;
+const MAX_TOTAL_INPUTS = 999;
+
+const BlankGenerationWarnings = () => {
+  const { t } = useTranslation();
+
+  return (
+    <Box component="ul" sx={{ m: 0, pl: 2 }}>
+      <li>{t('blank.warningUnresponsive')}</li>
+      <li>{t('blank.warningCrashLimit')}</li>
+      <li>{t('blank.warningCountMismatch')}</li>
+    </Box>
+  );
+};
+
 const BlankGenerator = () => {
   const { t } = useTranslation();
-  const { getVMixInputs, sendVMixFunction } = useVMixStatus();
+  const { getVMixInputs, sendVMixFunction, inputs } = useVMixStatus();
   const [transparent, setTransparent] = useState(false);
-  const [count, setCount] = useState(1);
+  const [count, setCount] = useState(MIN_BLANK_COUNT);
   const [countError, setCountError] = useState(false);
   const [showConfirmDialog, setShowConfirmDialog] = useState(false);
   const [generating, setGenerating] = useState(false);
@@ -30,6 +46,10 @@ const BlankGenerator = () => {
   const { toast, showToast, hideToast } = useToast(6000);
 
   const { selectedConnection, setSelectedConnection, connectedConnections } = useConnectionSelection();
+  const currentInputCount = selectedConnection ? (inputs[selectedConnection]?.length ?? 0) : 0;
+  const maxGeneratable = Math.max(0, MAX_TOTAL_INPUTS - currentInputCount);
+  const countOutOfRange = maxGeneratable < MIN_BLANK_COUNT || count < MIN_BLANK_COUNT || count > maxGeneratable;
+  const hasCountError = countError || countOutOfRange;
 
   const handleTransparentChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     setTransparent(event.target.checked);
@@ -44,7 +64,7 @@ const BlankGenerator = () => {
     }
 
     const value = parseInt(inputValue, 10);
-    if (!isNaN(value) && value >= 1 && value <= 50) {
+    if (!isNaN(value) && value >= MIN_BLANK_COUNT && value <= maxGeneratable) {
       setCount(value);
       setCountError(false);
     } else {
@@ -53,14 +73,14 @@ const BlankGenerator = () => {
   };
 
   const handleGenerate = () => {
-    if (selectedConnection === '') {
+    if (selectedConnection === '' || hasCountError) {
       return;
     }
     setShowConfirmDialog(true);
   };
 
   const handleConfirmGenerate = async () => {
-    if (!selectedConnection) {
+    if (!selectedConnection || countOutOfRange) {
       return;
     }
 
@@ -102,6 +122,10 @@ const BlankGenerator = () => {
           {t('blank.title')}
         </Typography>
 
+        <Alert severity="warning" sx={{ mb: 3 }}>
+          <BlankGenerationWarnings />
+        </Alert>
+
         <Box sx={{ mb: 3 }}>
           <ConnectionSelector
             selectedConnection={selectedConnection}
@@ -130,12 +154,18 @@ const BlankGenerator = () => {
             value={count}
             onChange={handleCountChange}
             inputProps={{
-              min: 1,
-              max: 50,
+              min: MIN_BLANK_COUNT,
+              max: maxGeneratable,
               step: 1
             }}
-            error={countError}
-            helperText={countError ? t('blank.countError') : t('blank.countHelper')}
+            error={hasCountError}
+            helperText={
+              maxGeneratable < MIN_BLANK_COUNT
+                ? t('blank.countAtLimit', { max: MAX_TOTAL_INPUTS })
+                : hasCountError
+                  ? t('blank.countError', { max: maxGeneratable })
+                  : t('blank.countHelper', { max: maxGeneratable })
+            }
             fullWidth
             variant="outlined"
           />
@@ -146,7 +176,7 @@ const BlankGenerator = () => {
           color="primary"
           size="large"
           onClick={handleGenerate}
-          disabled={selectedConnection === '' || generating || countError || count < 1 || count > 50}
+          disabled={selectedConnection === '' || generating || hasCountError}
           startIcon={generating ? <CircularProgress size={20} /> : null}
         >
           {generating ? t('blank.generating') : t('blank.generate')}
@@ -163,6 +193,9 @@ const BlankGenerator = () => {
           {t('blank.confirmTitle')}
         </DialogTitle>
         <DialogContent>
+          <Alert severity="warning" sx={{ mb: 2 }}>
+            <BlankGenerationWarnings />
+          </Alert>
           <DialogContentText id="confirm-dialog-description">
             {t('blank.confirmBody', { count, bg: bgWord, plural: count !== 1 ? 's' : '' })}
             <br />

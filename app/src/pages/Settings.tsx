@@ -3,8 +3,9 @@ import type { SelectChangeEvent } from '@mui/material/Select';
 import { useTranslation } from 'react-i18next';
 import { useTheme, type ThemeMode } from '../hooks/useTheme';
 import { useUISettings } from '../hooks/useUISettings.tsx';
-import { settingsService } from '../services/settingsService';
+import { settingsService, type CachedUpdateStatus, type UpdateInfo } from '../services/settingsService';
 import { invoke } from '@tauri-apps/api/core';
+import { listen } from '@tauri-apps/api/event';
 import { applySavedLocale } from '../i18n/config';
 import type { SettingsLocaleChoice } from '../i18n/locale';
 import { parseStoredLocaleForSettings } from '../i18n/locale';
@@ -25,6 +26,25 @@ import { useToast, ToastSnackbar } from '../hooks/useToast';
 import Switch from '@mui/material/Switch';
 import Typography from '@mui/material/Typography';
 import FolderOpenIcon from '@mui/icons-material/FolderOpen';
+
+function applyCachedUpdateStatus(
+  status: CachedUpdateStatus,
+  setUpdateInfo: (info: UpdateInfo | null) => void,
+  setUpdateCheckError: (error: string | null) => void,
+) {
+  if (!status.checked) {
+    return;
+  }
+  if (status.info) {
+    setUpdateInfo(status.info);
+    setUpdateCheckError(null);
+    return;
+  }
+  if (status.error) {
+    setUpdateInfo(null);
+    setUpdateCheckError(status.error);
+  }
+}
 
 const Settings = () => {
   const { t } = useTranslation();
@@ -48,22 +68,17 @@ const Settings = () => {
     build_timestamp: string;
   } | null>(null);
 
-  const [updateInfo, setUpdateInfo] = useState<{
-    available: boolean;
-    current_version: string;
-    latest_version?: string;
-    body?: string;
-  } | null>(null);
-
+  const [updateInfo, setUpdateInfo] = useState<UpdateInfo | null>(null);
+  const [updateCheckError, setUpdateCheckError] = useState<string | null>(null);
   const [checkingUpdate, setCheckingUpdate] = useState(false);
 
   const { toast, showToast, hideToast } = useToast(6000);
 
   const handleChange = (name: string, value: unknown) => {
-    setSettings({
-      ...settings,
+    setSettings(prev => ({
+      ...prev,
       [name]: value
-    });
+    }));
   };
 
   const handleOpenLogsDirectory = async () => {
@@ -79,13 +94,9 @@ const Settings = () => {
   const handleCheckForUpdates = async () => {
     setCheckingUpdate(true);
     try {
-      const result = await invoke<{
-        available: boolean;
-        current_version: string;
-        latest_version?: string;
-        body?: string;
-      }>('check_for_updates');
+      const result = await invoke<UpdateInfo>('check_for_updates');
       setUpdateInfo(result);
+      setUpdateCheckError(null);
       if (result.available) {
         showToast(
           t('settings.updateAvailableToast', {
@@ -99,6 +110,7 @@ const Settings = () => {
       }
     } catch (error) {
       console.error('Failed to check for updates:', error);
+      setUpdateCheckError(String(error));
       showToast(t('settings.checkUpdateFailed', { error: String(error) }), 'error');
     } finally {
       setCheckingUpdate(false);
@@ -129,15 +141,16 @@ const Settings = () => {
         await setThemeMode(settings.theme as ThemeMode);
       }
 
-      await settingsService.saveAppSettings({
-        defaultVMixIP: settings.defaultVMixIP,
-        defaultVMixPort: settings.defaultVMixPort,
-        theme: settings.theme,
-        uiDensity: settings.uiDensity,
-        locale: settings.locale === 'system' ? '' : settings.locale,
-      });
-
-      await settingsService.setLoggingConfig(settings.logLevel, settings.saveLogsToFile);
+      await Promise.all([
+        settingsService.saveAppSettings({
+          defaultVMixIP: settings.defaultVMixIP,
+          defaultVMixPort: settings.defaultVMixPort,
+          theme: settings.theme,
+          uiDensity: settings.uiDensity,
+          locale: settings.locale === 'system' ? '' : settings.locale,
+        }),
+        settingsService.setLoggingConfig(settings.logLevel, settings.saveLogsToFile),
+      ]);
 
       await refreshSettings();
 
@@ -151,30 +164,56 @@ const Settings = () => {
   };
 
   useEffect(() => {
-    const loadConfigurations = async () => {
+    let cancelled = false;
+    let unlisten: (() => void) | undefined;
+
+    const configPromise = Promise.all([
+      settingsService.getAppSettings(),
+      settingsService.getLoggingConfig(),
+      settingsService.getAppInfo(),
+    ]);
+
+    const load = async () => {
       try {
-        const appSettings = await settingsService.getAppSettings();
-        if (appSettings) {
+        unlisten = await listen<CachedUpdateStatus>('update-status-changed', (event) => {
+          applyCachedUpdateStatus(event.payload, setUpdateInfo, setUpdateCheckError);
+        });
+        if (cancelled) {
+          unlisten();
+          unlisten = undefined;
+          return;
+        }
+        const status = await settingsService.getUpdateInfo();
+        if (!cancelled) {
+          applyCachedUpdateStatus(status, setUpdateInfo, setUpdateCheckError);
+        }
+      } catch (error) {
+        console.error('Failed to load update status:', error);
+      }
+
+      try {
+        const [appSettings, loggingConfig, info] = await configPromise;
+        if (cancelled) {
+          return;
+        }
+
+        if (appSettings || loggingConfig) {
           setSettings(prev => ({
             ...prev,
-            defaultVMixIP: appSettings.default_vmix_ip ?? '127.0.0.1',
-            defaultVMixPort: appSettings.default_vmix_port ?? 8088,
-            theme: appSettings.theme as ThemeMode ?? 'Auto',
-            uiDensity: appSettings.ui_density as 'compact' | 'comfortable' | 'spacious' ?? 'comfortable',
-            locale: parseStoredLocaleForSettings(appSettings.locale),
+            ...(appSettings ? {
+              defaultVMixIP: appSettings.default_vmix_ip ?? '127.0.0.1',
+              defaultVMixPort: appSettings.default_vmix_port ?? 8088,
+              theme: appSettings.theme as ThemeMode ?? 'Auto',
+              uiDensity: appSettings.ui_density as 'compact' | 'comfortable' | 'spacious' ?? 'comfortable',
+              locale: parseStoredLocaleForSettings(appSettings.locale),
+            } : {}),
+            ...(loggingConfig ? {
+              logLevel: loggingConfig.level || 'info',
+              saveLogsToFile: loggingConfig.save_to_file || false,
+            } : {}),
           }));
         }
 
-        const loggingConfig = await settingsService.getLoggingConfig();
-        if (loggingConfig) {
-          setSettings(prev => ({
-            ...prev,
-            logLevel: loggingConfig.level || 'info',
-            saveLogsToFile: loggingConfig.save_to_file || false
-          }));
-        }
-
-        const info = await settingsService.getAppInfo();
         if (info) {
           setAppInfo(info as {
             version: string;
@@ -189,7 +228,12 @@ const Settings = () => {
       }
     };
 
-    loadConfigurations();
+    void load();
+
+    return () => {
+      cancelled = true;
+      unlisten?.();
+    };
   }, []);
 
   return (
@@ -403,9 +447,13 @@ const Settings = () => {
                       {t('settings.latestVersion')}
                     </Typography>
                   )
+                ) : updateCheckError ? (
+                  <Typography variant="body2" color="textSecondary">
+                    {t('settings.updateCheckFailedStatus')}
+                  </Typography>
                 ) : (
                   <Typography variant="body2" color="textSecondary">
-                    {t('settings.unknown')}
+                    {t('settings.checkingUpdates')}
                   </Typography>
                 )}
               </Box>

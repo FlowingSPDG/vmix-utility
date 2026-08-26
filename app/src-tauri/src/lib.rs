@@ -6,47 +6,34 @@ use tauri_plugin_dialog::{DialogExt, MessageDialogButtons, MessageDialogKind};
 
 // Common update check function
 async fn check_for_updates_with_dialog(app_handle: tauri::AppHandle, show_no_update_dialog: bool) {
-    match tauri_plugin_updater::UpdaterExt::updater(&app_handle) {
-        Ok(updater) => {
-            match updater.check().await {
-                Ok(Some(update)) => {
-                    app_log!(info, "Update available: {} -> {}", app_handle.package_info().version, update.version);
-                    
-                    // Native dialog for update prompt
-                    let current = app_handle.package_info().version.to_string();
-                    let latest = update.version.clone();
-                    app_handle.dialog()
-                        .message(format!("Update available: {} → {}", current, latest))
-                        .title("Update Available")
-                        .buttons(MessageDialogButtons::OkCancelCustom("Update now".to_string(), "Later".to_string()))
-                        .show(move |result| {
-                            if result {
-                                let app_handle_clone = app_handle.clone();
-                                tauri::async_runtime::spawn(async move {
-                                    let _ = install_update(app_handle_clone).await;
-                                });
-                            }
-                        });
-                }
-                Ok(None) => {
-                    app_log!(info, "No updates available");
-                    if show_no_update_dialog {
-                        // Native message dialog for up-to-date
-                        let current = app_handle.package_info().version.to_string();
-                        app_handle.dialog()
-                            .message(format!("You are using the latest version of vmix-utility!\nCurrent version: {}", current))
-                            .kind(MessageDialogKind::Info)
-                            .title("Up to Date")
-                            .blocking_show();
-                    }
-                }
-                Err(e) => {
-                    app_log!(error, "Failed to check for updates: {}", e);
-                }
+    match perform_update_check(&app_handle).await {
+        Ok(info) => {
+            if info.available {
+                let current = info.current_version.clone();
+                let latest = info.latest_version.clone().unwrap_or_default();
+                app_handle.dialog()
+                    .message(format!("Update available: {} → {}", current, latest))
+                    .title("Update Available")
+                    .buttons(MessageDialogButtons::OkCancelCustom("Update now".to_string(), "Later".to_string()))
+                    .show(move |result| {
+                        if result {
+                            let app_handle_clone = app_handle.clone();
+                            tauri::async_runtime::spawn(async move {
+                                let _ = install_update(app_handle_clone).await;
+                            });
+                        }
+                    });
+            } else if show_no_update_dialog {
+                let current = info.current_version.clone();
+                app_handle.dialog()
+                    .message(format!("You are using the latest version of vmix-utility!\nCurrent version: {}", current))
+                    .kind(MessageDialogKind::Info)
+                    .title("Up to Date")
+                    .blocking_show();
             }
         }
         Err(e) => {
-            app_log!(error, "Failed to get updater instance: {}", e);
+            app_log!(error, "Failed to check for updates: {}", e);
         }
     }
 }
@@ -215,6 +202,7 @@ pub fn run() {
             save_app_settings,
             get_app_settings,
             get_app_info,
+            get_update_info,
             open_logs_directory,
             check_for_updates,
             install_update,
