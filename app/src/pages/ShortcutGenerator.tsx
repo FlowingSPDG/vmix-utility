@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback, memo, useRef, useEffect, useTransition, forwardRef, useImperativeHandle, type ComponentType } from 'react';
+import { useState, useMemo, useCallback, memo, useRef, useEffect, useTransition, forwardRef, useImperativeHandle, type ComponentType, type HTMLAttributes } from 'react';
 import type { TFunction } from 'i18next';
 import { useTranslation } from 'react-i18next';
 import { openUrl } from '@tauri-apps/plugin-opener';
@@ -88,6 +88,29 @@ const VirtualizedInputList = FixedSizeList as unknown as ComponentType<
 
 const FUNCTION_NAME_COMMIT_MS = 400;
 const MAX_SHORTCUT_SUGGESTIONS = 50;
+/** Extra scrollable space after the last row so the toast does not cover TRY/Copy. */
+const LIST_BOTTOM_PADDING_PX = 48;
+
+const VirtualizedListInnerElement = forwardRef<HTMLDivElement, HTMLAttributes<HTMLDivElement>>(
+  function VirtualizedListInnerElement({ style, ...rest }, ref) {
+    const heightValue = style?.height;
+    const baseHeight =
+      typeof heightValue === 'number'
+        ? heightValue
+        : parseFloat(String(heightValue ?? 0)) || 0;
+
+    return (
+      <div
+        ref={ref}
+        style={{
+          ...style,
+          height: baseHeight + LIST_BOTTOM_PADDING_PX,
+        }}
+        {...rest}
+      />
+    );
+  }
+);
 
 interface FunctionNameFieldHandle {
   commitAndGet: () => string;
@@ -1300,6 +1323,7 @@ const ShortcutGenerator = () => {
                 height={listHeight}
                 itemCount={filteredInputs.length}
                 itemSize={spacing.itemHeight + 8}
+                innerElementType={VirtualizedListInnerElement}
                 itemData={useMemo(() => ({
                   filteredInputs,
                   vmixInputsByNumber,
