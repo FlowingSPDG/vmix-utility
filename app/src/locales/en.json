@@ -152,6 +152,7 @@
     "updateAvailable": "Update Available: {{version}}",
     "latestVersion": "Latest Version",
     "unknown": "Unknown",
+    "updateCheckFailedStatus": "Check failed",
     "checkingUpdates": "Checking...",
     "checkForUpdates": "Check for Updates",
     "installUpdate": "Install Update",

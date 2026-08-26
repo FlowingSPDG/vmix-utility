@@ -1,5 +1,5 @@
 use crate::types::{
-    AppConfig, AppSettings, AutoRefreshConfig, ConnectionConfig, ConnectionType,
+    AppConfig, AppSettings, AutoRefreshConfig, CachedUpdateStatus, ConnectionConfig, ConnectionType,
     DonationPromptConfig, VmixConnection, VmixInput, VmixVideoListInput,
 };
 use crate::http_client::VmixClientWrapper;
@@ -31,6 +31,7 @@ pub struct AppState {
     pub app_settings: Arc<Mutex<AppSettings>>,
     pub video_list_windows: Arc<Mutex<HashMap<String, VideoListWindow>>>,
     pub donation_prompt: Arc<Mutex<DonationPromptConfig>>,
+    pub update_status: Arc<Mutex<CachedUpdateStatus>>,
 }
 
 impl AppState {
@@ -45,6 +46,7 @@ impl AppState {
             app_settings: Arc::new(Mutex::new(AppSettings::default())),
             video_list_windows: Arc::new(Mutex::new(HashMap::new())),
             donation_prompt: Arc::new(Mutex::new(DonationPromptConfig::default())),
+            update_status: Arc::new(Mutex::new(CachedUpdateStatus::default())),
         }
     }
     

@@ -15,7 +15,23 @@ export interface LoggingConfig {
 
 export interface AppInfo {
   version: string;
+  git_commit_hash?: string;
+  git_branch?: string;
+  build_timestamp?: string;
   [key: string]: any;
+}
+
+export interface UpdateInfo {
+  available: boolean;
+  current_version: string;
+  latest_version?: string;
+  body?: string;
+}
+
+export interface CachedUpdateStatus {
+  checked: boolean;
+  info: UpdateInfo | null;
+  error: string | null;
 }
 
 /**
@@ -97,6 +113,13 @@ export const settingsService = {
       console.error('Failed to get app info:', error);
       throw error;
     }
+  },
+
+  /**
+   * Get cached startup/manual update check result
+   */
+  async getUpdateInfo(): Promise<CachedUpdateStatus> {
+    return await invoke<CachedUpdateStatus>('get_update_info');
   },
 
   /**

@@ -1,5 +1,5 @@
 use crate::types::{
-    AppInfo, AppSettings, AutoRefreshConfig, ConnectionType, LoggingConfig,
+    AppInfo, AppSettings, AutoRefreshConfig, CachedUpdateStatus, ConnectionType, LoggingConfig,
     UpdateInfo, VmixConnection, VmixInput, VmixVideoListInput, VmixVideoListItem,
 };
 use crate::http_client::VmixClientWrapper;
@@ -1040,18 +1040,26 @@ pub async fn get_video_list_windows_diagnostic(
     Ok(serde_json::Value::Object(diagnostic))
 }
 
-#[tauri::command]
-pub async fn check_for_updates(app_handle: AppHandle) -> Result<UpdateInfo, String> {
+const UPDATE_STATUS_EVENT: &str = "update-status-changed";
+
+fn store_and_emit_update_status(app_handle: &AppHandle, status: CachedUpdateStatus) {
+    let state = app_handle.state::<AppState>();
+    *state.update_status.lock().unwrap() = status.clone();
+    if let Err(e) = app_handle.emit(UPDATE_STATUS_EVENT, &status) {
+        app_log!(error, "Failed to emit {}: {}", UPDATE_STATUS_EVENT, e);
+    }
+}
+
+pub async fn perform_update_check(app_handle: &AppHandle) -> Result<UpdateInfo, String> {
     app_log!(info, "Checking for updates...");
-    
+
     let current_version = app_handle.package_info().version.to_string();
-    
-    // デバッグ情報: プラットフォーム情報を出力
+
     app_log!(info, "Current platform: {:?}", std::env::consts::OS);
     app_log!(info, "Current architecture: {:?}", std::env::consts::ARCH);
     app_log!(info, "Target triple: {:?}", std::env::var("TARGET").unwrap_or_else(|_| "unknown".to_string()));
-    
-    match tauri_plugin_updater::UpdaterExt::updater(&app_handle) {
+
+    let result = match tauri_plugin_updater::UpdaterExt::updater(app_handle) {
         Ok(updater) => {
             match updater.check().await {
                 Ok(Some(update)) => {
@@ -1082,7 +1090,36 @@ pub async fn check_for_updates(app_handle: AppHandle) -> Result<UpdateInfo, Stri
             app_log!(error, "Failed to get updater instance: {}", e);
             Err(format!("Failed to get updater instance: {}", e))
         }
+    };
+
+    match &result {
+        Ok(info) => {
+            store_and_emit_update_status(app_handle, CachedUpdateStatus {
+                checked: true,
+                info: Some(info.clone()),
+                error: None,
+            });
+        }
+        Err(e) => {
+            store_and_emit_update_status(app_handle, CachedUpdateStatus {
+                checked: true,
+                info: None,
+                error: Some(e.clone()),
+            });
+        }
     }
+
+    result
+}
+
+#[tauri::command]
+pub async fn check_for_updates(app_handle: AppHandle) -> Result<UpdateInfo, String> {
+    perform_update_check(&app_handle).await
+}
+
+#[tauri::command]
+pub async fn get_update_info(state: State<'_, AppState>) -> Result<CachedUpdateStatus, String> {
+    Ok(state.update_status.lock().unwrap().clone())
 }
 
 #[tauri::command]

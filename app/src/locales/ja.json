@@ -152,6 +152,7 @@
     "updateAvailable": "更新あり: {{version}}",
     "latestVersion": "最新です",
     "unknown": "不明",
+    "updateCheckFailedStatus": "確認に失敗",
     "checkingUpdates": "確認中...",
     "checkForUpdates": "更新を確認",
     "installUpdate": "更新をインストール",
