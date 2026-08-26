@@ -88,6 +88,8 @@ const VirtualizedInputList = FixedSizeList as unknown as ComponentType<
 
 const FUNCTION_NAME_COMMIT_MS = 400;
 const MAX_SHORTCUT_SUGGESTIONS = 50;
+/** Extra bottom space so the toast snackbar does not cover TRY/Copy on the last visible row. */
+const TOAST_FOOTER_SPACING = 8;
 
 interface FunctionNameFieldHandle {
   commitAndGet: () => string;
@@ -842,6 +844,7 @@ const ShortcutGenerator = () => {
   return (
     <Box sx={{ 
       p: spacing.cardPadding * 3,
+      pb: spacing.cardPadding * 3 + TOAST_FOOTER_SPACING,
       height: '100%',
       display: 'flex',
       flexDirection: 'column',
