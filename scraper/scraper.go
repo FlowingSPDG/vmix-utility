@@ -13,33 +13,34 @@ type Shortcut struct {
 	Parameters  []string // comma-separated queries
 }
 
+func transitionShortcut(name string, params ...string) Shortcut {
+	return Shortcut{Name: name, Description: name, Parameters: params}
+}
+
 // OverrideShortcuts is a list of shortcuts that are not on the official documentation.
+// Transition names match the vMix UI and can be used as Functions; Duration is a
+// Developer API parameter for transitions and is not listed in the reference table.
 var OverrideShortcuts = []Shortcut{
-	{
-		Name:        "Cut",
-		Description: "Cut",
-		Parameters: []string{
-			"Input",
-			"Mix",
-		},
-	},
-	{
-		Name:        "Fade",
-		Description: "Fade",
-		Parameters: []string{
-			"Input",
-			"Mix",
-			"Duration",
-		},
-	},
-	{
-		Name:        "Merge",
-		Description: "Merge",
-		Parameters: []string{
-			"Input",
-			"Duration",
-		},
-	},
+	transitionShortcut("Cut", "Input", "Mix"),
+	transitionShortcut("Fade", "Input", "Mix", "Duration"),
+	transitionShortcut("Zoom", "Input", "Mix", "Duration"),
+	transitionShortcut("Wipe", "Input", "Mix", "Duration"),
+	transitionShortcut("Slide", "Input", "Mix", "Duration"),
+	transitionShortcut("Fly", "Input", "Mix", "Duration"),
+	transitionShortcut("CrossZoom", "Input", "Mix", "Duration"),
+	transitionShortcut("FlyRotate", "Input", "Mix", "Duration"),
+	transitionShortcut("Cube", "Input", "Mix", "Duration"),
+	transitionShortcut("CubeZoom", "Input", "Mix", "Duration"),
+	transitionShortcut("VerticalWipe", "Input", "Mix", "Duration"),
+	transitionShortcut("VerticalSlide", "Input", "Mix", "Duration"),
+	transitionShortcut("Merge", "Input", "Duration"),
+	transitionShortcut("WipeReverse", "Input", "Mix", "Duration"),
+	transitionShortcut("SlideReverse", "Input", "Mix", "Duration"),
+	transitionShortcut("VerticalWipeReverse", "Input", "Mix", "Duration"),
+	transitionShortcut("VerticalSlideReverse", "Input", "Mix", "Duration"),
+	transitionShortcut("BarnDoor", "Input", "Mix", "Duration"),
+	transitionShortcut("RollerDoor", "Input", "Mix", "Duration"),
+	transitionShortcut("AlphaFade", "Input", "Mix", "Duration"),
 }
 
 func GetShortcuts(helpVer int) ([]Shortcut, error) {
