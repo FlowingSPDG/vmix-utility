@@ -32,6 +32,7 @@
     "active": true,
     "targets": "all",
     "publisher": "MikanseiLaboratory",
+    "copyright": "Copyright 2026 未完成成果物研究所 (MikanseiLaboratory)",
     "createUpdaterArtifacts": true,
     "windows": {
       "wix": {

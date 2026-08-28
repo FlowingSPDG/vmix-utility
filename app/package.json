@@ -2,6 +2,7 @@
   "name": "app",
   "private": true,
   "version": "2.2.7",
+  "license": "PolyForm-Shield-1.0.0",
   "type": "module",
   "scripts": {
     "dev": "vite",

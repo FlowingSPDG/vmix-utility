@@ -22,6 +22,7 @@ import PublicIcon from '@mui/icons-material/Public';
 import { openUrl } from '@tauri-apps/plugin-opener';
 import { useTranslation, Trans } from 'react-i18next';
 import { useTheme } from '../hooks/useTheme';
+import licenseText from 'virtual:app-license';
 
 const TwitchIcon = (props: SvgIconProps) => (
   <SvgIcon {...props} viewBox="0 0 24 24">
@@ -73,8 +74,8 @@ const Developer = () => {
                 {t('developer.repoBody')}
               </Typography>
 
-              <Box sx={{ display: 'flex', gap: 1, mb: 2 }}>
-                <Chip label="MIT License" variant="outlined" size="small" />
+              <Box sx={{ display: 'flex', gap: 1, mb: 2, flexWrap: 'wrap' }}>
+                <Chip label={t('developer.licenseChip')} variant="outlined" size="small" />
                 <Chip label="TypeScript" variant="outlined" size="small" />
                 <Chip label="React" variant="outlined" size="small" />
                 <Chip label="Tauri" variant="outlined" size="small" />
@@ -205,30 +206,22 @@ const Developer = () => {
             <Box sx={{
               bgcolor: resolvedTheme === 'dark' ? 'grey.800' : 'grey.50',
               p: 2,
-              borderRadius: 1
+              borderRadius: 1,
+              maxHeight: 360,
+              overflow: 'auto',
             }}>
-              <Typography variant="body2" component="pre" sx={{ fontFamily: 'monospace', whiteSpace: 'pre-wrap' }}>
-                {`MIT License
-
-Copyright (c) 2026 未完成成果物研究所
-
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
-
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
-
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.`}
+              <Typography
+                variant="body2"
+                component="pre"
+                sx={{
+                  fontFamily: 'monospace',
+                  whiteSpace: 'pre-wrap',
+                  overflowWrap: 'anywhere',
+                  wordBreak: 'break-word',
+                  m: 0,
+                }}
+              >
+                {licenseText.trim()}
               </Typography>
             </Box>
 

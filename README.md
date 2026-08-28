@@ -28,7 +28,12 @@ GitHub [Releases](https://github.com/MikanseiLaboratory/vmix-utility/releases)�
 
 ### License / ライセンス
 
-MITライセンス - 詳細は[LICENSE](LICENSE)ファイルを参照してください。
+[PolyForm Shield License 1.0.0](https://polyformproject.org/licenses/shield/1.0.0) — 詳細は[LICENSE](LICENSE)を参照してください。
+
+- 現場・業務での利用は無料です
+- 本ソフトウェアと競合する製品・サービスの提供には利用できません
+- 無償サポートは提供していません。ソフトウェアは無保証です
+- 以前に配布した MIT ライセンス版は、入手済みのコピーに限り MIT の条件が引き続き適用されます
 
 ### Links / リンク
 
